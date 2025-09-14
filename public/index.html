@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Prosta Platformówka Multiplayer - Pokoje</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div id="lobby">
+        <h1>Witaj w Lobby!</h1>
+        <p>Twoja nazwa: <span id="myUsername"></span> (Kolor: <span id="myColorDisplay" style="display: inline-block; width: 20px; height: 20px; border: 1px solid black;"></span>)</p>
+
+        <div class="room-actions">
+            <input type="text" id="newRoomName" placeholder="Nazwa nowego pokoju (opcjonalnie)">
+            <button id="createRoomBtn">Stwórz Pokój</button>
+        </div>
+
+        <h2>Dostępne Pokoje:</h2>
+        <ul id="roomList">
+            <!-- Pokoje będą ładowane tutaj przez JS -->
+            <li>Brak dostępnych pokoi. Stwórz jeden!</li>
+        </ul>
+    </div>
+
+    <!-- TEN DIV POWINIEN MIEĆ STYLE="DISPLAY: NONE;" POCZĄTKOWO -->
+    <div id="gameContainer" style="display: none;">
+        <button id="leaveRoomBtn">Opuść Pokój</button>
+        <canvas id="gameCanvas"></canvas> <!-- BEZ atrybutów width/height tutaj -->
+    </div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="js/BiomeManager.js"></script> <!-- DODANA LINIA -->
+    <script src="script.js"></script>
+</body>
+</html>

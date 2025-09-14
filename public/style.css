@@ -1,0 +1,148 @@
+html, body {
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    padding: 0; /* Dodano padding: 0 dla pewności */
+    overflow: hidden; /* Zapobiega scrollbarom */
+}
+
+body {
+    display: flex; /* Flexbox dla centrowania lobby/gameContainer */
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+    background-color: #333; /* Tło całej strony */
+    font-family: Arial, sans-serif;
+    color: #eee;
+}
+
+#gameContainer {
+    display: none; /* Początkowo ukryty */
+    position: fixed; /* Pozycjonowanie absolutne względem viewportu */
+    top: 0;
+    left: 0;
+    width: 100vw; /* Wypełnia całą szerokość viewportu */
+    height: 100vh; /* Wypełnia całą wysokość viewportu */
+    background-color: black; /* Tło dla obszarów niepokrytych przez canvas, jeśli object-fit: cover nie działa prawidłowo */
+    display: flex; /* Flexbox dla centrowania canvasa wewnątrz */
+    justify-content: center; /* Centruje zawartość (canvas) w poziomie */
+    align-items: center;    /* Centruje zawartość (canvas) w pionie */
+    z-index: 999; /* Zapewnia, że jest pod lobby, ale nad innymi elementami */
+}
+
+#gameContainer button {
+    position: absolute;
+    top: 10px;
+    left: 10px;
+    z-index: 1001; /* Zawsze widoczny na wierzchu */
+    padding: 8px 15px;
+    background-color: #dc3545;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 1em;
+}
+
+canvas {
+    display: block;
+    /* Tło gry (niebo) jest rysowane w JS, więc nie ustawiamy tu background-color */
+
+    width: 100%;    /* KLUCZOWE: Canvas ma w pełni wypełnić swój kontener */
+    height: 100%;   /* KLUCZOWE: Canvas ma w pełni wypełnić swój kontener */
+    /* Usunięto max-width i max-height, ponieważ 100% już to implikuje dla flexboxa. */
+    
+    object-fit: cover; /* KLUCZOWA WŁAŚCIWOŚĆ: Skaluje obraz tak, aby pokrył cały element, przycinając go w razie potrzeby, zachowując proporcje */
+
+    image-rendering: pixelated; /* Dla ostrych pikseli */
+    image-rendering: crisp-edges;
+    -ms-interpolation-mode: nearest-neighbor;
+}
+
+/* Reszta stylów lobby i przycisków bez zmian */
+#lobby {
+    background-color: #444;
+    padding: 20px;
+    border-radius: 8px;
+    box-shadow: 0 0 10px rgba(0, 0, 0, 0.5);
+    text-align: center;
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 1000;
+}
+
+#lobby h1 {
+    color: #aaffaa;
+}
+
+#roomList {
+    list-style: none;
+    padding: 0;
+    max-height: 300px;
+    overflow-y: auto;
+    border: 1px solid #666;
+    margin-top: 15px;
+    background-color: #555;
+}
+
+#roomList li {
+    padding: 10px;
+    border-bottom: 1px solid #666;
+    cursor: pointer;
+    transition: background-color 0.2s;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+#roomList li:last-child {
+    border-bottom: none;
+}
+
+#roomList li:hover {
+    background-color: #777;
+}
+
+#roomList button {
+    margin-left: 10px;
+    padding: 5px 10px;
+    cursor: pointer;
+    background-color: #28a745;
+    color: white;
+    border: none;
+    border-radius: 4px;
+}
+
+.room-actions {
+    margin-top: 20px;
+}
+
+.room-actions input {
+    padding: 8px;
+    border: 1px solid #666;
+    border-radius: 4px;
+    margin-right: 5px;
+    background-color: #666;
+    color: #eee;
+}
+
+.room-actions button {
+    padding: 8px 15px;
+    background-color: #007bff;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 1em;
+}
+
+#myColorDisplay {
+    border-radius: 50%;
+    vertical-align: middle;
+    width: 20px;
+    height: 20px;
+    display: inline-block;
+    margin-left: 5px;
+}
