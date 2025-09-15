@@ -6,7 +6,9 @@ const ctx = canvas.getContext('2d');
 // === STAŁE ROZDZIELCZOŚCI GRY ===
 const DEDICATED_GAME_WIDTH = 1920;  // Szerokość widocznego obszaru gry (viewport)
 const DEDICATED_GAME_HEIGHT = 1080; // Wysokość widocznego obszaru gry (viewport)
-const WORLD_WIDTH = 4000;           // Rzeczywista szerokość świata gry (większa niż viewport)
+// WORLD_WIDTH NIE JEST JUŻ STAŁĄ GLOBALNĄ, BĘDZIE DYNAMICZNIE POBIERANE Z SERWERA
+let currentWorldWidth = DEDICATED_GAME_WIDTH * 2; // Domyślna szerokość świata na starcie (przed dołączeniem do pokoju)
+
 // Ustaw wewnętrzną rozdzielczość canvasa, w której będziemy rysować
 canvas.width = DEDICATED_GAME_WIDTH;
 canvas.height = DEDICATED_GAME_HEIGHT;
@@ -16,8 +18,8 @@ ctx.webkitImageSmoothingEnabled = false;
 ctx.msImageSmoothingEnabled = false;
 ctx.imageSmoothingEnabled = false;
 
-// Instancja BiomeManager musi być utworzona po zdefiniowaniu WORLD_WIDTH i DEDICATED_GAME_HEIGHT
-const biomeManager = new BiomeManager(WORLD_WIDTH, DEDICATED_GAME_HEIGHT);
+// Instancja BiomeManager jest teraz inicjowana z początkową currentWorldWidth
+const biomeManager = new BiomeManager(currentWorldWidth, DEDICATED_GAME_HEIGHT);
 
 // Elementy UI
 const lobbyDiv = document.getElementById('lobby');
@@ -31,7 +33,6 @@ const leaveRoomBtn = document.getElementById('leaveRoomBtn');
 
 // Stałe gry
 const playerSize = 128; // Cała postać jest 128x128px
-// Grawitacja i siła skoku są teraz na serwerze, klient ich nie używa bezpośrednio do obliczeń
 
 // === Zmienione i nowe stałe dla ulepszeń ===
 const animationCycleLength = 30;
@@ -92,6 +93,7 @@ const JUMP_BODY_TILT_DEGREES = -20;
 const JUMP_LEG_OPPOSITE_ROTATION_DEGREES = -120;
 const JUMP_LEG_WAVE_DEGREES = 120;
 const JUMP_ARM_WAVE_DEGREES = 180;
+const INSECT_SCALE_FACTOR = 2.6;
 
 const JUMP_BODY_TILT_ANGLE = JUMP_BODY_TILT_DEGREES * (Math.PI / 180);
 const JUMP_LEG_OPPOSITE_ROTATION_ANGLE = JUMP_LEG_OPPOSITE_ROTATION_DEGREES * (Math.PI / 180);
@@ -101,7 +103,7 @@ const JUMP_ARM_WAVE_ANGLE = JUMP_ARM_WAVE_DEGREES * (Math.PI / 180);
 
 // === NOWE STAŁE DLA ZOOMU KAMERY ===
 let currentZoomLevel = 1.0;
-const MIN_ZOOM = 0.8;
+const MIN_ZOOM = 0.735;
 const MAX_ZOOM = 1.5;
 const ZOOM_SENSITIVITY = 0.1;
 
@@ -195,32 +197,60 @@ const exampleCustomItemPaths = {
     }
 };
 
-let imagesLoadedCount = 0;
 let totalImagesToLoad = 0;
-
 function loadImages(callback) {
     const allPaths = { ...characterImagePaths, ...customizationUIPaths, ...sliderUIPaths };
 
-    // 1. Oblicz całkowitą liczbę obrazów do załadowania
-    totalImagesToLoad = Object.keys(allPaths).length;
+    totalImagesToLoad = 0;
+
+    totalImagesToLoad += Object.keys(allPaths).length;
+
     for (const itemName in exampleCustomItemPaths.items) {
         totalImagesToLoad++;
     }
-    // W BiomeManager jest już zliczanie obrazów biomów i waterplants,
-    // więc nie dodajemy tutaj do totalImagesToLoad
-    // Po prostu wywołamy loadBiomeImages, która sama zwiększy imagesLoadedCount
 
-    // Jeśli totalImagesToLoad nadal wynosi 0 (np. brak żadnych obrazów do załadowania), wywołujemy callback od razu.
-    // To jest mało prawdopodobne, ale dobra praktyka.
+    for (const category in exampleCustomItemPaths) {
+        if (category === 'items') continue;
+        for (const itemName in exampleCustomItemPaths[category]) {
+            totalImagesToLoad++;
+        }
+    }
+
     if (totalImagesToLoad === 0) {
-        callback();
+        biomeManager.loadBiomeImages(callback);
         return;
     }
 
-    let loadedCountForThisFunction = 0; // Licznik dla obrazów ładowanych bezpośrednio w tej funkcji
+    let loadedCountForThisFunction = 0;
 
-     for (const category in exampleCustomItemPaths) {
-        if (category === 'items') continue; // Items są już obsługiwane
+    const onImageLoadOrError = (imgSrc) => {
+        loadedCountForThisFunction++;
+        if (loadedCountForThisFunction === totalImagesToLoad) {
+            biomeManager.loadBiomeImages(() => {
+                callback();
+            });
+        }
+    };
+
+    for (const key in allPaths) {
+        const img = new Image();
+        img.src = allPaths[key];
+        img.onload = () => {
+            if (characterImagePaths[key]) {
+                characterImages[key] = img;
+            } else if (customizationUIPaths[key] || sliderUIPaths[key]) {
+                customizationUIImages[key] = img;
+            }
+            onImageLoadOrError(img.src);
+        };
+        img.onerror = () => {
+            console.error(`Błąd ładowania obrazu: ${img.src}`);
+            onImageLoadOrError(img.src);
+        };
+    }
+
+    for (const category in exampleCustomItemPaths) {
+        if (category === 'items') continue;
         const categoryPaths = exampleCustomItemPaths[category];
         for (const itemName in categoryPaths) {
             const path = categoryPaths[itemName];
@@ -238,55 +268,12 @@ function loadImages(callback) {
                 if (!characterCustomImages[category]) {
                     characterCustomImages[category] = {};
                 }
-                characterCustomImages[category][itemName] = null; // Zapisz null, żeby nie próbować ponownie
+                characterCustomImages[category][itemName] = null;
                 onImageLoadOrError(img.src);
             };
         }
-        
-    }
-    if (totalImagesToLoad === 0) {
-        callback();
-        return;
     }
 
-
-    
-
-    const onImageLoadOrError = (imgSrc) => {
-        loadedCountForThisFunction++;
-        // console.log(`Loaded image: ${imgSrc}, loadedCountForThisFunction: ${loadedCountForThisFunction}, totalImagesToLoad: ${totalImagesToLoad}`);
-        if (loadedCountForThisFunction === totalImagesToLoad) {
-            // Po załadowaniu wszystkich obrazów z "tej" funkcji, inicjujemy ładowanie biomów
-            // i przekazujemy callback, który ostatecznie wywoła główny callback,
-            // gdy WSZYSTKIE obrazy (w tym z biomeManager) zostaną załadowane.
-            biomeManager.loadBiomeImages(() => {
-                // Ta funkcja zwrotna jest wywoływana, gdy biomeManager zakończy ładowanie WSZYSTKICH swoich obrazów.
-                // Na tym etapie globalne imagesLoadedCount powinno już uwzględniać wszystkie obrazy.
-                callback();
-            });
-        }
-    };
-
-
-    // --- Ładowanie bazowych i UI obrazów ---
-    for (const key in allPaths) {
-        const img = new Image();
-        img.src = allPaths[key];
-        img.onload = () => {
-            if (characterImagePaths[key]) {
-                characterImages[key] = img;
-            } else if (customizationUIPaths[key] || sliderUIPaths[key]) {
-                customizationUIImages[key] = img;
-            }
-            onImageLoadOrError(img.src);
-        };
-        img.onerror = () => {
-            console.error(`Błąd ładowania obrazu: ${img.src}`);
-            onImageLoadOrError(img.src); // Nadal zliczaj błędy, aby callback został wywołany
-        };
-    }
-
-    // --- Ładowanie obrazów nowych przedmiotów ---
     const itemPathsToLoad = exampleCustomItemPaths.items;
     for (const itemName in itemPathsToLoad) {
         const itemData = itemPathsToLoad[itemName];
@@ -298,7 +285,7 @@ function loadImages(callback) {
         };
         img.onerror = () => {
             console.error(`Błąd ładowania obrazu przedmiotu: ${img.src}`);
-            onImageLoadOrError(img.src); // Nadal zliczaj błędy
+            onImageLoadOrError(img.src);
         };
     }
 }
@@ -342,6 +329,7 @@ let localPlayer = {
 };
 
 let playersInRoom = {};
+let insectsInRoom = []; // NOWA ZMIENNA DLA INSEKTÓW
 let currentRoom = null;
 let keys = {};
 let bobberAnimationTime = 0;
@@ -449,20 +437,44 @@ let lastTime = 0;
 
 function updateCamera() {
     const playerWorldCenterX = localPlayer.x + playerSize / 2;
-    const playerWorldCenterY = localPlayer.y + playerSize;
+    const playerWorldCenterY = localPlayer.y + playerSize / 2;
 
     const visibleWorldWidth = DEDICATED_GAME_WIDTH / currentZoomLevel;
+    biomeManager.drawParallaxBackground(ctx, cameraX, visibleWorldWidth);
+    // ===============================================
+
+    if (currentRoom && currentRoom.gameData && currentRoom.gameData.biome) {
+        const biomeName = currentRoom.gameData.biome;
+        const groundLevel = currentRoom.gameData.groundLevel;
+
+        // KROK 1: Dalsze warstwy ziemi
+        biomeManager.drawBackgroundBiomeGround(ctx, biomeName, groundLevel);
+
+        // KROK 2: Drzewa w tle
+        biomeManager.drawBackgroundTrees(ctx);
+
+        // KROK 3: Rośliny naziemne w tle
+        biomeManager.drawBackgroundPlants(ctx);
+
+        // KROK 4: Wierzchnia warstwa ziemi
+        biomeManager.drawForegroundBiomeGround(ctx, biomeName, groundLevel);
+
+        // KROK 5: Budynki
+        biomeManager.drawBuildings(ctx, groundLevel, cameraX, DEDICATED_GAME_WIDTH / currentZoomLevel);
+    }
     const visibleWorldHeight = DEDICATED_GAME_HEIGHT / currentZoomLevel;
 
     let targetCameraX = playerWorldCenterX - visibleWorldWidth / 2;
     if (targetCameraX < 0) {
         targetCameraX = 0;
     }
-    if (targetCameraX > WORLD_WIDTH - visibleWorldWidth) {
-        targetCameraX = WORLD_WIDTH - visibleWorldWidth;
+    // ZMIANA: Użycie currentWorldWidth zamiast stałej WORLD_WIDTH
+    if (targetCameraX > currentWorldWidth - visibleWorldWidth) {
+        targetCameraX = currentWorldWidth - visibleWorldWidth;
     }
-    if (WORLD_WIDTH < visibleWorldWidth) {
-        targetCameraX = (WORLD_WIDTH / 2) - (visibleWorldWidth / 2);
+    // ZMIANA: Użycie currentWorldWidth zamiast stałej WORLD_WIDTH
+    if (currentWorldWidth < visibleWorldWidth) {
+        targetCameraX = (currentWorldWidth / 2) - (visibleWorldWidth / 2);
     }
 
     let targetCameraY = playerWorldCenterY - visibleWorldHeight / 2;
@@ -477,7 +489,7 @@ function updateCamera() {
     }
 
     cameraX = targetCameraX;
-    cameraY = targetCameraY*1.2;
+    cameraY = targetCameraY * 1.2;
 }
 
 // NOWA FUNKCJA: Rysuje część postaci z możliwością zastosowania filtrów CSS
@@ -490,9 +502,6 @@ function drawFilteredCharacterPart(context, image, drawX, drawY, width, height, 
     const offscreenCtx = offscreenCanvas.getContext('2d');
     offscreenCtx.imageSmoothingEnabled = false;
 
-    // Rysuj bez filtrów najpierw, aby potem nałożyć filtry na istniejący obraz.
-    // Inaczej, jeśli filtr jest "saturate(0%)", a potem narysujemy go ponownie,
-    // to nałożymy go na już odfiltrowany, co może dać podwójne odcienie szarości itp.
     offscreenCtx.drawImage(image, 0, 0, width, height);
 
     const filters = [];
@@ -512,9 +521,6 @@ function drawFilteredCharacterPart(context, image, drawX, drawY, width, height, 
 
 
 function drawPlayer(p) {
-    // Nie używamy już imagesLoadedCount === totalImagesToLoad tutaj,
-    // bo drawPlayer jest wywoływane dopiero po załadowaniu wszystkich obrazów.
-    // Zamiast tego sprawdzamy, czy obraz konkretnej części jest gotowy.
     if (!characterImages.body || !characterImages.body.complete) {
         ctx.fillStyle = p.color;
         ctx.fillRect(p.x, p.y, playerSize, playerSize);
@@ -544,7 +550,7 @@ function drawPlayer(p) {
 
     const characterRootX = p.x;
     const characterRootY = p.y;
-    
+
     let eyeShiftX_preRotation = 0;
     let eyeShiftY_preRotation = 0;
 
@@ -557,7 +563,7 @@ function drawPlayer(p) {
 
         const headWorldCenterX = characterRootX + headPivotInImageX;
         const headWorldCenterY = characterRootY + neutralHeadCenterY_relToPlayerTop;
-        
+
         const gazeVectorX_relativeToHead_inPlayerSpace = (mouseWorldX - headWorldCenterX) * p.direction;
         const gazeVectorY_relativeToHead_inPlayerSpace = (mouseWorldY - headWorldCenterY);
 
@@ -639,7 +645,7 @@ function drawPlayer(p) {
     drawCharacterPart(characterImages.leg, backLegOffsetX, 0, legPivotInImageX, legPivotInImageY, backLegRotationAmount);
     drawCharacterPart(characterImages.arm, backArmOffsetX, 0, originalArmPivotInImageX, originalArmPivotInImageY, backArmRotationAmount);
     drawCharacterPart(characterImages.leg, frontLegOffsetX, 0, legPivotInImageX, legPivotInImageY, legRotationAmount);
-    
+
     ctx.drawImage(characterImages.body, characterRootX + 0, characterRootY + bodyVerticalOscillationY, playerSize, playerSize);
 
     const headRenderAbsOffsetY = headInitialOffsetY + bodyVerticalOscillationY + headVerticalOscillationY;
@@ -673,121 +679,71 @@ function drawPlayer(p) {
     // === Rysowanie Włosów ===
     const selectedHairName = playerCustomizations.hair;
     if (selectedHairName && selectedHairName !== 'none') {
-        const hairPath = exampleCustomItemPaths.hair[selectedHairName];
-        if (hairPath) {
-            // Sprawdzamy, czy obraz włosów jest już załadowany do characterCustomImages
-            // Jeśli nie, próbujemy go załadować. To powinno być już obsługiwane przez loadImages na starcie,
-            // ale defensywna programacja jest dobra.
-            if (!characterCustomImages.hair[selectedHairName]) {
-                const img = new Image();
-                img.src = hairPath;
-                img.onload = () => {
-                    characterCustomImages.hair[selectedHairName] = img;
-                    // Ponowne rysowanie po załadowaniu obrazu
-                    requestAnimationFrame(gameLoop);
-                };
-                img.onerror = () => {
-                    console.error(`Błąd ładowania obrazu włosów: ${hairPath}`);
-                    characterCustomImages.hair[selectedHairName] = null;
-                };
-            }
-            
-            const hairImage = characterCustomImages.hair[selectedHairName];
-            if (hairImage && hairImage.complete) {
-                ctx.save();
-                const drawActualX = characterRootX + 0;
-                const drawActualY = characterRootY + headRenderAbsOffsetY + HAIR_VERTICAL_OFFSET;
+        const hairImage = characterCustomImages.hair[selectedHairName];
+        if (hairImage && hairImage.complete) {
+            ctx.save();
+            const drawActualX = characterRootX + 0;
+            const drawActualY = characterRootY + headRenderAbsOffsetY + HAIR_VERTICAL_OFFSET;
 
-                ctx.translate(drawActualX + headPivotInImageX, drawActualY + headPivotInImageY - HAIR_VERTICAL_OFFSET);
-                ctx.rotate(headRotationAmount);
-                
-                drawFilteredCharacterPart(
-                    ctx,
-                    hairImage,
-                    -headPivotInImageX,
-                    -(headPivotInImageY - HAIR_VERTICAL_OFFSET),
-                    playerSize, playerSize,
-                    playerCustomizations.hairSaturation,
-                    playerCustomizations.hairHue,
-                    playerCustomizations.hairBrightness
-                );
-                ctx.restore();
-            }
+            ctx.translate(drawActualX + headPivotInImageX, drawActualY + headPivotInImageY - HAIR_VERTICAL_OFFSET);
+            ctx.rotate(headRotationAmount);
+
+            drawFilteredCharacterPart(
+                ctx,
+                hairImage,
+                -headPivotInImageX,
+                -(headPivotInImageY - HAIR_VERTICAL_OFFSET),
+                playerSize, playerSize,
+                playerCustomizations.hairSaturation,
+                playerCustomizations.hairHue,
+                playerCustomizations.hairBrightness
+            );
+            ctx.restore();
         }
     }
 
     // === Rysowanie Brody ===
     const selectedBeardName = playerCustomizations.beard;
     if (selectedBeardName && selectedBeardName !== 'none') {
-        const beardPath = exampleCustomItemPaths.beard[selectedBeardName];
-        if (beardPath) {
-            if (!characterCustomImages.beard[selectedBeardName]) {
-                const img = new Image();
-                img.src = beardPath;
-                img.onload = () => {
-                    characterCustomImages.beard[selectedBeardName] = img;
-                    requestAnimationFrame(gameLoop);
-                };
-                img.onerror = () => {
-                    console.error(`Błąd ładowania obrazu brody: ${beardPath}`);
-                    characterCustomImages.beard[selectedBeardName] = null;
-                };
-            }
-            const beardImage = characterCustomImages.beard[selectedBeardName];
-            if (beardImage && beardImage.complete) {
-                const BEARD_VERTICAL_OFFSET = Math.round(15 * (playerSize / 32));
-                ctx.save();
-                const drawActualX = characterRootX + 0;
-                const drawActualY = characterRootY + headRenderAbsOffsetY + BEARD_VERTICAL_OFFSET;
+        const beardImage = characterCustomImages.beard[selectedBeardName];
+        if (beardImage && beardImage.complete) {
+            const BEARD_VERTICAL_OFFSET = Math.round(15 * (playerSize / 32));
+            ctx.save();
+            const drawActualX = characterRootX + 0;
+            const drawActualY = characterRootY + headRenderAbsOffsetY + BEARD_VERTICAL_OFFSET;
 
-                ctx.translate(drawActualX + headPivotInImageX, drawActualY + headPivotInImageY - BEARD_VERTICAL_OFFSET);
-                ctx.rotate(headRotationAmount);
+            ctx.translate(drawActualX + headPivotInImageX, drawActualY + headPivotInImageY - BEARD_VERTICAL_OFFSET);
+            ctx.rotate(headRotationAmount);
 
-                drawFilteredCharacterPart(
-                    ctx,
-                    beardImage,
-                    -headPivotInImageX,
-                    -(headPivotInImageY - BEARD_VERTICAL_OFFSET),
-                    playerSize, playerSize,
-                    playerCustomizations.beardSaturation,
-                    playerCustomizations.beardHue,
-                    playerCustomizations.beardBrightness
-                );
-                ctx.restore();
-            }
+            drawFilteredCharacterPart(
+                ctx,
+                beardImage,
+                -headPivotInImageX,
+                -(headPivotInImageY - BEARD_VERTICAL_OFFSET), // Zmieniono z HAT_TOP_OFFSET_Y
+                playerSize, playerSize,
+                playerCustomizations.beardSaturation,
+                playerCustomizations.beardHue,
+                playerCustomizations.beardBrightness
+            );
+            ctx.restore();
         }
     }
 
     // === Rysowanie Kapelusza ===
     const selectedHatName = playerCustomizations.hat;
     if (selectedHatName && selectedHatName !== 'none') {
-        const hatPath = exampleCustomItemPaths.hat[selectedHatName];
-        if (hatPath) {
-            if (!characterCustomImages.hat[selectedHatName]) {
-                const img = new Image();
-                img.src = hatPath;
-                img.onload = () => {
-                    characterCustomImages.hat[selectedHatName] = img;
-                    requestAnimationFrame(gameLoop);
-                };
-                img.onerror = () => {
-                    console.error(`Błąd ładowania obrazu kapelusza: ${hatPath}`);
-                    characterCustomImages.hat[selectedHatName] = null;
-                };
-            }
-            const hatImage = characterCustomImages.hat[selectedHatName];
-            if (hatImage && hatImage.complete) {
-                const HAT_TOP_OFFSET_Y = -Math.round(20 * (playerSize / 32));
-                drawCharacterPart(
-                    hatImage,
-                    0,
-                    headRenderAbsOffsetY + HAT_TOP_OFFSET_Y,
-                    headPivotInImageX,
-                    headPivotInImageY - HAT_TOP_OFFSET_Y,
-                    headRotationAmount,
-                    playerSize, playerSize
-                );
-            }
+        const hatImage = characterCustomImages.hat[selectedHatName];
+        if (hatImage && hatImage.complete) {
+            const HAT_TOP_OFFSET_Y = -Math.round(20 * (playerSize / 32));
+            drawCharacterPart(
+                hatImage,
+                0,
+                headRenderAbsOffsetY + HAT_TOP_OFFSET_Y,
+                headPivotInImageX,
+                headPivotInImageY - HAT_TOP_OFFSET_Y,
+                headRotationAmount,
+                playerSize, playerSize
+            );
         }
     }
     // --- NOWOŚĆ: Rysowanie przedmiotu w dłoni ---
@@ -795,36 +751,19 @@ function drawPlayer(p) {
 
     if (equippedItemName && equippedItemName !== ITEM_NONE) {
         const itemConfig = exampleCustomItemPaths.items[equippedItemName];
+        const itemImage = characterCustomImages.items[equippedItemName];
 
-        if (itemConfig) {
-            const itemImage = characterCustomImages.items[equippedItemName];
-
-            if (itemImage && itemImage.complete) {
-                drawCharacterPart(
-                    itemImage,
-                    frontArmOffsetX,
-                    0,
-                    originalArmPivotInImageX,
-                    originalArmPivotInImageY,
-                    armRotationAmount,
-                    itemConfig.width,
-                    itemConfig.height
-                );
-            } else if (!itemImage) {
-                // Obraz nie jest jeszcze załadowany, próbujemy go załadować.
-                const img = new Image();
-                img.src = itemConfig.path;
-                img.onload = () => {
-                    characterCustomImages.items[equippedItemName] = img;
-                    requestAnimationFrame(gameLoop); // Ponowne rysowanie po załadowaniu
-                };
-                img.onerror = () => {
-                    console.error(`Błąd ładowania obrazu dla przedmiotu: ${itemConfig.path}`);
-                    characterCustomImages.items[equippedItemName] = null;
-                };
-            }
-        } else {
-            console.warn(`Nie znaleziono konfiguracji dla przedmiotu: ${equippedItemName}`);
+        if (itemConfig && itemImage && itemImage.complete) {
+            drawCharacterPart(
+                itemImage,
+                frontArmOffsetX,
+                0,
+                originalArmPivotInImageX,
+                originalArmPivotInImageY,
+                armRotationAmount,
+                itemConfig.width,
+                itemConfig.height
+            );
         }
     }
     drawCharacterPart(characterImages.arm, frontArmOffsetX, 0, originalArmPivotInImageX, originalArmPivotInImageY, armRotationAmount);
@@ -882,7 +821,7 @@ function drawCustomizationMenu() {
     const playerScreenY = (localPlayer.y - cameraY) * currentZoomLevel;
 
     const menuRenderX = playerScreenX + playerSize * currentZoomLevel + MENU_X_OFFSET_FROM_PLAYER;
-    const menuCenterY = playerScreenY + MENU_Y_OFFSET_FROM_PLAYER_TOP_CENTER_SELECTED; 
+    const menuCenterY = playerScreenY + MENU_Y_OFFSET_FROM_PLAYER_TOP_CENTER_SELECTED;
 
     ctx.textAlign = 'left';
     ctx.textBaseline = 'middle';
@@ -904,7 +843,7 @@ function drawCustomizationMenu() {
         ctx.save();
 
         let targetY = menuCenterY + i * ROLLER_ITEM_VERTICAL_SPACING;
-        
+
         let currentScale = 1.0;
         let currentAlpha = 1.0;
 
@@ -932,7 +871,7 @@ function drawCustomizationMenu() {
     ctx.save();
     ctx.translate(frameX + FRAME_SIZE / 2, frameY + FRAME_SIZE / 2);
     ctx.rotate(rotationAngle);
-    
+
     if (customizationUIImages.frame && customizationUIImages.frame.complete) {
         ctx.drawImage(customizationUIImages.frame, -FRAME_SIZE / 2, -FRAME_SIZE / 2, FRAME_SIZE, FRAME_SIZE);
     } else {
@@ -944,53 +883,36 @@ function drawCustomizationMenu() {
     const selectedOptionName = customizationOptions[selectedCategory]?.[currentCustomizationOptionIndices[selectedCategory]];
 
     if (selectedOptionName && selectedOptionName !== 'none') {
-        const itemPath = exampleCustomItemPaths[selectedCategory]?.[selectedOptionName];
-        if (itemPath) {
-            if (!characterCustomImages[selectedCategory][selectedOptionName]) {
-                const img = new Image();
-                img.src = itemPath;
-                img.onload = () => {
-                    characterCustomImages[selectedCategory][selectedOptionName] = img;
-                    requestAnimationFrame(gameLoop);
-                };
-                img.onerror = () => {
-                    console.error(`Błąd ładowania obrazu custom: ${itemPath}`);
-                    characterCustomImages[selectedCategory][selectedOptionName] = null;
-                };
-            }
-            
-            const customItemImage = characterCustomImages[selectedCategory][selectedOptionName];
-            if (customItemImage && customItemImage.complete) {
-                const itemDrawSize = FRAME_SIZE * 0.8;
-                
-                if (selectedCategory === 'hair') {
-                    drawFilteredCharacterPart(
-                        ctx,
-                        customItemImage,
-                        -itemDrawSize / 2, -itemDrawSize / 2,
-                        itemDrawSize, itemDrawSize,
-                        localPlayerCustomizations.hairSaturation,
-                        localPlayerCustomizations.hairHue,
-                        localPlayerCustomizations.hairBrightness
-                    );
-                } else if (selectedCategory === 'beard') {
-                     drawFilteredCharacterPart(
-                        ctx,
-                        customItemImage,
-                        -itemDrawSize / 2, -itemDrawSize / 2,
-                        itemDrawSize, itemDrawSize,
-                        localPlayerCustomizations.beardSaturation,
-                        localPlayerCustomizations.beardHue,
-                        localPlayerCustomizations.beardBrightness
-                    );
-                } else {
-                    ctx.drawImage(customItemImage, -itemDrawSize / 2, -itemDrawSize / 2, itemDrawSize, itemDrawSize);
-                }
+        const customItemImage = characterCustomImages[selectedCategory]?.[selectedOptionName];
+        if (customItemImage && customItemImage.complete) {
+            const itemDrawSize = FRAME_SIZE * 0.8;
 
-            } else if (customItemImage === null) {
-                ctx.fillStyle = 'gray';
-                ctx.fillRect(-FRAME_SIZE / 4, -FRAME_SIZE / 4, FRAME_SIZE / 2, FRAME_SIZE / 2);
+            if (selectedCategory === 'hair') {
+                drawFilteredCharacterPart(
+                    ctx,
+                    customItemImage,
+                    -itemDrawSize / 2, -itemDrawSize / 2,
+                    itemDrawSize, itemDrawSize,
+                    localPlayerCustomizations.hairSaturation,
+                    localPlayerCustomizations.hairHue,
+                    localPlayerCustomizations.hairBrightness
+                );
+            } else if (selectedCategory === 'beard') {
+                 drawFilteredCharacterPart(
+                    ctx,
+                    customItemImage,
+                    -itemDrawSize / 2, -itemDrawSize / 2,
+                    itemDrawSize, itemDrawSize,
+                    localPlayerCustomizations.beardSaturation,
+                    localPlayerCustomizations.beardHue,
+                    localPlayerCustomizations.beardBrightness
+                );
+            } else {
+                ctx.drawImage(customItemImage, -itemDrawSize / 2, -itemDrawSize / 2, itemDrawSize, itemDrawSize);
             }
+        } else if (customItemImage === null) {
+            ctx.fillStyle = 'gray';
+            ctx.fillRect(-FRAME_SIZE / 4, -FRAME_SIZE / 4, FRAME_SIZE / 2, FRAME_SIZE / 2);
         }
     }
 
@@ -1117,15 +1039,13 @@ function drawFishingLine(p) {
     let rotationOffset = 0;
 
     if (p.lineAnchorWorldY !== null) {
-        // Użycie ID gracza do unikalnego przesunięcia, aby bobbery nie oscylowały idealnie synchronicznie
-        // Bezpieczne generowanie stałego offsetu z ID
         let idSum = 0;
         if (p.id) {
             for (let i = 0; i < p.id.length; i++) {
                 idSum += p.id.charCodeAt(i);
             }
         }
-        const playerUniqueOffset = (idSum % 100) * 0.1; // Offset oparty na sumie znaków ID
+        const playerUniqueOffset = (idSum % 100) * 0.1;
         verticalOffset = Math.sin(bobberAnimationTime + playerUniqueOffset) * BOBBER_VERTICAL_OSCILLATION;
         rotationOffset = Math.cos(bobberAnimationTime * 0.7 + playerUniqueOffset) * BOBBER_ROTATION_OSCILLATION;
     }
@@ -1137,7 +1057,7 @@ function drawFishingLine(p) {
         const drawHeight = floatConfig.height;
 
         ctx.save();
-        
+
         ctx.translate(p.floatWorldX, p.floatWorldY + verticalOffset);
         ctx.rotate(rotationOffset);
 
@@ -1157,8 +1077,52 @@ function drawFishingLine(p) {
         ctx.arc(p.floatWorldX, p.floatWorldY + verticalOffset, FLOAT_SIZE / 2, 0, Math.PI * 2);
         ctx.fill();
     }
-    
+
     ctx.restore();
+}
+
+// === ZMODYFIKOWANA FUNKCJA DO RYSOWANIA INSEKTÓW Z OBSŁUGĄ HUE ===
+function drawInsects() {
+    const insectImage = biomeManager.getCurrentInsectImage();
+    if (!insectImage || !insectImage.complete) return;
+
+    const INSECT_TILE_SIZE = 32;
+    const INSECT_ANIMATION_SPEED_TICKS = 8;
+    const renderedSize = INSECT_TILE_SIZE * INSECT_SCALE_FACTOR;
+
+    for (const insect of insectsInRoom) {
+        const currentFrame = Math.floor(insect.animationFrame / INSECT_ANIMATION_SPEED_TICKS);
+        const sourceX = currentFrame * INSECT_TILE_SIZE;
+        const sourceY = (insect.typeIndex || 0) * INSECT_TILE_SIZE;
+        const angleInRadians = insect.angle * (Math.PI / 180);
+
+        ctx.save();
+        ctx.translate(insect.x + renderedSize / 2, insect.y + renderedSize / 2);
+        ctx.rotate(angleInRadians);
+
+        // ZMIANA: Sprawdź, czy insekt ma zdefiniowaną właściwość 'hue' i zastosuj filtr.
+        // Ta zmiana zakłada, że serwer przy tworzeniu insekta nadaje mu
+        // właściwość 'hue' z wartością liczbową (np. od 0 do 360).
+        if (typeof insect.hue === 'number') {
+            ctx.filter = `hue-rotate(${insect.hue}deg)`;
+        }
+
+        ctx.drawImage(
+            insectImage,
+            sourceX,
+            sourceY,
+            INSECT_TILE_SIZE,
+            INSECT_TILE_SIZE,
+            -renderedSize / 2,
+            -renderedSize / 2,
+            renderedSize,
+            renderedSize
+        );
+
+        // ctx.restore() usunie zastosowany filtr, więc kolejne obiekty
+        // będą rysowane bez niego (chyba że same mają właściwość 'hue').
+        ctx.restore();
+    }
 }
 
 
@@ -1168,19 +1132,14 @@ function gameLoop(currentTime) {
     const deltaTime = (currentTime - lastTime) / 1000; // Czas w sekundach
     lastTime = currentTime;
 
- 
-    const biomeManagerTotalImages = Object.keys(biomeManager.biomeDefinitions).length + (biomeManager.waterPlantsImage ? 1 : 0);
-    const totalLoadableImagesExcludingBiomeManager = Object.keys(characterImagePaths).length + Object.keys(customizationUIPaths).length + Object.keys(sliderUIPaths).length + Object.keys(exampleCustomItemPaths.items).length;
 
     if (currentRoom === null) {
         requestAnimationFrame(gameLoop);
         return;
     }
-    
-    bobberAnimationTime += BOBBER_ANIMATION_SPEED;
 
-    // NEW: Zaktualizuj animację wody
-    biomeManager.updateWaterAnimation(deltaTime);
+    bobberAnimationTime += BOBBER_ANIMATION_SPEED;
+    biomeManager.updateAnimations(deltaTime);
 
     const isPlayerInputLocked = isCustomizationMenuOpen || draggingSlider || localPlayer.isCasting;
     if (!isPlayerInputLocked) {
@@ -1190,8 +1149,6 @@ function gameLoop(currentTime) {
             currentMouseY: localPlayer.currentMouseY,
         });
     } else {
-        // Jeśli input jest zablokowany, wysyłamy puste klawisze, ale nadal aktualizujemy mysz dla celowania wędką.
-        // Jeśli nie chcesz, żeby mysz aktualizowała się podczas menu/slajderów, usuń currentMouseX/Y
         socket.emit('playerInput', {
             keys: {},
             currentMouseX: localPlayer.currentMouseX,
@@ -1208,56 +1165,66 @@ function gameLoop(currentTime) {
     updateCamera();
 
     ctx.clearRect(0, 0, DEDICATED_GAME_WIDTH, DEDICATED_GAME_HEIGHT);
-    
-    // Rysowanie tła
+
+    // Rysowanie jednolitego koloru nieba
     biomeManager.drawBackground(ctx);
 
-    ctx.save(); 
+    // Zaczynamy transformację całego świata gry
+    ctx.save();
     ctx.scale(currentZoomLevel, currentZoomLevel);
     ctx.translate(-cameraX, -cameraY);
 
+    // === NAJWAŻNIEJSZA ZMIANA ===
+    // Rysujemy tło paralaksy WEWNĄTRZ transformacji, aby dziedziczyło ZOOM.
+    // Specjalna logika wewnątrz tej funkcji zadba o poprawne przesunięcie paralaksy.
+    const visibleWorldWidth = DEDICATED_GAME_WIDTH / currentZoomLevel;
+    biomeManager.drawParallaxBackground(ctx, cameraX, cameraY, visibleWorldWidth);
+    
+    // =============================
+
+    // --- Reszta świata jest rysowana normalnie ---
     if (currentRoom && currentRoom.gameData && currentRoom.gameData.biome) {
-        biomeManager.drawBiomeGround(ctx, currentRoom.gameData.biome, currentRoom.gameData.groundLevel, cameraX, cameraY, currentZoomLevel);
+        const biomeName = currentRoom.gameData.biome;
+        const groundLevel = currentRoom.gameData.groundLevel;
+
+        biomeManager.drawBackgroundBiomeGround(ctx, biomeName, groundLevel);
+        biomeManager.drawBackgroundTrees(ctx);
+        biomeManager.drawBackgroundPlants(ctx);
+        drawInsects(); // <-- WYWOŁANIE RYSOWANIA INSEKTÓW
+        biomeManager.drawForegroundBiomeGround(ctx, biomeName, groundLevel);
+        biomeManager.drawBuildings(ctx, groundLevel, cameraX, visibleWorldWidth);
+    }
         
-        // Rysowanie roślin tła (index 0)
-        // Przekazujemy cameraX, ponieważ BiomeManager.drawWater potrzebuje go do sprawdzenia widoczności roślin
-        biomeManager.drawWater(ctx, currentRoom.gameData.biome, cameraX, 0); 
-    }
 
-    for (let id in playersInRoom) {
-        const p = playersInRoom[id];
-        drawPlayer(p);
-    }
+    let playersToRender = Object.values(playersInRoom);
+    playersToRender.sort((a, b) => (a.y + playerSize) - (b.y + playerSize));
+    playersToRender.forEach(p => drawPlayer(p));
 
-    // Rysowanie roślin frontowych (index 1) - po graczach
+
+
     if (currentRoom && currentRoom.gameData && currentRoom.gameData.biome) {
-        // Przekazujemy cameraX, ponieważ BiomeManager.drawWater potrzebuje go do sprawdzenia widoczności roślin
-        biomeManager.drawWater(ctx, currentRoom.gameData.biome, cameraX, 1);
+        const biomeName = currentRoom.gameData.biome;
+
+        biomeManager.drawForegroundPlants(ctx);
+        biomeManager.drawForegroundTrees(ctx);
+        biomeManager.drawWater(ctx, biomeName, cameraX);
     }
 
-    ctx.restore(); // JEDEN RESTORE na jeden SAVE
+    ctx.restore();
 
+    // Rysowanie UI (w przestrzeni ekranu)
     if (isCustomizationMenuOpen) {
-        // Menu personalizacji rysowane w przestrzeni ekranu, nie świata
         ctx.save();
-        // Nie skalujemy ani nie translatujemy, ponieważ menu jest elementem UI
         drawCustomizationMenu();
         ctx.restore();
     }
-
     if (localPlayer.isCasting) {
-        // Pasek wędkowania rysowany w przestrzeni ekranu, ale jego pozycja zależy od gracza
         ctx.save();
-        // Tutaj p.x i p.y będą już przetransformowane przez kamerę i zoom, więc nie potrzebujemy translate
-        // ale drawFishingBar wewnętrznie przelicza na przestrzeń ekranu.
         drawFishingBar(localPlayer);
         ctx.restore();
     }
-    
     for (const id in playersInRoom) {
         const player = playersInRoom[id];
-        // Linia wędkowania i spławik muszą być rysowane w przestrzeni świata (skalowane i translatowane)
-        // drawFishingLine wewnętrznie obsługuje ctx.save/restore, scale i translate
         drawFishingLine(player);
     }
 
@@ -1265,6 +1232,17 @@ function gameLoop(currentTime) {
 }
 
 // --- Obsługa zdarzeń Socket.IO ---
+
+socket.on('grassSwaying', ({ grassId, direction }) => {
+    if (currentRoom && biomeManager) {
+        biomeManager.startSwayAnimation(grassId, direction);
+    }
+});
+
+// === NOWY LISTENER DLA INSEKTÓW ===
+socket.on('insectsUpdate', (insectsData) => {
+    insectsInRoom = insectsData;
+});
 
 socket.on('playerInfo', (info) => {
     localPlayer.id = info.id;
@@ -1276,7 +1254,7 @@ socket.on('playerInfo', (info) => {
         for (const category in customizationOptions) {
             const selectedOption = localPlayer.customizations[category];
             const options = customizationOptions[category];
-            if (options) { 
+            if (options) {
                 const index = options.indexOf(selectedOption);
                 if (index !== -1) {
                     currentCustomizationOptionIndices[category] = index;
@@ -1297,7 +1275,7 @@ socket.on('roomListUpdate', (roomsFromServer) => {
             const room = roomsFromServer[roomId];
             const li = document.createElement('li');
             li.innerHTML = `
-                <span>${room.name} (Graczy: ${room.playerCount})</span>
+                <span>${room.name} (Graczy: ${room.playerCount}) - Biome: ${room.biome}, Size: ${room.worldWidth}px, Village: ${room.villageType}</span>
                 <button data-room-id="${roomId}">Dołącz</button>
             `;
             li.querySelector('button').addEventListener('click', () => {
@@ -1322,11 +1300,39 @@ socket.on('roomRemoved', (removedRoomId) => {
 socket.on('roomJoined', (roomData) => {
     currentRoom = roomData;
     playersInRoom = roomData.playersInRoom;
-    
+
+    if (roomData.gameData) {
+        currentWorldWidth = roomData.gameData.worldWidth;
+        biomeManager.worldWidth = currentWorldWidth;
+        biomeManager.setBiome(roomData.gameData.biome);
+        biomeManager.setVillageData(roomData.gameData.villageType, roomData.gameData.villageXPosition, roomData.gameData.placedBuildings);
+
+        if (roomData.gameData.groundPlants) {
+            biomeManager.initializeGroundPlants(roomData.gameData.groundPlants);
+        } else {
+            biomeManager.initializeGroundPlants([]);
+        }
+
+        if (roomData.gameData.trees) {
+            biomeManager.initializeTrees(roomData.gameData.trees);
+        } else {
+            biomeManager.initializeTrees([]);
+        }
+
+        // Inicjalizacja insektów przy dołączaniu do pokoju
+        insectsInRoom = roomData.gameData.insects || [];
+
+    } else {
+        biomeManager.initializeGroundPlants([]);
+        biomeManager.initializeTrees([]); // Upewnij się, że drzewa są czyszczone
+        biomeManager.setVillageData('none', null, []);
+        insectsInRoom = [];
+    }
+
     if (playersInRoom[localPlayer.id]) {
         const serverPlayerState = playersInRoom[localPlayer.id];
-        Object.assign(localPlayer, serverPlayerState); // Szybsze kopiowanie wszystkich właściwości
-        
+        Object.assign(localPlayer, serverPlayerState);
+
         if (serverPlayerState.customizations) {
             Object.assign(localPlayer.customizations, serverPlayerState.customizations);
         }
@@ -1335,7 +1341,7 @@ socket.on('roomJoined', (roomData) => {
         for (const category in customizationOptions) {
             const selectedOption = localPlayer.customizations[category];
             const options = customizationOptions[category];
-            if (options) { 
+            if (options) {
                 const index = options.indexOf(selectedOption);
                 if (index !== -1) {
                     currentCustomizationOptionIndices[category] = index;
@@ -1359,11 +1365,13 @@ socket.on('roomJoined', (roomData) => {
     const visibleWorldWidthAtInit = DEDICATED_GAME_WIDTH / currentZoomLevel;
     const visibleWorldHeightAtInit = DEDICATED_GAME_HEIGHT / currentZoomLevel;
 
+
+
     cameraX = playerInitialCenterX - visibleWorldWidthAtInit / 2;
     cameraY = playerInitialCenterY - visibleWorldHeightAtInit / 2;
 
     if (cameraX < 0) cameraX = 0;
-    if (cameraX > WORLD_WIDTH - visibleWorldWidthAtInit) cameraX = WORLD_WIDTH - visibleWorldWidthAtInit;
+    if (cameraX > currentWorldWidth - visibleWorldWidthAtInit) cameraX = currentWorldWidth - visibleWorldWidthAtInit;
     if (cameraY < 0) cameraY = 0;
     if (cameraY > DEDICATED_GAME_HEIGHT - visibleWorldHeightAtInit) cameraY = DEDICATED_GAME_HEIGHT - visibleWorldHeightAtInit;
 
@@ -1390,7 +1398,6 @@ socket.on('playerMovedInRoom', (allPlayersData) => {
     if (Array.isArray(allPlayersData)) {
         const updatedPlayersMap = {};
         for (const movedPlayerData of allPlayersData) {
-            // Zanim zaktualizujemy gracza, zachowajmy lokalnie obliczoną pozycję końca wędki, jeśli istnieje
             if (playersInRoom[movedPlayerData.id]) {
                 movedPlayerData.rodTipWorldX = playersInRoom[movedPlayerData.id].rodTipWorldX;
                 movedPlayerData.rodTipWorldY = playersInRoom[movedPlayerData.id].rodTipWorldY;
@@ -1398,13 +1405,11 @@ socket.on('playerMovedInRoom', (allPlayersData) => {
             updatedPlayersMap[movedPlayerData.id] = movedPlayerData;
         }
 
-        playersInRoom = updatedPlayersMap; 
-        
+        playersInRoom = updatedPlayersMap;
+
         if (localPlayer.id && playersInRoom[localPlayer.id]) {
             const serverState = playersInRoom[localPlayer.id];
 
-            // Aktualizuj tylko dane z serwera, ale nie nadpisuj lokalnych stanów, które są zarządzane klient-side (np. casting)
-            // Lepsze podejście to nadpisać wszystkie, a potem przywrócić tylko te, które są lokalne.
             const tempLocalCasting = localPlayer.isCasting;
             const tempLocalFishingBarTime = localPlayer.fishingBarTime;
             const tempLocalFishingBarSliderPosition = localPlayer.fishingBarSliderPosition;
@@ -1414,13 +1419,12 @@ socket.on('playerMovedInRoom', (allPlayersData) => {
 
             Object.assign(localPlayer, serverState);
 
-            // Przywróć lokalnie zarządzane stany
             localPlayer.isCasting = tempLocalCasting;
             localPlayer.fishingBarTime = tempLocalFishingBarTime;
             localPlayer.fishingBarSliderPosition = tempLocalFishingBarSliderPosition;
             localPlayer.castingPower = tempLocalCastingPower;
             localPlayer.castingDirectionAngle = tempLocalCastingDirectionAngle;
-            
+
             if (serverState.customizations) {
                 Object.assign(localPlayer.customizations, serverState.customizations);
                 Object.assign(localPlayerCustomizations, localPlayer.customizations);
@@ -1460,8 +1464,19 @@ leaveRoomBtn.addEventListener('click', () => {
 function leaveCurrentRoomUI() {
     currentRoom = null;
     playersInRoom = {};
+    insectsInRoom = []; // Wyczyszczenie insektów po opuszczeniu pokoju
     gameContainerDiv.style.display = 'none';
     lobbyDiv.style.display = 'block';
+
+    if (biomeManager) {
+        biomeManager.initializeGroundPlants([]);
+        biomeManager.initializeTrees([]); // Wyczyszczenie drzew po opuszczeniu pokoju
+        biomeManager.setBiome('jurassic'); // Ustaw domyślny biom
+        biomeManager.setVillageData('none', null, []); // Reset danych wioski, bez budynków
+        currentWorldWidth = DEDICATED_GAME_WIDTH * 2;
+        biomeManager.worldWidth = currentWorldWidth;
+    }
+
     localPlayer.x = 50;
     localPlayer.y = DEDICATED_GAME_HEIGHT - 50 - playerSize;
     localPlayer.isJumping = false;
@@ -1602,9 +1617,10 @@ canvas.addEventListener('mousemove', (event) => {
         const mouseY_internalCanvas_unzoomed = mouseY_canvasCss * (DEDICATED_GAME_HEIGHT / rect.height);
 
         localPlayer.currentMouseX = mouseX_internalCanvas_unzoomed / currentZoomLevel + cameraX;
-        localPlayer.currentMouseY = mouseY_internalCanvas_unzoomed / currentZoomLevel + cameraY; 
+        localPlayer.currentMouseY = mouseY_internalCanvas_unzoomed / currentZoomLevel + cameraY;
 
-        localPlayer.currentMouseX = Math.max(0, Math.min(WORLD_WIDTH, localPlayer.currentMouseX));
+        // ZMIANA: Ograniczenie pozycji myszy do dynamicznej szerokości świata
+        localPlayer.currentMouseX = Math.max(0, Math.min(currentWorldWidth, localPlayer.currentMouseX));
         localPlayer.currentMouseY = Math.max(0, Math.min(DEDICATED_GAME_HEIGHT, localPlayer.currentMouseY));
 
         if (localPlayer.customizations.rightHandItem === ITEM_ROD && !localPlayer.isCasting && !localPlayer.hasLineCast && localPlayer.rodTipWorldX !== null) {
@@ -1622,7 +1638,7 @@ canvas.addEventListener('mousemove', (event) => {
 
         const normalizedValue = effectiveClickPosition / (draggingSlider.barWidth - draggingSlider.handleSize);
         let newValue = draggingSlider.min + normalizedValue * (draggingSlider.max - draggingSlider.min);
-        
+
         newValue = Math.max(draggingSlider.min, Math.min(draggingSlider.max, newValue));
         newValue = Math.round(newValue);
 
@@ -1656,9 +1672,9 @@ canvas.addEventListener('mousedown', (event) => {
             mousePos.x <= bounds.handleX + bounds.handleSize + hitboxExpand &&
             mousePos.y >= bounds.handleY - hitboxExpand &&
             mousePos.y <= bounds.handleY + bounds.handleSize + hitboxExpand) {
-            
+
             draggingSlider = { ...bounds, startMouseX: mousePos.x, startValue: localPlayerCustomizations[bounds.propertyName] };
-            event.preventDefault(); 
+            event.preventDefault();
             return;
         }
 
@@ -1666,7 +1682,7 @@ canvas.addEventListener('mousedown', (event) => {
             mousePos.x <= bounds.barX + bounds.barWidth &&
             mousePos.y >= bounds.barY &&
             mousePos.y <= bounds.barY + bounds.barHeight) {
-            
+
             const clickPositionInBar = mousePos.x - bounds.barX;
             const handleCenterOffset = bounds.handleSize / 2;
             const effectiveClickPosition = clickPositionInBar - handleCenterOffset;
@@ -1679,7 +1695,7 @@ canvas.addEventListener('mousedown', (event) => {
             localPlayerCustomizations[bounds.propertyName] = newValue;
             localPlayer.customizations[bounds.propertyName] = newValue;
             socket.emit('updateCustomization', localPlayer.customizations);
-            
+
             draggingSlider = { ...bounds, startMouseX: mousePos.x, startValue: newValue };
             event.preventDefault();
             return;
@@ -1691,7 +1707,7 @@ canvas.addEventListener('mouseup', (event) => {
     if (event.button === 0 && currentRoom !== null && localPlayer.customizations.rightHandItem === ITEM_ROD && !isCustomizationMenuOpen) {
         if (localPlayer.isCasting) {
             localPlayer.isCasting = false;
-            
+
             socket.emit('castFishingLine', {
                 power: localPlayer.castingPower,
                 angle: localPlayer.castingDirectionAngle,
