@@ -650,40 +650,56 @@ function gameLoop(currentTime) {
 // ZMIANA: Ta funkcja teraz tylko tworzy serwer i ogłasza go.
 createRoomBtn.addEventListener('click', () => {
     isHost = true;
-    initializePeer((peerId) => {
-        localPlayer.id = peerId;
+    function initializePeer(callback) {
+    if (peer && !peer.destroyed) {
+        return callback(peer.id);
+    }
 
-        // 1. Uruchom instancję serwera gry w tle. Serwer startuje PUSTY.
-        gameHostInstance = new GameHost();
-        const roomConfig = gameHostInstance.start({ id: peerId, username: localPlayer.username, color: localPlayer.color, customizations: localPlayer.customizations });
+    // Pełna konfiguracja z serwerami STUN i TURN
+    const peerConfig = {
+        // 'iceServers' to lista "pomocników" do nawiązywania połączenia
+        iceServers: [
+            // Serwery STUN (szybkie, próbują połączenia bezpośredniego)
+            { urls: 'stun:stun.l.google.com:19302' },
+            { urls: 'stun:stun1.l.google.com:19302' },
 
-        // 2. Zarejestruj pokój na serwerze sygnalizacyjnym, aby inni (i my) mogli go zobaczyć.
-        signalingSocket.emit('register-host', {
-            peerId,
-            name: newRoomNameInput.value.trim() || roomConfig.name,
-            biome: roomConfig.gameData.biome,
-            worldWidth: roomConfig.gameData.worldWidth,
-            villageType: roomConfig.gameData.villageType
-        });
+            // Serwery TURN (klucz do rozwiązania - używane jako ostateczność, gdy STUN zawiedzie)
+            // Używamy darmowego serwera z projektu Open Relay Project
+            {
+                urls: "turn:openrelay.metered.ca:80",
+                username: "openrelayproject",
+                credential: "openrelayproject"
+            },
+            {
+                urls: "turn:openrelay.metered.ca:443",
+                username: "openrelayproject",
+                credential: "openrelayproject"
+            }
+        ],
+    };
 
-        // 3. Ustaw nasłuchiwanie na PRAWDZIWE połączenia od gości.
-        peer.on('connection', (conn) => {
-            conn.on('open', () => {
-                conn.on('data', (data) => {
-                    if (data.type === 'requestJoin') { gameHostInstance.addPlayer(conn, data.payload); signalingSocket.emit('notify-join', peerId); }
-                    else if (data.type === 'playerInput') { gameHostInstance.handlePlayerInput(conn.peer, data.payload); }
-                    else if (data.type === 'playerAction') { gameHostInstance.handlePlayerAction(conn.peer, data.payload); }
-                });
-            });
-            conn.on('close', () => { gameHostInstance.removePlayer(conn.peer); signalingSocket.emit('notify-leave', peerId); });
-        });
+    // Inicjalizujemy PeerJS z nową, pełną konfiguracją.
+    // Używamy { config: ... }, aby poprawnie przekazać listę serwerów.
+    peer = new Peer(undefined, { config: peerConfig });
 
-        // 4. Zablokuj przycisk tworzenia, aby uniknąć bałaganu.
-        createRoomBtn.disabled = true;
-        newRoomNameInput.disabled = true;
-        console.log(`[HOST] Serwer w tle uruchomiony. Pokój "${roomConfig.name}" jest teraz widoczny w lobby.`);
+    peer.on('open', (id) => {
+        console.log('Moje ID w sieci P2P: ' + id);
+        if (callback) callback(id);
     });
-});
+
+    peer.on('error', (err) => {
+        console.error("Błąd krytyczny PeerJS: ", err);
+        if (err.type === 'peer-unavailable') {
+             console.error("Nie udało się połączyć z hostem. Może być za firewallem lub offline.");
+             alert("Nie można połączyć się z tym pokojem. Spróbuj z innym.");
+        } else if (err.type === 'network') {
+            console.error("Problem z siecią uniemożliwił połączenie P2P.");
+            alert("Problem z siecią. Nie można nawiązać połączenia P2P.");
+        } else {
+             alert("Wystąpił błąd połączenia P2P. Odśwież stronę.");
+        }
+    });
+}
 
 // ZMIANA: Ta funkcja obsługuje teraz dwa przypadki - dołączanie jako gość i jako host.
 function joinRoom(hostPeerId) {
