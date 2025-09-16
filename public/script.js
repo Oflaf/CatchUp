@@ -420,19 +420,24 @@ function initializePeer(callback) {
     const isLocal = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
 
     const peerOptions = {
-        host: location.hostname,
-        path: '/peerjs', // <-- Ta ścieżka musi zgadzać się z app.use() w server.js
+        host: location.hostname, // localhost lub TwojaNazwa.onrailway.app
+        path: '/peerjs',         // Ścieżka zdefiniowana w server.js
         config: {
             iceServers: [
                 { urls: 'stun:stun.l.google.com:19302' },
                 { urls: 'stun:stun1.l.google.com:19302' },
+                // TURN serwery zostawiamy dla pewności
+                { urls: "turn:openrelay.metered.ca:80", username: "openrelayproject", credential: "openrelayproject" },
+                { urls: "turn:openrelay.metered.ca:443", username: "openrelayproject", credential: "openrelayproject" }
             ]
         }
     };
 
+    // Kluczowa poprawka: tylko jeśli działamy lokalnie, ustawiamy port 3000
     if (isLocal) {
         peerOptions.port = 3000;
     } else {
+        // Na Railway używamy bezpiecznego połączenia, PeerJS sam ustawi port 443
         peerOptions.secure = true;
     }
 
@@ -445,7 +450,7 @@ function initializePeer(callback) {
 
     peer.on('error', (err) => {
         console.error("Błąd krytyczny PeerJS: ", err);
-        if (callback) callback(null); 
+        if (callback) callback(null); // Zwróć null, jeśli inicjalizacja się nie powiodła
     });
 }
 
