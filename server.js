@@ -5,20 +5,27 @@ const { ExpressPeerServer } = require('peer');
 
 const app = express();
 const server = http.createServer(app);
-const io = socketIo(server);
+
+// === NOWA, POPRAWIONA KONFIGURACJA SOCKET.IO ===
+const io = socketIo(server, {
+  cors: {
+    origin: "*", // Na produkcji warto to zawęzić do adresu Twojej strony
+    methods: ["GET", "POST"]
+  }
+});
+// ===============================================
 
 const PORT = process.env.PORT || 3000;
 
 app.use(express.static('public'));
 
-// === POPRAWIONA KONFIGURACJA PEER SERVER ===
+// Konfiguracja Peer Server pozostaje taka sama jak w poprzedniej sugestii
 const peerServer = ExpressPeerServer(server, {
     debug: true,
-    // Nie definiuj tu `path`, ponieważ ścieżka jest określona poniżej
 });
 
-// Podepnij serwer PeerJS pod właściwą ścieżkę
-app.use('/peerjs', peerServer); // To jest teraz jedyne miejsce definiujące ścieżkę '/peerjs'
+app.use('/peerjs', peerServer);
+
 
 // === POCZĄTEK BLOKU DIAGNOSTYCZNEGO DLA PEER SERVER ===
 peerServer.on('connection', (client) => {
@@ -34,11 +41,14 @@ peerServer.on('error', (error) => {
 });
 // === KONIEC BLOKU DIAGNOSTYCZNEGO ===
 
+
+// Reszta Twojego kodu socket.io bez zmian...
 let activeHosts = {};
 
 io.on('connection', (socket) => {
     console.log(`[Socket.IO] Połączono klienta sygnalizacyjnego: ${socket.id}`);
-
+    // ... i tak dalej
+    // ... cały Twój kod obsługi 'register-host', 'disconnect' itd.
     socket.emit('roomListUpdate', activeHosts);
 
     socket.on('register-host', (roomData) => {
@@ -81,6 +91,7 @@ io.on('connection', (socket) => {
         }
     });
 });
+
 
 server.listen(PORT, () => {
     console.log(`Serwer SYGNALIZACYJNY I PEERJS działają na porcie ${PORT}`);
