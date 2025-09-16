@@ -1,6 +1,7 @@
 const express = require('express');
 const http = require('http');
 const socketIo = require('socket.io');
+const { ExpressPeerServer } = require('peer');
 
 const app = express();
 const server = http.createServer(app);
@@ -10,33 +11,44 @@ const PORT = process.env.PORT || 3000;
 
 app.use(express.static('public'));
 
-// Prosta baza danych w pamięci do przechowywania aktywnych hostów (pokoi)
+const peerServer = ExpressPeerServer(server, {
+    debug: true,
+    path: '/' // <-- Zmień ścieżkę na główną
+});
+
+app.use('/peerjs', peerServer);
+
+// === POCZĄTEK BLOKU DIAGNOSTYCZNEGO DLA PEER SERVER ===
+peerServer.on('connection', (client) => {
+    console.log(`[PeerServer] SUKCES: Klient połączył się z ID: ${client.getId()}`);
+});
+
+peerServer.on('disconnect', (client) => {
+    console.log(`[PeerServer] INFO: Klient rozłączył się z ID: ${client.getId()}`);
+});
+
+peerServer.on('error', (error) => {
+    console.error(`[PeerServer] BŁĄD KRYTYCZNY:`, error);
+});
+// === KONIEC BLOKU DIAGNOSTYCZNEGO ===
+
 let activeHosts = {};
 
 io.on('connection', (socket) => {
-    console.log(`Połączono klienta sygnalizacyjnego: ${socket.id}`);
+    console.log(`[Socket.IO] Połączono klienta sygnalizacyjnego: ${socket.id}`);
 
-    // Wyślij nowo podłączonemu graczowi aktualną listę pokoi
     socket.emit('roomListUpdate', activeHosts);
 
-    // Host rejestruje swój pokój
     socket.on('register-host', (roomData) => {
-        // roomData powinna zawierać { peerId, name, biome, worldWidth, villageType }
-        console.log(`Host zarejestrował pokój: ${roomData.name} z Peer ID: ${roomData.peerId}`);
+        console.log(`[Socket.IO] Host zarejestrował pokój: ${roomData.name} z Peer ID: ${roomData.peerId}`);
         activeHosts[roomData.peerId] = {
-            peerId: roomData.peerId,
-            name: roomData.name,
-            playerCount: 1, // Zaczyna od 1 (host)
-            biome: roomData.biome,
-            worldWidth: roomData.worldWidth,
-            villageType: roomData.villageType,
-            hostSocketId: socket.id // Przechowujemy ID socketa na wypadek rozłączenia
+            peerId: roomData.peerId, name: roomData.name, playerCount: 1,
+            biome: roomData.biome, worldWidth: roomData.worldWidth, villageType: roomData.villageType,
+            hostSocketId: socket.id
         };
-        // Powiadom wszystkich o nowym pokoju
         io.emit('roomListUpdate', activeHosts);
     });
     
-    // Klient informuje serwer, że dołączył do hosta (w celu aktualizacji playerCount)
     socket.on('notify-join', (hostPeerId) => {
         if(activeHosts[hostPeerId]) {
             activeHosts[hostPeerId].playerCount++;
@@ -44,12 +56,9 @@ io.on('connection', (socket) => {
         }
     });
     
-    // Klient informuje, że opuścił hosta
     socket.on('notify-leave', (hostPeerId) => {
         if(activeHosts[hostPeerId]) {
             activeHosts[hostPeerId].playerCount--;
-            // Jeśli host jest sam i się rozłączy, usuwamy pokój
-            // Ale główna logika usuwania jest przy rozłączeniu hosta
             if (activeHosts[hostPeerId].playerCount <= 0) {
                  delete activeHosts[hostPeerId];
             }
@@ -57,23 +66,20 @@ io.on('connection', (socket) => {
         }
     });
 
-    // Gdy host się rozłączy (zamknie kartę)
     socket.on('disconnect', () => {
-        console.log(`Rozłączono klienta sygnalizacyjnego: ${socket.id}`);
-        // Znajdź czy ten socket był hostem
+        console.log(`[Socket.IO] Rozłączono klienta sygnalizacyjnego: ${socket.id}`);
         const hostPeerId = Object.keys(activeHosts).find(
             peerId => activeHosts[peerId].hostSocketId === socket.id
         );
 
         if (hostPeerId) {
-            console.log(`Host ${activeHosts[hostPeerId].name} (${hostPeerId}) rozłączył się. Usuwanie pokoju.`);
+            console.log(`[Socket.IO] Host ${activeHosts[hostPeerId].name} (${hostPeerId}) rozłączył się. Usuwanie pokoju.`);
             delete activeHosts[hostPeerId];
-            // Powiadom wszystkich, że pokój został usunięty
             io.emit('roomListUpdate', activeHosts);
         }
     });
 });
 
 server.listen(PORT, () => {
-    console.log(`Serwer SYGNALIZACYJNY działa na porcie ${PORT}`);
+    console.log(`Serwer SYGNALIZACYJNY I PEERJS działają na porcie ${PORT}`);
 });
