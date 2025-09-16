@@ -417,49 +417,35 @@ function initializePeer(callback) {
         return callback(peer.id);
     }
 
-    // Pełna konfiguracja z serwerami STUN (do prób połączeń bezpośrednich) 
-    // i serwerami TURN (do połączeń przekazywanych, gdy STUN zawiedzie)
-    const peerConfig = {
-        iceServers: [
-            // Standardowe serwery STUN od Google
-            { urls: 'stun:stun.l.google.com:19302' },
-            { urls: 'stun:stun1.l.google.com:19302' },
+    const isLocal = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
 
-            // Darmowe, publiczne serwery TURN z projektu Open Relay Project
-            // To jest kluczowy element, który powinien rozwiązać Twój problem
-            {
-                urls: "turn:openrelay.metered.ca:80",
-                username: "openrelayproject",
-                credential: "openrelayproject"
-            },
-            {
-                urls: "turn:openrelay.metered.ca:443",
-                username: "openrelayproject",
-                credential: "openrelayproject"
-            }
-        ],
+    const peerOptions = {
+        host: location.hostname,
+        path: '/peerjs', // <-- Ta ścieżka musi zgadzać się z app.use() w server.js
+        config: {
+            iceServers: [
+                { urls: 'stun:stun.l.google.com:19302' },
+                { urls: 'stun:stun1.l.google.com:19302' },
+            ]
+        }
     };
 
-    // Inicjalizujemy PeerJS z nową, pełną konfiguracją.
-    // Używamy { config: ... }, aby poprawnie przekazać listę serwerów do biblioteki.
-    peer = new Peer(undefined, { config: peerConfig });
+    if (isLocal) {
+        peerOptions.port = 3000;
+    } else {
+        peerOptions.secure = true;
+    }
+
+    peer = new Peer(undefined, peerOptions);
 
     peer.on('open', (id) => {
-        console.log('Moje ID w sieci P2P: ' + id);
+        console.log('Moje ID w sieci P2P (z naszego serwera): ' + id);
         if (callback) callback(id);
     });
 
     peer.on('error', (err) => {
         console.error("Błąd krytyczny PeerJS: ", err);
-        if (err.type === 'peer-unavailable') {
-             console.error("Nie udało się połączyć z hostem. Może być za firewallem lub offline.");
-             alert("Nie można połączyć się z tym pokojem. Spróbuj z innym.");
-        } else if (err.type === 'network') {
-            console.error("Problem z siecią uniemożliwił połączenie P2P.");
-            alert("Problem z siecią. Nie można nawiązać połączenia P2P.");
-        } else {
-             alert("Wystąpił błąd połączenia P2P. Odśwież stronę.");
-        }
+        if (callback) callback(null); 
     });
 }
 
@@ -663,15 +649,27 @@ function gameLoop(currentTime) {
 
 // ZMIANA: Ta funkcja teraz tylko tworzy serwer i ogłasza go.
 createRoomBtn.addEventListener('click', () => {
+    if (isHost) return; // Zapobiegaj wielokrotnemu klikaniu
     isHost = true;
+    createRoomBtn.disabled = true; // Zablokuj przycisk od razu
+    newRoomNameInput.disabled = true;
+
     initializePeer((peerId) => {
+        if (!peerId) {
+            console.error("Nie udało się uzyskać Peer ID. Nie można stworzyć pokoju.");
+            alert("Błąd sieci, nie można stworzyć pokoju.");
+            isHost = false; // Zresetuj flagę
+            createRoomBtn.disabled = false;
+            newRoomNameInput.disabled = false;
+            return;
+        }
+        
+        console.log(`Uzyskano Peer ID: ${peerId}. Inicjuję hosta gry...`);
         localPlayer.id = peerId;
 
-        // 1. Uruchom instancję serwera gry w tle. Serwer startuje PUSTY.
         gameHostInstance = new GameHost();
         const roomConfig = gameHostInstance.start({ id: peerId, username: localPlayer.username, color: localPlayer.color, customizations: localPlayer.customizations });
 
-        // 2. Zarejestruj pokój na serwerze sygnalizacyjnym, aby inni (i my) mogli go zobaczyć.
         signalingSocket.emit('register-host', {
             peerId,
             name: newRoomNameInput.value.trim() || roomConfig.name,
@@ -680,7 +678,6 @@ createRoomBtn.addEventListener('click', () => {
             villageType: roomConfig.gameData.villageType
         });
 
-        // 3. Ustaw nasłuchiwanie na PRAWDZIWE połączenia od gości.
         peer.on('connection', (conn) => {
             conn.on('open', () => {
                 conn.on('data', (data) => {
@@ -691,10 +688,7 @@ createRoomBtn.addEventListener('click', () => {
             });
             conn.on('close', () => { gameHostInstance.removePlayer(conn.peer); signalingSocket.emit('notify-leave', peerId); });
         });
-
-        // 4. Zablokuj przycisk tworzenia, aby uniknąć bałaganu.
-        createRoomBtn.disabled = true;
-        newRoomNameInput.disabled = true;
+        
         console.log(`[HOST] Serwer w tle uruchomiony. Pokój "${roomConfig.name}" jest teraz widoczny w lobby.`);
     });
 });
@@ -706,115 +700,111 @@ function joinRoom(hostPeerId) {
 
         // Przypadek 1: Host dołącza do WŁASNEJ gry.
         if (isHost && myPeerId === hostPeerId) {
-    console.log('[HOST] Wykryto dołączanie do własnego pokoju. Używanie w pełni symulowanego połączenia.');
-
-    const simulatedConnection = {
-        peer: myPeerId,
-        open: true,
-
-        send: (data) => {
-            switch (data.type) {
-                case 'roomJoined':
-                    onSuccessfulJoin(data.payload);
-                    break;
-                case 'gameStateUpdate':
-                    // Przechowujemy stany animacji lokalnego gracza, aby uniknąć ich resetowania
-                    const oldLocalPlayerAnimState = playersInRoom[localPlayer.id] 
-                        ? { animationFrame: playersInRoom[localPlayer.id].animationFrame, idleAnimationFrame: playersInRoom[localPlayer.id].idleAnimationFrame } 
-                        : { animationFrame: 0, idleAnimationFrame: 0 };
-
-                    const map = {};
-                    for (const p of data.payload) {
-                        if (playersInRoom[p.id]) {
-                            p.animationFrame = playersInRoom[p.id].animationFrame;
-                            p.idleAnimationFrame = playersInRoom[p.id].idleAnimationFrame;
-                        }
-                        map[p.id] = p;
-                    }
-                    playersInRoom = map;
-
-                    // KLUCZOWA ZMIANA: Usunęliśmy stąd linię `Object.assign(localPlayer, ...)`!
-                    // Teraz host, tak samo jak gość, polega wyłącznie na funkcji `reconcilePlayerPosition()`
-                    // w głównej pętli gry, aby płynnie korygować swoją pozycję.
-                    break;
-
-                case 'playerJoinedRoom':
-                    if (!playersInRoom[data.payload.id]) {
-                        playersInRoom[data.payload.id] = data.payload.playerData;
-                        console.log(`Gracz ${data.payload.username} dołączył.`);
-                    }
-                    break;
-                case 'playerLeftRoom':
-                    if (playersInRoom[data.payload]) {
-                        console.log(`Gracz ${playersInRoom[data.payload].username} opuścił.`);
-                        delete playersInRoom[data.payload];
-                    }
-                    break;
-                case 'playerCustomizationUpdated':
-                    if (playersInRoom[data.payload.id]) {
-                        playersInRoom[data.payload.id].customizations = data.payload.customizations;
-                    }
-                    break;
-                case 'grassSwaying':
-                    if (biomeManager) {
-                        biomeManager.startSwayAnimation(data.payload.grassId, data.payload.direction);
-                    }
-                    break;
-            }
-        },
-        
-        sendToServer: (data) => {
-             if (data.type === 'playerInput') {
-                gameHostInstance.handlePlayerInput(myPeerId, data.payload);
-            } else if (data.type === 'playerAction') {
-                gameHostInstance.handlePlayerAction(myPeerId, data.payload);
-            }
-        }
-    };
-
-    hostConnection = {
-        send: (data) => simulatedConnection.sendToServer(data)
-    };
-    
-    gameHostInstance.addPlayer(simulatedConnection, localPlayer);
-    
-} 
-        // Przypadek 2: Zwykły gość dołącza do gry (bez zmian).
-        else {
-            isHost = false; // Na wszelki wypadek
-            hostConnection = peer.connect(hostPeerId, { reliable: true });
-
-            hostConnection.on('open', () => {
-                signalingSocket.emit('notify-join', hostPeerId);
-                hostConnection.send({ type: 'requestJoin', payload: localPlayer });
-                
-                hostConnection.on('data', (data) => {
-                    switch(data.type) {
+            console.log('[HOST] Wykryto dołączanie do własnego pokoju. Używanie symulowanego połączenia.');
+            
+            const simulatedConnection = {
+                peer: myPeerId,
+                open: true,
+                send: (data) => {
+                    switch (data.type) {
                         case 'roomJoined': onSuccessfulJoin(data.payload); break;
                         case 'gameStateUpdate':
                             const map = {};
                             for (const p of data.payload) {
-                                if(playersInRoom[p.id]) { p.animationFrame = playersInRoom[p.id].animationFrame; p.idleAnimationFrame = playersInRoom[p.id].idleAnimationFrame; }
+                                if(playersInRoom[p.id]) {
+                                    p.animationFrame = playersInRoom[p.id].animationFrame;
+                                    p.idleAnimationFrame = playersInRoom[p.id].idleAnimationFrame;
+                                }
                                 map[p.id] = p;
                             }
                             playersInRoom = map;
-                            if (playersInRoom[localPlayer.id]) Object.assign(localPlayer, playersInRoom[localPlayer.id]);
                             break;
-                        case 'playerJoinedRoom': 
+                        case 'playerJoinedRoom':
                             if (!playersInRoom[data.payload.id]) {
-                                playersInRoom[data.payload.id] = data.payload.playerData; 
+                                playersInRoom[data.payload.id] = data.payload.playerData;
                                 console.log(`Gracz ${data.payload.username} dołączył.`);
                             }
                             break;
-                        case 'playerLeftRoom': if(playersInRoom[data.payload]) { console.log(`Gracz ${playersInRoom[data.payload].username} opuścił.`); delete playersInRoom[data.payload]; } break;
-                        case 'playerCustomizationUpdated': if(playersInRoom[data.payload.id]) playersInRoom[data.payload.id].customizations = data.payload.customizations; break;
-                        case 'grassSwaying': 
-                            if (biomeManager) biomeManager.startSwayAnimation(data.payload.grassId, data.payload.direction);
+                        case 'playerLeftRoom':
+                            if (playersInRoom[data.payload]) {
+                                console.log(`Gracz ${playersInRoom[data.payload].username} opuścił.`);
+                                delete playersInRoom[data.payload];
+                            }
+                            break;
+                        case 'playerCustomizationUpdated':
+                            if (playersInRoom[data.payload.id]) {
+                                playersInRoom[data.payload.id].customizations = data.payload.customizations;
+                            }
+                            break;
+                        case 'grassSwaying':
+                            if (biomeManager) {
+                                biomeManager.startSwayAnimation(data.payload.grassId, data.payload.direction);
+                            }
                             break;
                     }
-                });
+                },
+                sendToServer: (data) => {
+                     if (data.type === 'playerInput') { gameHostInstance.handlePlayerInput(myPeerId, data.payload); }
+                     else if (data.type === 'playerAction') { gameHostInstance.handlePlayerAction(myPeerId, data.payload); }
+                }
+            };
+            hostConnection = { send: (data) => simulatedConnection.sendToServer(data) };
+            gameHostInstance.addPlayer(simulatedConnection, localPlayer);
+        } 
+        // Przypadek 2: Zwykły gość dołącza do gry.
+        else {
+            isHost = false;
+            console.log(`[GOŚĆ] Próbuję nawiązać połączenie P2P z hostem o ID: ${hostPeerId}`);
+            
+            hostConnection = peer.connect(hostPeerId, { reliable: true });
+
+            if (!hostConnection) {
+                console.error("[GOŚĆ] BŁĄD KRYTYCZNY: peer.connect() zwróciło null.");
+                alert("Nie udało się zainicjować połączenia z hostem.");
+                return;
+            }
+
+            console.log("[GOŚĆ] Obiekt połączenia został stworzony. Oczekuję na zdarzenia...");
+
+            hostConnection.on('open', () => {
+                console.log(`[GOŚĆ] SUKCES! Połączenie P2P z hostem (${hostPeerId}) zostało otwarte.`);
+                signalingSocket.emit('notify-join', hostPeerId);
+                hostConnection.send({ type: 'requestJoin', payload: localPlayer });
             });
+
+            hostConnection.on('data', (data) => {
+                switch(data.type) {
+                    case 'roomJoined': onSuccessfulJoin(data.payload); break;
+                    case 'gameStateUpdate':
+                        const map = {};
+                        for (const p of data.payload) {
+                            if(playersInRoom[p.id]) { p.animationFrame = playersInRoom[p.id].animationFrame; p.idleAnimationFrame = playersInRoom[p.id].idleAnimationFrame; }
+                            map[p.id] = p;
+                        }
+                        playersInRoom = map;
+                        if (playersInRoom[localPlayer.id]) Object.assign(localPlayer, playersInRoom[localPlayer.id]);
+                        break;
+                    case 'playerJoinedRoom': 
+                        if (!playersInRoom[data.payload.id]) {
+                            playersInRoom[data.payload.id] = data.payload.playerData; 
+                            console.log(`Gracz ${data.payload.username} dołączył.`);
+                        }
+                        break;
+                    case 'playerLeftRoom': if(playersInRoom[data.payload]) { console.log(`Gracz ${playersInRoom[data.payload].username} opuścił.`); delete playersInRoom[data.payload]; } break;
+                    case 'playerCustomizationUpdated': if(playersInRoom[data.payload.id]) playersInRoom[data.payload.id].customizations = data.payload.customizations; break;
+                    case 'grassSwaying': 
+                        if (biomeManager) biomeManager.startSwayAnimation(data.payload.grassId, data.payload.direction);
+                        break;
+                }
+            });
+
+            hostConnection.on('error', (err) => {
+                console.error(`[GOŚĆ] BŁĄD POŁĄCZENIA P2P:`, err);
+                alert('Wystąpił błąd podczas komunikacji z hostem.');
+            });
+
             hostConnection.on('close', () => { 
+                console.warn("[GOŚĆ] Połączenie P2P z hostem zostało zamknięte.");
                 alert('Host zamknął pokój lub utracono połączenie.'); 
                 leaveCurrentRoomUI();
             });
