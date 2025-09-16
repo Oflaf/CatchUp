@@ -11,12 +11,14 @@ const PORT = process.env.PORT || 3000;
 
 app.use(express.static('public'));
 
+// === POPRAWIONA KONFIGURACJA PEER SERVER ===
 const peerServer = ExpressPeerServer(server, {
     debug: true,
-    path: '/' // <-- Zmień ścieżkę na główną
+    // Nie definiuj tu `path`, ponieważ ścieżka jest określona poniżej
 });
 
-app.use('/peerjs', peerServer);
+// Podepnij serwer PeerJS pod właściwą ścieżkę
+app.use('/peerjs', peerServer); // To jest teraz jedyne miejsce definiujące ścieżkę '/peerjs'
 
 // === POCZĄTEK BLOKU DIAGNOSTYCZNEGO DLA PEER SERVER ===
 peerServer.on('connection', (client) => {
