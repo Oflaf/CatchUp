@@ -412,45 +412,32 @@ function initializeSignaling() {
     });
 }
 
+
 function initializePeer(callback) {
     if (peer && !peer.destroyed) {
         return callback(peer.id);
     }
 
-    const isLocal = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
+    // === POCZĄTEK KLUCZOWEJ ZMIANY ===
 
-    const peerOptions = {
-        host: location.hostname, // localhost lub TwojaNazwa.onrailway.app
-        path: '/peerjs',         // Ścieżka zdefiniowana w server.js
-        config: {
-            iceServers: [
-                { urls: 'stun:stun.l.google.com:19302' },
-                { urls: 'stun:stun1.l.google.com:19302' },
-                // TURN serwery zostawiamy dla pewności
-                { urls: "turn:openrelay.metered.ca:80", username: "openrelayproject", credential: "openrelayproject" },
-                { urls: "turn:openrelay.metered.ca:443", username: "openrelayproject", credential: "openrelayproject" }
-            ]
-        }
-    };
+    // Usuwamy całą starą konfigurację.
+    // Użycie `new Peer()` bez żadnych opcji automatycznie łączy się
+    // z darmowym, chmurowym serwerem PeerJS, który ma niezawodne
+    // serwery STUN i TURN. To rozwiązuje problemy z połączeniem.
+    peer = new Peer();
 
-    // Kluczowa poprawka: tylko jeśli działamy lokalnie, ustawiamy port 3000
-    if (isLocal) {
-        peerOptions.port = 3000;
-    } else {
-        // Na Railway używamy bezpiecznego połączenia, PeerJS sam ustawi port 443
-        peerOptions.secure = true;
-    }
-
-    peer = new Peer(undefined, peerOptions);
+    // === KONIEC KLUCZOWEJ ZMIANY ===
 
     peer.on('open', (id) => {
-        console.log('Moje ID w sieci P2P (z naszego serwera): ' + id);
+        console.log('Moje ID w sieci P2P (z serwera chmurowego PeerJS): ' + id);
         if (callback) callback(id);
     });
 
     peer.on('error', (err) => {
         console.error("Błąd krytyczny PeerJS: ", err);
-        if (callback) callback(null); // Zwróć null, jeśli inicjalizacja się nie powiodła
+        // Zmieńmy alert, żeby był bardziej czytelny dla gracza
+        alert("Wystąpił błąd sieciowy P2P. Spróbuj odświeżyć stronę. Błąd: " + err.type);
+        if (callback) callback(null);
     });
 }
 
