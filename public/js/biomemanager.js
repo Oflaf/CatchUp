@@ -149,7 +149,7 @@ class BiomeManager {
         this.treeDefinitions = [];
         this.backgroundTrees = [];
         this.foregroundTrees = [];
-        this.TREE_VERTICAL_OFFSET = 2;
+        this.TREE_VERTICAL_OFFSET = 0;
         this.TREE_MIN_SCALE = 2.7;
         this.TREE_MAX_SCALE = 3.6;
         this.groundPlantDefinitions = [];
@@ -158,7 +158,7 @@ class BiomeManager {
         this.backgroundWaterPlants = [];
         this.backgroundGroundPlants = [];
         this.foregroundGroundPlants = [];
-        this.GROUNDGRASS_VERTICAL_OFFSET = 2;
+        this.GROUNDGRASS_VERTICAL_OFFSET = 0;
         this.GROUNDGRASS_MIN_SCALE = 2.2;
         this.GROUNDGRASS_MAX_SCALE = 3.6;
         this.placedWaterPlants = [];

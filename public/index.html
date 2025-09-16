@@ -29,8 +29,17 @@
         <canvas id="gameCanvas"></canvas> <!-- BEZ atrybutów width/height tutaj -->
     </div>
 
-    <script src="/socket.io/socket.io.js"></script>
-    <script src="js/biomemanager.js"></script> <!-- DODANA LINIA -->
+    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script> 
+    
+    <!-- Socket.io do komunikacji z serwerem SYGNALIZACYJNYM -->
+    <script src="/socket.io/socket.io.js"></script> 
+    
+    <script src="js/biomemanager.js"></script>
+    
+    <!-- Nasza nowa logika hosta -->
+    <script src="js/host.js"></script> 
+    
+    <!-- Główny skrypt klienta -->
     <script src="script.js"></script>
 </body>
 </html>
