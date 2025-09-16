@@ -1,17 +1,22 @@
+
 'use strict';
 
 // ====================================================================
-// === SEKCJA 1: ZMIENNE SIECIOWE P2P i STANU GRY (bez zmian) ===
+// === SEKCJA 1: ZMIENNE SIECIOWE P2P i STANU GRY ===
 // ====================================================================
 
-// Zmienne do zarządzania komunikacją P2P
-let signalingSocket;    // Socket do komunikacji z serwerem matchmakingu
-let peer;               // Obiekt PeerJS lokalnego gracza
-let isHost = false;     // Flaga określająca, czy ten klient jest hostem gry
-let gameHostInstance;   // Przechowuje instancję klasy GameHost (tylko dla hosta)
-let hostConnection;     // Połączenie z hostem (dla każdego, łącznie z hostem)
+let signalingSocket;
+let peer;
+let isHost = false;
+let gameHostInstance;
+let hostConnection;
 
-// === Oryginalne zmienne, stałe i elementy UI (bez zmian) ===
+// === NOWA ZMIENNA GLOBALNA: Przechowuje listę dostępnych pokoi z serwera sygnalizacyjnego ===
+let availableRooms = {}; 
+// === NOWA ZMIENNA GLOBALNA: Przechowuje konfigurację pokoju hosta ===
+let hostRoomConfiguration = null; 
+// ========================================================================================
+
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
 
@@ -96,9 +101,6 @@ const BOBBER_VERTICAL_OSCILLATION = 4;
 const BOBBER_ROTATION_OSCILLATION = 10 * (Math.PI / 180);
 const BOBBER_ANIMATION_SPEED = 0.05;
 
-// NOWE STAŁE SKOPIOWANE Z HOSTA DO SYMULACJI RUCHU
-
-
 const characterImagePaths = { leg: 'img/character/leg.png', body: 'img/character/body.png', arm: 'img/character/arm.png', head: 'img/character/head.png', eye: 'img/character/eye.png' };
 const customizationUIPaths = { frame: 'img/ui/frame.png' };
 const sliderUIPaths = { bar: 'img/ui/bar.png', sliderHandle: 'img/ui/slider.png', fishingBar: 'img/ui/fishingbar.png' };
@@ -126,13 +128,10 @@ let keys = {};
 let bobberAnimationTime = 0;
 let cameraX = 0;
 let cameraY = 0;
-// NOWE ZMIENNE DO PŁYNNEJ KAMERY
 let cameraTargetX = 0;
 let cameraTargetY = 0;
 const CAMERA_SMOOTHING_FACTOR = 0.08;
 
-// NOWA STAŁA: Kontroluje pionowe położenie gracza na ekranie.
-// Wartość 0.5 = idealny środek. Wartość < 0.5 = gracz niżej (widać więcej góry).
 const CAMERA_VERTICAL_BIAS = 0.4;
 let isCustomizationMenuOpen = false;
 const customizationCategories = [ 'hat', 'hair', 'accessories', 'beard', 'clothes', 'pants', 'shoes' ];
@@ -157,27 +156,15 @@ function lerp(start, end, amt) {
 const RECONCILIATION_FACTOR = 0.1;
 
 function reconcilePlayerPosition() {
-    // Pobierz autorytatywny stan naszego gracza, który przyszedł z serwera
     const serverState = playersInRoom[localPlayer.id];
-
-    // Jeśli z jakiegoś powodu go nie ma (np. tuż po dołączeniu), nic nie rób
     if (!serverState) return;
-
-    // Płynnie interpoluj pozycję przewidzianą przez klienta (localPlayer.x)
-    // w kierunku pozycji autorytatywnej z serwera (serverState.x).
     localPlayer.x = lerp(localPlayer.x, serverState.x, RECONCILIATION_FACTOR);
     localPlayer.y = lerp(localPlayer.y, serverState.y, RECONCILIATION_FACTOR);
-
-    // Kopiujemy też inne ważne stany, które nie są pozycją, a powinny być
-    // natychmiast zsynchronizowane (np. czy gracz skacze, jaki ma kierunek).
     localPlayer.isJumping = serverState.isJumping;
     localPlayer.direction = serverState.direction;
     localPlayer.hasLineCast = serverState.hasLineCast;
     localPlayer.floatWorldX = serverState.floatWorldX;
     localPlayer.floatWorldY = serverState.floatWorldY;
-    
-    // Aby uniknąć nieskończonego przybliżania się, gdy różnica jest minimalna,
-    // "przyciągamy" pozycję, jeśli jest już wystarczająco blisko.
     if (Math.abs(localPlayer.x - serverState.x) < 0.5) {
         localPlayer.x = serverState.x;
     }
@@ -192,25 +179,13 @@ function updateCamera() {
 
     const visibleWorldWidth = DEDICATED_GAME_WIDTH / currentZoomLevel;
     biomeManager.drawParallaxBackground(ctx, cameraX, visibleWorldWidth);
-    // ===============================================
-
     if (currentRoom && currentRoom.gameData && currentRoom.gameData.biome) {
         const biomeName = currentRoom.gameData.biome;
         const groundLevel = currentRoom.gameData.groundLevel;
-
-        // KROK 1: Dalsze warstwy ziemi
         biomeManager.drawBackgroundBiomeGround(ctx, biomeName, groundLevel);
-
-        // KROK 2: Drzewa w tle
         biomeManager.drawBackgroundTrees(ctx);
-
-        // KROK 3: Rośliny naziemne w tle
         biomeManager.drawBackgroundPlants(ctx);
-
-        // KROK 4: Wierzchnia warstwa ziemi
         biomeManager.drawForegroundBiomeGround(ctx, biomeName, groundLevel);
-
-        // KROK 5: Budynki
         biomeManager.drawBuildings(ctx, groundLevel, cameraX, DEDICATED_GAME_WIDTH / currentZoomLevel);
     }
     const visibleWorldHeight = DEDICATED_GAME_HEIGHT / currentZoomLevel;
@@ -219,11 +194,9 @@ function updateCamera() {
     if (targetCameraX < 0) {
         targetCameraX = 0;
     }
-    // ZMIANA: Użycie currentWorldWidth zamiast stałej WORLD_WIDTH
     if (targetCameraX > currentWorldWidth - visibleWorldWidth) {
         targetCameraX = currentWorldWidth - visibleWorldWidth;
     }
-    // ZMIANA: Użycie currentWorldWidth zamiast stałej WORLD_WIDTH
     if (currentWorldWidth < visibleWorldWidth) {
         targetCameraX = (currentWorldWidth / 2) - (visibleWorldWidth / 2);
     }
@@ -245,25 +218,17 @@ function updateCamera() {
 function drawFilteredCharacterPart(a,b,c,d,e,f,g=100,h=0,i=100){if(!b||!b.complete)return;const j=document.createElement("canvas");j.width=e,j.height=f;const k=j.getContext("2d");k.imageSmoothingEnabled=!1,k.drawImage(b,0,0,e,f);const l=[];100!==g&&l.push(`saturate(${g}%)`),0!==h&&l.push(`hue-rotate(${h}deg)`),100!==i&&l.push(`brightness(${i}%)`),l.length>0?(a.save(),a.filter=l.join(" "),a.drawImage(j,c,d,e,f),a.restore()):a.drawImage(j,c,d,e,f)}
 function drawPlayer(p){if(!characterImages.body||!characterImages.body.complete){ctx.fillStyle=p.color,ctx.fillRect(p.x,p.y,playerSize,playerSize);return}ctx.save();let a=0,b=0,c=0,d=0,e=0,f=0,g=0,h=0;const i=(Number(p.animationFrame||0)%animationCycleLength)/animationCycleLength,j=(Number(p.idleAnimationFrame||0)%IDLE_ANIM_CYCLE_LENGTH)/IDLE_ANIM_CYCLE_LENGTH,k=p.isWalking===!0,l=p.isIdle===!0,m=p.isJumping===!0;let n=0;const o=p.x,q=p.y;let r=0,s=0;if(p.id===localPlayer.id&&void 0!==localPlayer.currentMouseX){const t=localPlayer.currentMouseX,u=localPlayer.currentMouseY,v=o+headPivotInImageX,w=q+(headInitialOffsetY+headPivotInImageY),x=(t-v)*p.direction,y=u-w,z=Math.sqrt(x*x+y*y);if(z>0){const A=x/z,B=y/z;r=A*Math.min(z,eyeMaxMovementRadius),s=B*Math.min(z,eyeMaxMovementRadius)}}if(k&&!m)n=Math.sin(2*i*Math.PI),a=-bodyHeadPulseAmount*Math.abs(n),b=n*armRotationAngle,c=-b,d=n*legRotationAngle,e=-d,f=n*headRotationAngleAmount,g=Math.sin(4*i*Math.PI)*bodyHeadPulseAmount*headOscillationAmplitudeFactor;else if(l&&!m)n=Math.sin(2*j*Math.PI),a=-IDLE_BODY_HEAD_PULSE_AMOUNT*Math.abs(n),b=n*IDLE_ARM_ROTATION_ANGLE,c=-b,d=0,e=0,f=n*IDLE_HEAD_ROTATION_ANGLE_AMOUNT,g=Math.sin(4*j*Math.PI)*IDLE_BODY_HEAD_PULSE_AMOUNT*IDLE_HEAD_OSCILLATION_AMPLITUDE_FACTOR;else if(m){const C=18,D=54;p.velocityY>0?h=JUMP_BODY_TILT_ANGLE*(1-Math.min(1,Math.max(0,p.velocityY/C))):h=JUMP_BODY_TILT_ANGLE*(1-Math.min(1,Math.max(0,Math.abs(p.velocityY)/D)));const E=Math.min(1,Math.abs(p.velocityY)/Math.max(C,D));d=-E*JUMP_LEG_OPPOSITE_ROTATION_ANGLE,e=E*JUMP_LEG_WAVE_ANGLE,b=E*JUMP_ARM_WAVE_ANGLE,c=-.7*b,f=.5*h,g=0,a=0}ctx.translate(o+playerSize/2,q+playerSize/2),ctx.scale(p.direction,1),m&&ctx.rotate(h*p.direction),ctx.translate(-(o+playerSize/2),-(q+playerSize/2));function t(a,b,c,d,e,f=0,g=playerSize,h=playerSize){if(!a||!a.complete)return;ctx.save();const i=o+b,j=q+c;ctx.translate(i+d,j+e),ctx.rotate(f),ctx.drawImage(a,-d,-e,g,h),ctx.restore()}t(characterImages.leg,backLegOffsetX,0,legPivotInImageX,legPivotInImageY,e),t(characterImages.arm,backArmOffsetX,0,originalArmPivotInImageX,originalArmPivotInImageY,c),t(characterImages.leg,frontLegOffsetX,0,legPivotInImageX,legPivotInImageY,d),ctx.drawImage(characterImages.body,o,q+a,playerSize,playerSize);const u=headInitialOffsetY+a+g;t(characterImages.head,0,u,headPivotInImageX,headPivotInImageY,f),t(characterImages.eye,LEFT_EYE_BASE_X_REL_HEAD_TL+r,u+EYE_BASE_Y_REL_HEAD_TL+s,eyePivotInImage,eyePivotInImage,0,eyeSpriteSize,eyeSpriteSize),t(characterImages.eye,RIGHT_EYE_BASE_X_REL_HEAD_TL+r,u+EYE_BASE_Y_REL_HEAD_TL+s,eyePivotInImage,eyePivotInImage,0,eyeSpriteSize,eyeSpriteSize);const v=p.customizations||{},w=v.hair;if(w&&"none"!==w){const x=characterCustomImages.hair[w];x&&x.complete&&(ctx.save(),ctx.translate(o+headPivotInImageX,q+u+HAIR_VERTICAL_OFFSET+headPivotInImageY-HAIR_VERTICAL_OFFSET),ctx.rotate(f),drawFilteredCharacterPart(ctx,x,-headPivotInImageX,-(headPivotInImageY-HAIR_VERTICAL_OFFSET),playerSize,playerSize,v.hairSaturation,v.hairHue,v.hairBrightness),ctx.restore())}const y=v.beard;if(y&&"none"!==y){const z=characterCustomImages.beard[y];if(z&&z.complete){const A=Math.round(15*(playerSize/32));ctx.save(),ctx.translate(o+headPivotInImageX,q+u+A+headPivotInImageY-A),ctx.rotate(f),drawFilteredCharacterPart(ctx,z,-headPivotInImageX,-(headPivotInImageY-A),playerSize,playerSize,v.beardSaturation,v.beardHue,v.brightness),ctx.restore()}}const B=v.hat;if(B&&"none"!==B){const C=characterCustomImages.hat[B];C&&C.complete&&t(C,0,u-Math.round(20*(playerSize/32)),headPivotInImageX,headPivotInImageY- -Math.round(20*(playerSize/32)),f,playerSize,playerSize)}const D=v.rightHandItem;if(D&&D!==ITEM_NONE){const E=exampleCustomItemPaths.items[D],F=characterCustomImages.items[D];E&&F&&F.complete&&t(F,frontArmOffsetX,0,originalArmPivotInImageX,originalArmPivotInImageY,b,E.width,E.height)}t(characterImages.arm,frontArmOffsetX,0,originalArmPivotInImageX,originalArmPivotInImageY,b),ctx.restore(),p.customizations&&p.customizations.rightHandItem===ITEM_ROD?(p.rodTipWorldX=p.x+playerSize/2+(frontArmOffsetX+originalArmPivotInImageX-playerSize/2)*p.direction+(ROD_TIP_OFFSET_X*Math.cos(b)-ROD_TIP_OFFSET_Y*Math.sin(b))*p.direction,p.rodTipWorldY=p.y+playerSize/2+(0+originalArmPivotInImageY-playerSize/2)+(ROD_TIP_OFFSET_X*Math.sin(b)+ROD_TIP_OFFSET_Y*Math.cos(b)),p.id===localPlayer.id&&(localPlayer.rodTipWorldX=p.rodTipWorldX,localPlayer.rodTipWorldY=p.rodTipWorldY)):(p.rodTipWorldX=null,p.rodTipWorldY=null,p.id===localPlayer.id&&(localPlayer.rodTipWorldX=null,localPlayer.rodTipWorldY=null)),ctx.fillStyle="white",ctx.font=`${DEFAULT_FONT_SIZE_USERNAME}px ${PIXEL_FONT}`,ctx.textAlign="center",ctx.fillText(p.username||p.id.substring(0,5),p.x+playerSize/2,p.y-10+a)}
 function drawCustomizationMenu() {
-    // Oblicz pozycję gracza na ekranie (a nie w świecie gry)
     const playerScreenX = (localPlayer.x - cameraX) * currentZoomLevel;
     const playerScreenY = (localPlayer.y - cameraY) * currentZoomLevel;
-
     const menuX = playerScreenX + (playerSize / 2) * currentZoomLevel;
     const menuY = playerScreenY;
-
-    // Używamy save/restore, aby rysowanie UI nie było zaburzone przez zoom i kamerę
     ctx.save();
-    ctx.setTransform(1, 0, 0, 1, 0, 0); // Resetujemy transformacje do domyślnych
-
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.font = `${DEFAULT_FONT_SIZE_MENU}px ${PIXEL_FONT}`;
     ctx.textAlign = 'left';
     ctx.textBaseline = 'middle';
-
-    // Rysowanie kategorii
     customizationCategories.forEach((category, index) => {
         const itemY = menuY + (index - selectedCategoryIndex) * MENU_ITEM_HEIGHT;
-        
         if (index === selectedCategoryIndex) {
             ctx.fillStyle = MENU_HIGHLIGHT_COLOR;
             ctx.fillText(`> ${category.toUpperCase()}`, menuX + 20, itemY);
@@ -272,61 +237,42 @@ function drawCustomizationMenu() {
             ctx.fillText(category, menuX + 40, itemY);
         }
     });
-    
-    // Rysowanie aktualnie wybranej opcji dla podświetlonej kategorii
     const selectedCategory = customizationCategories[selectedCategoryIndex];
     const optionIndex = currentCustomizationOptionIndices[selectedCategory];
     const optionName = customizationOptions[selectedCategory][optionIndex];
-    
     ctx.fillStyle = 'white';
     ctx.textAlign = 'right';
     ctx.fillText(`< ${optionName} >`, menuX + 250, menuY);
-
     ctx.restore();
 }
 function drawFishingBar(p) {
     const barScreenX = DEDICATED_GAME_WIDTH / 2 - FISHING_BAR_WIDTH / 2;
     const barScreenY = DEDICATED_GAME_HEIGHT - 100;
-
     ctx.save();
-    ctx.setTransform(1, 0, 0, 1, 0, 0); // Rysujemy w przestrzeni ekranu
-
-    // Tło paska
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
     ctx.fillRect(barScreenX, barScreenY, FISHING_BAR_WIDTH, FISHING_BAR_HEIGHT);
-
-    // Wskaźnik mocy
     const powerWidth = p.castingPower * FISHING_BAR_WIDTH;
-    ctx.fillStyle = `hsl(${120 * (1 - p.castingPower)}, 100%, 50%)`; // Kolor od zielonego do czerwonego
+    ctx.fillStyle = `hsl(${120 * (1 - p.castingPower)}, 100%, 50%)`;
     ctx.fillRect(barScreenX, barScreenY, powerWidth, FISHING_BAR_HEIGHT);
-
-    // Obramowanie
     ctx.strokeStyle = 'white';
     ctx.strokeRect(barScreenX, barScreenY, FISHING_BAR_WIDTH, FISHING_BAR_HEIGHT);
-
     ctx.restore();
 }
 
 function drawFishingLine(p) {
-    // Rysuj tylko, jeśli gracz zarzucił wędkę i mamy wszystkie potrzebne koordynaty
     if (!p.hasLineCast || p.rodTipWorldX === null || p.floatWorldX === null) {
         return;
     }
-
     ctx.save();
-    // Przełączamy się z powrotem na koordynaty świata gry, bo żyłka i spławik są jego częścią
     ctx.scale(currentZoomLevel, currentZoomLevel);
     ctx.translate(-cameraX, -cameraY);
-
-    // Rysowanie żyłki
     ctx.strokeStyle = '#ffffff99';
     ctx.lineWidth = 4;
     ctx.beginPath();
     ctx.moveTo(p.rodTipWorldX, p.rodTipWorldY);
     ctx.lineTo(p.floatWorldX, p.floatWorldY+24);
     ctx.stroke();
-
-    // Rysowanie spławika
     const floatImage = characterCustomImages.items.float;
     if (floatImage && floatImage.complete) {
         bobberAnimationTime += BOBBER_ANIMATION_SPEED;
@@ -338,32 +284,26 @@ function drawFishingLine(p) {
         ctx.arc(p.floatWorldX, p.floatWorldY, 10, 0, Math.PI * 2);
         ctx.fill();
     }
-    
     ctx.restore();
 }
 
 function drawInsects() {
     const insectImage = biomeManager.getCurrentInsectImage();
     if (!insectImage || !insectImage.complete) return;
-
     const INSECT_TILE_SIZE = 32;
     const INSECT_ANIMATION_SPEED_TICKS = 8;
     const renderedSize = INSECT_TILE_SIZE * INSECT_SCALE_FACTOR;
-
     for (const insect of insectsInRoom) {
         const currentFrame = Math.floor((insect.animationFrame || 0) / INSECT_ANIMATION_SPEED_TICKS);
         const sourceX = currentFrame * INSECT_TILE_SIZE;
         const sourceY = (insect.typeIndex || 0) * INSECT_TILE_SIZE;
         const angleInRadians = (insect.angle || 0) * (Math.PI / 180);
-
         ctx.save();
         ctx.translate(insect.x + renderedSize / 2, insect.y + renderedSize / 2);
         ctx.rotate(angleInRadians);
-
         if (typeof insect.hue === 'number') {
             ctx.filter = `hue-rotate(${insect.hue}deg)`;
         }
-
         ctx.drawImage(
             insectImage,
             sourceX,
@@ -375,7 +315,6 @@ function drawInsects() {
             renderedSize,
             renderedSize
         );
-
         ctx.restore();
     }
 }
@@ -387,15 +326,16 @@ function drawInsects() {
 function initializeSignaling() {
     signalingSocket = io();
     signalingSocket.on('connect', () => console.log('Połączono z serwerem sygnalizacyjnym.', signalingSocket.id));
+    // === ZMIANA: Aktualizujemy globalną zmienną availableRooms ===
     signalingSocket.on('roomListUpdate', (hosts) => {
-        if (!currentRoom) {
+        availableRooms = hosts; // Przechowujemy listę pokoi globalnie
+        if (!currentRoom) { // Aktualizujemy lobby tylko jeśli nie jesteśmy w grze
             roomListUl.innerHTML = '';
             if (Object.keys(hosts).length === 0) {
                 roomListUl.innerHTML = '<li>Brak dostępnych pokoi. Stwórz jeden!</li>';
             } else {
                 for (let peerId in hosts) {
                     const room = hosts[peerId];
-                    // ZMIANA: Usunięto warunek, aby host widział swój własny pokój
                     const li = document.createElement('li');
                     li.innerHTML = `<span>${room.name} (Graczy: ${room.playerCount})</span><button data-peer-id="${peerId}">Dołącz</button>`;
                     li.querySelector('button').addEventListener('click', () => joinRoom(peerId));
@@ -404,6 +344,7 @@ function initializeSignaling() {
             }
         }
     });
+    // =============================================================
     signalingSocket.on('roomRemoved', (removedRoomId) => {
         if (hostConnection && hostConnection.peer === removedRoomId) {
             alert('Pokój, w którym byłeś, został usunięty!');
@@ -418,15 +359,8 @@ function initializePeer(callback) {
         return callback(peer.id);
     }
 
-    // === POCZĄTEK KLUCZOWEJ ZMIANY ===
-
-    // Usuwamy całą starą konfigurację.
-    // Użycie `new Peer()` bez żadnych opcji automatycznie łączy się
-    // z darmowym, chmurowym serwerem PeerJS, który ma niezawodne
-    // serwery STUN i TURN. To rozwiązuje problemy z połączeniem.
+    // Użycie `new Peer()` bez opcji łączy z domyślnym serwerem PeerJS
     peer = new Peer();
-
-    // === KONIEC KLUCZOWEJ ZMIANY ===
 
     peer.on('open', (id) => {
         console.log('Moje ID w sieci P2P (z serwera chmurowego PeerJS): ' + id);
@@ -435,13 +369,27 @@ function initializePeer(callback) {
 
     peer.on('error', (err) => {
         console.error("Błąd krytyczny PeerJS: ", err);
-        // Zmieńmy alert, żeby był bardziej czytelny dla gracza
         alert("Wystąpił błąd sieciowy P2P. Spróbuj odświeżyć stronę. Błąd: " + err.type);
         if (callback) callback(null);
     });
 }
 
-function onSuccessfulJoin(roomData) {
+// === ZMIANA: Funkcja teraz akceptuje hostPeerId ===
+function onSuccessfulJoin(roomData, hostPeerId = null) { 
+    // Jeśli nazwa pokoju jest brakująca, spróbuj ją pobrać z listy dostępnych pokoi
+    if (!roomData || !roomData.name) {
+        if (hostPeerId && availableRooms[hostPeerId] && availableRooms[hostPeerId].name) {
+            roomData = roomData || {}; // Upewnij się, że roomData istnieje
+            roomData.name = availableRooms[hostPeerId].name; // Pobierz nazwę z listy lobby
+            console.log(`[INFO] Nazwa pokoju była pusta, używam nazwy z listy lobby: ${roomData.name}`);
+        } else {
+            console.warn(`[WARN] Nie udało się ustalić nazwy pokoju. Dane pokoju:`, roomData);
+            roomData = roomData || {};
+            roomData.name = "Nieznany pokój"; // Placeholder, jeśli nazwa nie zostanie znaleziona
+        }
+    }
+    // ====================================================
+
     currentRoom = roomData;
     playersInRoom = roomData.playersInRoom;
 
@@ -487,12 +435,13 @@ function onSuccessfulJoin(roomData) {
 
     lobbyDiv.style.display = 'none';
     gameContainerDiv.style.display = 'block';
-    console.log(`Pomyślnie dołączono do pokoju: "${currentRoom.name}"`);
+    // Logowanie nazwy pokoju, która mogła zostać uzupełniona
+    console.log(`Pomyślnie dołączono do pokoju: "${currentRoom.name}"`); 
 }
 
 
 // ====================================================================
-// === SEKCJA 4: GŁÓWNA PĘTLA GRY I FUNKCJE KOMUNIKACYJNE (bez zmian) ===
+// === SEKCJA 4: GŁÓWNA PĘTLA GRY I FUNKCJE KOMUNIKACYJNE ===
 // ====================================================================
 
 function sendPlayerInput() {
@@ -518,28 +467,17 @@ function sendPlayerAction(type, payload = {}) {
 
 function gameLoop(currentTime) {
     function updateLocalPlayerMovement() {
-    // Ta funkcja symuluje ruch TYLKO dla gracza, którym sterujemy.
-    // Dzięki temu nie musimy czekać na odpowiedź serwera, aby zobaczyć ruch.
-    // Host później skoryguje naszą pozycję, jeśli będzie taka potrzeba.
-
     let targetVelocityX = 0;
-    // Używamy obiektu `keys`, który już masz i aktualizujesz
     if (keys['ArrowLeft'] || keys['KeyA']) {
         targetVelocityX = -PLAYER_WALK_SPEED;
     } else if (keys['ArrowRight'] || keys['KeyD']) {
         targetVelocityX = PLAYER_WALK_SPEED;
     }
-
-    // Płynne zatrzymywanie się i aktualizacja prędkości
     localPlayer.velocityX = targetVelocityX !== 0 ? targetVelocityX : localPlayer.velocityX * DECELERATION_FACTOR;
     if (Math.abs(localPlayer.velocityX) < MIN_VELOCITY_FOR_WALK_ANIMATION) {
         localPlayer.velocityX = 0;
     }
-    
-    // Zastosuj ruch
     localPlayer.x += localPlayer.velocityX;
-
-    // Ogranicz pozycję do granic świata
     localPlayer.x = Math.max(0, Math.min(currentWorldWidth - playerSize, localPlayer.x));
 }
 
@@ -589,24 +527,14 @@ function gameLoop(currentTime) {
     biomeManager.updateAnimations(deltaTime);
     
     sendPlayerInput();
-
-
-    // 2. NATYCHMIAST symulujemy nasz własny ruch na kliencie (przewidywanie)
     updateLocalPlayerMovement();
-    
-    // 3. NOWY KROK: Płynnie korygujemy naszą przewidzianą pozycję na podstawie
-    //    ostatniego stanu otrzymanego z serwera (rekonsyliacja)
     reconcilePlayerPosition();
-    
-    // 4. Płynnie aktualizujemy kamerę, aby podążała za naszą nową,
-    //    płynnie skorygowaną pozycją.
     updateCamera();
     if (localPlayer.isCasting) {
         localPlayer.fishingBarTime += FISHING_SLIDER_SPEED;
         localPlayer.fishingBarSliderPosition = (Math.sin(localPlayer.fishingBarTime) + 1) / 2;
         localPlayer.castingPower = localPlayer.fishingBarSliderPosition;
     }
-    
     
     ctx.clearRect(0, 0, DEDICATED_GAME_WIDTH, DEDICATED_GAME_HEIGHT);
     biomeManager.drawBackground(ctx);
@@ -623,14 +551,12 @@ function gameLoop(currentTime) {
     
     Object.values(playersInRoom).sort((a,b)=>(a.y+playerSize)-(b.y+playerSize)).forEach(p=>drawPlayer(p));
     
-    
     if(currentRoom?.gameData?.biome){const {biome:b,groundLevel:g}=currentRoom.gameData;biomeManager.drawForegroundPlants(ctx);biomeManager.drawForegroundTrees(ctx);;drawInsects();biomeManager.drawForegroundBiomeGround(ctx,b,g);biomeManager.drawWater(ctx,b,cameraX)}
     
     ctx.restore();for(const id in playersInRoom) drawFishingLine(playersInRoom[id]);
     
     if(isCustomizationMenuOpen) drawCustomizationMenu();
     if(localPlayer.isCasting) drawFishingBar(localPlayer);
-    
     
     requestAnimationFrame(gameLoop);
 }
@@ -639,18 +565,17 @@ function gameLoop(currentTime) {
 // === SEKCJA 5: OBSŁUGA ZDARZEŃ UI i P2P (NOWA LOGIKA) ===
 // ====================================================================
 
-// ZMIANA: Ta funkcja teraz tylko tworzy serwer i ogłasza go.
 createRoomBtn.addEventListener('click', () => {
-    if (isHost) return; // Zapobiegaj wielokrotnemu klikaniu
+    if (isHost) return; 
     isHost = true;
-    createRoomBtn.disabled = true; // Zablokuj przycisk od razu
+    createRoomBtn.disabled = true; 
     newRoomNameInput.disabled = true;
 
     initializePeer((peerId) => {
         if (!peerId) {
             console.error("Nie udało się uzyskać Peer ID. Nie można stworzyć pokoju.");
             alert("Błąd sieci, nie można stworzyć pokoju.");
-            isHost = false; // Zresetuj flagę
+            isHost = false; 
             createRoomBtn.disabled = false;
             newRoomNameInput.disabled = false;
             return;
@@ -660,11 +585,14 @@ createRoomBtn.addEventListener('click', () => {
         localPlayer.id = peerId;
 
         gameHostInstance = new GameHost();
+        // --- ZMIANA: Przechowujemy konfigurację pokoju hosta ---
         const roomConfig = gameHostInstance.start({ id: peerId, username: localPlayer.username, color: localPlayer.color, customizations: localPlayer.customizations });
+        hostRoomConfiguration = roomConfig; // Zapisujemy konfigurację pokoju
+        // ========================================================
 
         signalingSocket.emit('register-host', {
             peerId,
-            name: newRoomNameInput.value.trim() || roomConfig.name,
+            name: newRoomNameInput.value.trim() || roomConfig.name, // Nazwa dla lobby
             biome: roomConfig.gameData.biome,
             worldWidth: roomConfig.gameData.worldWidth,
             villageType: roomConfig.gameData.villageType
@@ -673,7 +601,28 @@ createRoomBtn.addEventListener('click', () => {
         peer.on('connection', (conn) => {
             conn.on('open', () => {
                 conn.on('data', (data) => {
-                    if (data.type === 'requestJoin') { gameHostInstance.addPlayer(conn, data.payload); signalingSocket.emit('notify-join', peerId); }
+                    if (data.type === 'requestJoin') { 
+                        gameHostInstance.addPlayer(conn, data.payload); 
+
+                        // --- ZMIANA: Host jawnie wysyła nazwę pokoju ---
+                        // Sprawdzamy, czy mamy nazwę pokoju w naszej globalnej zmiennej
+                        if (hostRoomConfiguration) { 
+                            const roomDataToSend = {
+                                name: hostRoomConfiguration.name, // Używamy nazwy pokoju hosta
+                                playersInRoom: playersInRoom, // Aktualna lista graczy
+                                gameData: hostRoomConfiguration.gameData // Dane gry
+                            };
+                            // Wysyłamy wiadomość roomJoined z pełnymi danymi
+                            conn.send({ type: 'roomJoined', payload: roomDataToSend });
+                        } else {
+                            console.error("Host: Nie można wysłać roomJoined - brak hostRoomConfiguration!");
+                            // Opcjonalnie można wysłać błąd do klienta
+                            // conn.send({ type: 'joinError', payload: 'Host configuration missing.' });
+                        }
+                        // --- KONIEC ZMIANY ---
+                        
+                        signalingSocket.emit('notify-join', peerId); 
+                    }
                     else if (data.type === 'playerInput') { gameHostInstance.handlePlayerInput(conn.peer, data.payload); }
                     else if (data.type === 'playerAction') { gameHostInstance.handlePlayerAction(conn.peer, data.payload); }
                 });
@@ -685,12 +634,10 @@ createRoomBtn.addEventListener('click', () => {
     });
 });
 
-// ZMIANA: Ta funkcja obsługuje teraz dwa przypadki - dołączanie jako gość i jako host.
 function joinRoom(hostPeerId) {
     initializePeer((myPeerId) => {
         localPlayer.id = myPeerId;
 
-        // Przypadek 1: Host dołącza do WŁASNEJ gry.
         if (isHost && myPeerId === hostPeerId) {
             console.log('[HOST] Wykryto dołączanie do własnego pokoju. Używanie symulowanego połączenia.');
             
@@ -699,7 +646,7 @@ function joinRoom(hostPeerId) {
                 open: true,
                 send: (data) => {
                     switch (data.type) {
-                        case 'roomJoined': onSuccessfulJoin(data.payload); break;
+                        case 'roomJoined': onSuccessfulJoin(data.payload); break; // Host sam sobie wysyła roomJoined
                         case 'gameStateUpdate':
                             const map = {};
                             for (const p of data.payload) {
@@ -766,7 +713,11 @@ function joinRoom(hostPeerId) {
 
             hostConnection.on('data', (data) => {
                 switch(data.type) {
-                    case 'roomJoined': onSuccessfulJoin(data.payload); break;
+                    case 'roomJoined':
+                        // === ZMIANA: Przekazujemy hostPeerId do onSuccessfulJoin ===
+                        onSuccessfulJoin(data.payload, hostPeerId); 
+                        break;
+                    // ===============================================================
                     case 'gameStateUpdate':
                         const map = {};
                         for (const p of data.payload) {
@@ -814,7 +765,6 @@ leaveRoomBtn.addEventListener('click', () => {
         }, 500);
     } 
     
-    // Gość zamyka swoje prawdziwe połączenie
     if (!isHost && hostConnection) { 
         hostConnection.close(); 
     }
@@ -834,7 +784,6 @@ function leaveCurrentRoomUI() {
     hostConnection=null; 
     gameHostInstance=null;
     
-    // ZMIANA: Odblokuj przyciski po wyjściu
     createRoomBtn.disabled = false;
     newRoomNameInput.disabled = false;
 
@@ -845,7 +794,7 @@ function leaveCurrentRoomUI() {
 
 
 // ====================================================================
-// === SEKCJA 6: OBSŁUGA ZDARZEŃ KLAWIATURY I MYSZY (bez zmian) ===
+// === SEKCJA 6: OBSŁUGA ZDARZEŃ KLAWIATURY I MYSZY ===
 // ====================================================================
 function getMousePosOnCanvas(canvas, evt) {
     const rect = canvas.getBoundingClientRect();
@@ -879,7 +828,7 @@ document.addEventListener('keydown', (event) => {
         event.preventDefault();
         draggingSlider = null;
     } else if (isCustomizationMenuOpen) {
-        event.preventDefault(); // Zapobiegaj ruchowi postaci, gdy menu jest otwarte
+        event.preventDefault(); 
 
         const currentCategory = customizationCategories[selectedCategoryIndex];
         const options = customizationOptions[currentCategory];
@@ -899,11 +848,8 @@ document.addEventListener('keydown', (event) => {
         }
 
         if (needsUpdate) {
-            // Zaktualizuj lokalny stan
             currentCustomizationOptionIndices[currentCategory] = optionIndex;
             localPlayer.customizations[currentCategory] = options[optionIndex];
-            
-            // WYŚLIJ AKTUALIZACJĘ DO HOSTA!
             sendPlayerAction('updateCustomization', localPlayer.customizations);
         }
 
@@ -924,7 +870,6 @@ canvas.addEventListener('mousemove', (event) => {
         localPlayer.currentMouseX = mouseX_unzoomed / currentZoomLevel + cameraX;
         localPlayer.currentMouseY = mouseY_unzoomed / currentZoomLevel + cameraY;
     }
-    // Tu powinna być logika przeciągania slidera, jeśli jest potrzebna
 });
 
 canvas.addEventListener('mousedown', (event) => {
@@ -934,14 +879,12 @@ canvas.addEventListener('mousedown', (event) => {
         localPlayer.fishingBarTime = 0;
         event.preventDefault();
     }
-    // Tu powinna być logika klikania na suwak, jeśli jest potrzebna
 });
 
 canvas.addEventListener('mouseup', (event) => {
     if (event.button === 0 && !isCustomizationMenuOpen && currentRoom && localPlayer.customizations.rightHandItem === ITEM_ROD) {
         if (localPlayer.isCasting) {
             localPlayer.isCasting = false;
-            // Obliczanie kąta rzutu na podstawie pozycji myszy
             const angle = Math.atan2(localPlayer.currentMouseY - localPlayer.rodTipWorldY, localPlayer.currentMouseX - localPlayer.rodTipWorldX);
 
             sendPlayerAction('castFishingLine', { 
@@ -967,7 +910,7 @@ canvas.addEventListener('wheel', (event) => {
 
 
 // ====================================================================
-// === SEKCJA 7: INICJALIZACJA (bez zmian) ===
+// === SEKCJA 7: INICJALIZACJA ===
 // ====================================================================
 
 console.log("Inicjalizacja klienta P2P...");
