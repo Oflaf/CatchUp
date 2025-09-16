@@ -417,16 +417,16 @@ function initializePeer(callback) {
         return callback(peer.id);
     }
 
-    // Pełna konfiguracja z serwerami STUN i TURN
+    // Pełna konfiguracja z serwerami STUN (do prób połączeń bezpośrednich) 
+    // i serwerami TURN (do połączeń przekazywanych, gdy STUN zawiedzie)
     const peerConfig = {
-        // 'iceServers' to lista "pomocników" do nawiązywania połączenia
         iceServers: [
-            // Serwery STUN (szybkie, próbują połączenia bezpośredniego)
+            // Standardowe serwery STUN od Google
             { urls: 'stun:stun.l.google.com:19302' },
             { urls: 'stun:stun1.l.google.com:19302' },
 
-            // Serwery TURN (klucz do rozwiązania - używane jako ostateczność, gdy STUN zawiedzie)
-            // Używamy darmowego serwera z projektu Open Relay Project
+            // Darmowe, publiczne serwery TURN z projektu Open Relay Project
+            // To jest kluczowy element, który powinien rozwiązać Twój problem
             {
                 urls: "turn:openrelay.metered.ca:80",
                 username: "openrelayproject",
@@ -441,7 +441,7 @@ function initializePeer(callback) {
     };
 
     // Inicjalizujemy PeerJS z nową, pełną konfiguracją.
-    // Używamy { config: ... }, aby poprawnie przekazać listę serwerów.
+    // Używamy { config: ... }, aby poprawnie przekazać listę serwerów do biblioteki.
     peer = new Peer(undefined, { config: peerConfig });
 
     peer.on('open', (id) => {
