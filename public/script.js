@@ -361,16 +361,29 @@ function initializePeer(callback) {
 
     // Użycie `new Peer()` bez opcji łączy z domyślnym serwerem PeerJS
     const peerConfig = {
-    // DODAJEMY TĘ LINIĘ
-    debug: 3, // 0 (off), 1 (errors), 2 (warnings), 3 (all logs)
-
+    debug: 3, 
     config: {
         'iceServers': [
+            // Standardowe serwery STUN
             { urls: 'stun:stun.l.google.com:19302' },
             { urls: 'stun:stun1.l.google.com:19302' },
+
+            // DODAJEMY PUBLICZNY SERWER TURN (tylko do testów!)
+            // Dane z: https://github.com/open-relay/open-relay
+            {
+                urls: "turn:openrelay.metered.ca:80",
+                username: "openrelayproject",
+                credential: "openrelayproject"
+            },
+            {
+                urls: "turn:openrelay.metered.ca:443",
+                username: "openrelayproject",
+                credential: "openrelayproject"
+            }
         ]
     }
 };
+
 peer = new Peer(undefined, peerConfig);
 
     peer.on('open', (id) => {
