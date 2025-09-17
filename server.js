@@ -50,11 +50,11 @@ app.get('/health', (req, res) => {
 let activeHosts = {};
 
 io.on('connection', (socket) => {
-    console.log(`[Socket.IO] Signaling client connected: ${socket.id}`);
+    console.log(`[Socket.IO] Połączono klienta sygnalizacyjnego: ${socket.id}`);
     socket.emit('roomListUpdate', activeHosts);
 
     socket.on('register-host', (roomData) => {
-        console.log(`[Socket.IO] The host has registered the room: ${roomData.name} z Peer ID: ${roomData.peerId}`);
+        console.log(`[Socket.IO] Host zarejestrował pokój: ${roomData.name} z Peer ID: ${roomData.peerId}`);
         activeHosts[roomData.peerId] = {
             peerId: roomData.peerId,
             name: roomData.name,
@@ -85,12 +85,12 @@ io.on('connection', (socket) => {
     });
 
     socket.on('disconnect', () => {
-        console.log(`[Socket.IO] Signaling client disconnected: ${socket.id}`);
+        console.log(`[Socket.IO] Rozłączono klienta sygnalizacyjnego: ${socket.id}`);
         const hostPeerId = Object.keys(activeHosts).find(
             peerId => activeHosts[peerId].hostSocketId === socket.id
         );
         if (hostPeerId) {
-            console.log(`[Socket.IO] Host ${activeHosts[hostPeerId].name} (${hostPeerId}) left. Deleting a room.`);
+            console.log(`[Socket.IO] Host ${activeHosts[hostPeerId].name} (${hostPeerId}) rozłączył się. Usuwanie pokoju.`);
             delete activeHosts[hostPeerId];
             io.emit('roomListUpdate', activeHosts);
         }
@@ -98,22 +98,22 @@ io.on('connection', (socket) => {
 });
 
 server.listen(PORT, () => {
-    console.log(`The Socket.IO SIGNALING server runs on the port ${PORT}`);
+    console.log(`Serwer SYGNALIZACYJNY Socket.IO działa na porcie ${PORT}`);
     console.log(`INFO: Railway assigned port: ${process.env.PORT || 'undefined'}`);
 });
 
 process.on('SIGTERM', () => {
-    console.log(`SIGTERM signal received. I'm closing the server...`);
+    console.log('Otrzymano sygnał SIGTERM. Zamykam serwer...');
     server.close(() => {
-        console.log('HTTP server closed.');
+        console.log('Serwer HTTP zamknięty.');
         process.exit(0);
     });
 });
 
 process.on('SIGINT', () => { 
-    console.log(`SIGINT signal received. I'm closing the server...`);
+    console.log('Otrzymano sygnał SIGINT. Zamykam serwer...');
     server.close(() => {
-        console.log('HTTP server closed.');
+        console.log('Serwer HTTP zamknięty.');
         process.exit(0);
     });
 });
