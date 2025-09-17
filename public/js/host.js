@@ -3,7 +3,7 @@
 // Nie używa Express, Socket.IO ani żadnych bibliotek Node.js.
 
 // ====================================================================================
-// === SEKCJA 1: STAŁE GRY (bez zmian) ===
+// === SEKCJA 1: STAŁE GRY (dodano nowe stałe) ===
 // ====================================================================================
 
 const AVAILABLE_BIOMES = ['jurassic', 'grassland'];
@@ -21,7 +21,7 @@ const WATER_TOP_Y_WORLD = DEDICATED_GAME_HEIGHT - 164;
 const FLOAT_GRAVITY = 0.3;
 const FLOAT_WATER_FRICTION = 0.9;
 const FLOAT_HITBOX_RADIUS = 32 / 2;
-const CASTING_POWER_MULTIPLIER = 20;
+const CASTING_POWER_MULTIPLIER = 13;
 const GRASS_SWAY_DURATION_MS = 1800;
 const GRASS_DENSITY_FACTOR = 0.075;
 const GRASS_SPRITE_WIDTH = 32 * 3.8;
@@ -30,6 +30,13 @@ const TREE_DENSITY_VARIATION_FACTOR = 0.55;
 const TREE_FOREGROUND_CHANCE = 0.15;
 const TREE_MIN_HORIZONTAL_GAP = 64;
 const INSECT_DENSITY_FACTOR = 0.0009;
+
+// === ZMIANA START ===
+// Nowe stałe do kontrolowania "zrywania" żyłki.
+const MAX_CAST_DISTANCE = 950; // Maksymalna odległość, na jaką spławik może polecieć od gracza podczas rzutu.
+const MAX_PLAYER_FLOAT_DISTANCE = 1050; // Maksymalna odległość między graczem a spławikiem, zanim żyłka się "zerwie".
+// === ZMIANA KONIEC ===
+
 
 const VILLAGE_TYPE = {
     NONE: 'none',
@@ -83,7 +90,7 @@ const ARM_OFFSET_Y_IN_PLAYER_SPACE = 0;
 
 
 // ====================================================================================
-// === SEKCJA 2: FUNKCJE POMOCNICZE (jedna funkcja zmodyfikowana) ===
+// === SEKCJA 2: FUNKCJE POMOCNICZE (bez zmian) ===
 // ====================================================================================
 
 function createSeededRandom(seedStr) {
@@ -182,9 +189,6 @@ function _getNumberOfBuildingsForType(seededRandom, villageType) {
     }
 }
 
-// === POCZĄTEK POPRAWIONEJ FUNKCJI ===
-// Wklej to w miejsce testowej funkcji w pliku host_nowa_wersja.js
-
 function _generateBuildingsLayout(roomId, biomeName, villageType, villageXPosition, worldWidth) {
     if (villageType === VILLAGE_TYPE.NONE) return [];
     
@@ -195,48 +199,36 @@ function _generateBuildingsLayout(roomId, biomeName, villageType, villageXPositi
     const numBuildings = _getNumberOfBuildingsForType(seededRandom, villageType);
     if (numBuildings === 0) return [];
 
-    // --- Stałe kontrolujące minimalny i maksymalny odstęp ---
-    // Możesz dowolnie zmieniać te wartości, aby dostosować wygląd wiosek!
-    const MIN_GAP = 50;  // Minimalna gwarantowana przerwa między budynkami
-    const MAX_GAP = 300; // Do minimalnej przerwy zostanie dodana losowa wartość od 0 do 300
+    const MIN_GAP = 50;
+    const MAX_GAP = 300;
     
     const placedBuildings = [];
-
-    // 1. Umieść pierwszy budynek w centrum wioski
     const firstBuildingDef = biomeBuildingInfo.definitions[Math.floor(seededRandom() * biomeBuildingInfo.definitions.length)];
     const firstBuildingWidth = firstBuildingDef.width * biomeBuildingInfo.displayScaleFactor;
     
     placedBuildings.push({
         definitionId: firstBuildingDef.id,
-        x: villageXPosition - (firstBuildingWidth / 2), // Wyśrodkuj pierwszy budynek
+        x: villageXPosition - (firstBuildingWidth / 2),
         width: firstBuildingWidth,
         height: firstBuildingDef.height * biomeBuildingInfo.displayScaleFactor,
     });
     
-    // Inicjalizuj skrajne pozycje (lewa krawędź i prawa krawędź całej grupy budynków)
     let leftmostX = placedBuildings[0].x;
     let rightmostX = placedBuildings[0].x + placedBuildings[0].width;
 
-    // 2. Umieść pozostałe budynki, dodając je po lewej lub prawej stronie
     for (let i = 1; i < numBuildings; i++) {
-        // Wybierz losowy budynek do umieszczenia
         const newBuildingDef = biomeBuildingInfo.definitions[Math.floor(seededRandom() * biomeBuildingInfo.definitions.length)];
         const newBuildingWidth = newBuildingDef.width * biomeBuildingInfo.displayScaleFactor;
-
-        // Oblicz losową przerwę
         const gap = MIN_GAP + seededRandom() * (MAX_GAP - MIN_GAP);
         
         let newX;
         
-        // Zdecyduj (50/50), czy umieścić po lewej czy po prawej stronie istniejącej grupy
         if (seededRandom() < 0.5) {
-            // Umieść po lewej: nowa pozycja = lewa krawędź - przerwa - szerokość nowego budynku
             newX = leftmostX - gap - newBuildingWidth;
-            leftmostX = newX; // Zaktualizuj nową lewą krawędź całej grupy
+            leftmostX = newX;
         } else {
-            // Umieść po prawej: nowa pozycja = prawa krawędź + przerwa
             newX = rightmostX + gap;
-            rightmostX = newX + newBuildingWidth; // Zaktualizuj nową prawą krawędź całej grupy
+            rightmostX = newX + newBuildingWidth;
         }
         
         placedBuildings.push({
@@ -246,15 +238,11 @@ function _generateBuildingsLayout(roomId, biomeName, villageType, villageXPositi
             height: newBuildingDef.height * biomeBuildingInfo.displayScaleFactor,
         });
     }
-
-    // Posortuj budynki po pozycji X dla porządku (przydatne przy renderowaniu)
     return placedBuildings.sort((a, b) => a.x - b.x);
 }
-// === KONIEC POPRAWIONEJ FUNKCJI ===
-
 
 function getArmRotationAngle(player) {
-    if (Math.abs(player.velocityX) > MIN_VELOCITY_FOR_WALK_ANIMATION) return 0; // Uproszczone, klient sam liczy animacje
+    if (Math.abs(player.velocityX) > MIN_VELOCITY_FOR_WALK_ANIMATION) return 0;
     return 0;
 }
 
@@ -295,12 +283,10 @@ class GameHost {
     constructor() {
         this.room = null;
         this.gameLoopInterval = null;
-        this.connections = {}; // Przechowuje aktywne połączenia PeerJS { peerId: conn }
+        this.connections = {};
     }
 
-    // --- Metody Komunikacji ---
     broadcast(message) {
-        // console.log("[HOST] Broadcasting:", message.type);
         for (const peerId in this.connections) {
             if (this.connections[peerId].open) {
                 this.connections[peerId].send(message);
@@ -314,11 +300,9 @@ class GameHost {
         }
     }
     
-    // --- Metody Zarządzania Grą ---
     start(hostData) {
-        const roomId = hostData.id; // PeerID Hosta jest ID pokoju
+        const roomId = hostData.id;
         
-        // Generowanie świata
         const roomSeededRandom = createSeededRandom(roomId);
         const randomBiome = AVAILABLE_BIOMES[Math.floor(roomSeededRandom() * AVAILABLE_BIOMES.length)];
         const randomWorldWidth = Math.floor(roomSeededRandom() * (WORLD_WIDTH_MAX - WORLD_WIDTH_MIN + 1)) + WORLD_WIDTH_MIN;
@@ -366,17 +350,13 @@ class GameHost {
     stop() {
         clearInterval(this.gameLoopInterval);
         this.room = null;
-        // Zamknij wszystkie połączenia
         for (const peerId in this.connections) {
             this.connections[peerId].close();
         }
         this.connections = {};
         console.log("[HOST] Gra zatrzymana i zresetowana.");
     }
-    
-    // --- Metody Zarządzania Graczami i Inputem ---
 
-    // ZMIANA W TEJ FUNKCJI
     addPlayer(conn, initialPlayerData) {
         const peerId = conn.peer;
         this.connections[peerId] = conn;
@@ -394,8 +374,6 @@ class GameHost {
         };
         this.room.playerInputs[peerId] = { keys: {} };
         
-        // KLUCZOWA ZMIANA: Wyślij odpowiedź powitalną bezpośrednio przez obiekt 'conn'.
-        // To działa zarówno dla prawdziwych połączeń, jak i dla naszej symulacji.
         conn.send({
             type: 'roomJoined',
             payload: {
@@ -406,7 +384,6 @@ class GameHost {
             }
         });
         
-        // Poinformuj WSZYSTKICH (łącznie z nowym) o dołączeniu gracza
         setTimeout(() => {
              this.broadcast({
                 type: 'playerJoinedRoom',
@@ -436,6 +413,20 @@ class GameHost {
         }
     }
     
+    // === ZMIANA START ===
+    // Funkcja pomocnicza do resetowania stanu wędki
+    _resetFishingState(player) {
+        player.hasLineCast = false;
+        player.floatWorldX = null;
+        player.floatWorldY = null;
+        player.floatVelocityX = 0;
+        player.floatVelocityY = 0;
+        player.lineAnchorWorldX = null;
+        player.lineAnchorWorldY = null;
+    }
+    // === ZMIANA KONIEC ===
+
+
     handlePlayerAction(peerId, actionData) {
         if(!this.room) return;
         const player = this.room.players[peerId];
@@ -452,6 +443,13 @@ class GameHost {
                 break;
             }
             case 'updateCustomization': {
+                // === ZMIANA START ===
+                // Jeśli gracz ma zarzuconą wędkę i zmienia przedmiot w dłoni na coś innego, zerwij żyłkę.
+                if (player.hasLineCast && actionData.payload.rightHandItem !== 'rod') {
+                    this._resetFishingState(player);
+                }
+                // === ZMIANA KONIEC ===
+                
                 Object.assign(player.customizations, actionData.payload);
                 this.broadcast({ 
                     type: 'playerCustomizationUpdated', 
@@ -473,18 +471,13 @@ class GameHost {
             }
              case 'reelInFishingLine': {
                 if (player.hasLineCast) {
-                    player.hasLineCast = false;
-                    player.floatWorldX = null;
-                    player.floatWorldY = null;
-                    player.floatVelocityX = 0;
-                    player.floatVelocityY = 0;
+                    this._resetFishingState(player);
                 }
                 break;
             }
         }
     }
 
-    // --- Główna pętla gry (bez zmian) ---
     updateGame() {
         if (!this.room) return;
 
@@ -497,7 +490,6 @@ class GameHost {
             const player = room.players[playerId];
             const playerInput = room.playerInputs[playerId] || { keys: {} };
             
-            // --- Logika ruchu ---
             let targetVelocityX = 0;
             if (playerInput.keys['ArrowLeft'] || playerInput.keys['KeyA']) {
                 targetVelocityX = -PLAYER_WALK_SPEED;
@@ -512,7 +504,6 @@ class GameHost {
             player.x += player.velocityX;
             player.x = Math.max(0, Math.min(worldWidth - PLAYER_SIZE, player.x));
 
-            // --- Logika grawitacji i skoku ---
             if (player.isJumping || player.y < groundY_target_for_player_top) {
                 player.velocityY += GRAVITY;
                 player.y += player.velocityY;
@@ -526,7 +517,6 @@ class GameHost {
                  player.y = groundY_target_for_player_top;
             }
 
-            // --- Logika kołysania trawy ---
             const playerHitbox = { x: player.x + PLAYER_SIZE * 0.25, y: player.y + PLAYER_SIZE * 0.8, width: PLAYER_SIZE * 0.5, height: PLAYER_SIZE * 0.2 };
             room.gameData.groundPlants.forEach(grass => {
                 if (grass.swaying && Date.now() - grass.swayStartTime > GRASS_SWAY_DURATION_MS) grass.swaying = false;
@@ -535,44 +525,64 @@ class GameHost {
                     if (playerHitbox.x < grassHitbox.x + grassHitbox.width && playerHitbox.x + playerHitbox.width > grassHitbox.x) {
                         grass.swaying = true;
                         grass.swayStartTime = Date.now();
-                        // Rozgłoś event do klientów, żeby odtworzyli animację
                         this.broadcast({ type: 'grassSwaying', payload: { grassId: grass.id, direction: player.direction } });
                     }
                 }
             });
             
-            // --- Logika wędki i spławika ---
             player.rodTipWorldX = calculateRodTipWorldPosition(player).x;
             player.rodTipWorldY = calculateRodTipWorldPosition(player).y;
-            if(player.hasLineCast){
-                if (player.lineAnchorWorldY === null) {
-                    player.floatVelocityY += FLOAT_GRAVITY;
-                    player.floatWorldX += player.floatVelocityX;
-                    player.floatWorldY += player.floatVelocityY;
 
-                    if (player.floatWorldY + FLOAT_HITBOX_RADIUS >= WATER_TOP_Y_WORLD) {
-                        player.floatWorldY = WATER_TOP_Y_WORLD - FLOAT_HITBOX_RADIUS;
-                        player.floatVelocityY = 0;
-                        player.floatVelocityX *= FLOAT_WATER_FRICTION;
-                        player.lineAnchorWorldX = player.floatWorldX;
-                        player.lineAnchorWorldY = player.lineAnchorWorldY;
-                    }
+            if(player.hasLineCast){
+                // === ZMIANA START ===
+                // Sprawdź, czy gracz nie odszedł za daleko od spławika.
+                const distanceFromFloat = Math.hypot(player.x - player.floatWorldX, player.y - player.floatWorldY);
+                if (distanceFromFloat > MAX_PLAYER_FLOAT_DISTANCE) {
+                    this._resetFishingState(player);
                 } else {
-                    player.floatVelocityX *= FLOAT_WATER_FRICTION;
-                    if(Math.abs(player.floatVelocityX) < 0.1) player.floatVelocityX = 0;
-                    player.floatWorldX += player.floatVelocityX;
-                    player.floatWorldY = player.lineAnchorWorldY;
+                // === ZMIANA KONIEC ===
+                    
+                    // Fizyka spławika (gdy jest w powietrzu)
+                    if (player.lineAnchorWorldY === null) {
+                        player.floatVelocityY += FLOAT_GRAVITY;
+                        player.floatWorldX += player.floatVelocityX;
+                        player.floatWorldY += player.floatVelocityY;
+                        
+                        // Sprawdź, czy spławik nie wyleciał za daleko podczas rzutu
+                        const castDistance = Math.hypot(player.rodTipWorldX - player.floatWorldX, player.rodTipWorldY - player.floatWorldY);
+                        if (castDistance > MAX_CAST_DISTANCE) {
+                             this._resetFishingState(player);
+                        }
+
+                        // Kolizja z wodą
+                        else if (player.floatWorldY + FLOAT_HITBOX_RADIUS >= WATER_TOP_Y_WORLD) {
+                            player.floatWorldY = WATER_TOP_Y_WORLD - FLOAT_HITBOX_RADIUS;
+                            player.floatVelocityY = 0;
+                            player.floatVelocityX *= FLOAT_WATER_FRICTION;
+                            // Ustawienie kotwicy w wodzie - zmieniamy na `player.floatWorldY`, bo tam się zatrzymał
+                            player.lineAnchorWorldX = player.floatWorldX;
+                            player.lineAnchorWorldY = player.floatWorldY; 
+                        }
+                    } 
+                    // Fizyka spławika (gdy jest już w wodzie)
+                    else {
+                        player.floatVelocityX *= FLOAT_WATER_FRICTION;
+                        if(Math.abs(player.floatVelocityX) < 0.1) player.floatVelocityX = 0;
+                        player.floatWorldX += player.floatVelocityX;
+                        // Spławik utrzymuje się na stałej wysokości Y kotwicy
+                        player.floatWorldY = player.lineAnchorWorldY;
+                    }
+                // === ZMIANA START ===
+                // Zamknięcie klamry od warunku sprawdzającego dystans
                 }
-            } else {
-                 player.floatVelocityX = 0;
-                 player.floatVelocityY = 0;
-                 player.floatWorldX = null;
-                 player.floatWorldY = null;
-                 player.lineAnchorWorldY = null;
+                // === ZMIANA KONIEC ===
+            } 
+            // Jeśli żyłka nie jest zarzucona, upewnij się, że stan jest czysty
+            else {
+                 this._resetFishingState(player);
             }
         }
 
-        // --- Rozgłoś zaktualizowany stan do wszystkich graczy ---
         this.broadcast({
             type: 'gameStateUpdate',
             payload: Object.values(room.players)
