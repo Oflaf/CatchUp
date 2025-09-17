@@ -2,13 +2,34 @@
 <html lang="pl">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <!-- Upewnij się, że twój meta tag viewport wciąż blokuje skalowanie na urządzeniach mobilnych -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Prosta Platformówka Multiplayer - Pokoje</title>
     <link rel="stylesheet" href="style.css">
+
+    <!-- ===== NOWY FRAGMENT BLOKUJĄCY ZOOM PRZEGLĄDARKI ===== -->
+    <script>
+        // Zapobiegaj zoomowi za pomocą kółka myszy z wciśniętym Ctrl
+        document.addEventListener('wheel', function(event) {
+            if (event.ctrlKey) {
+                event.preventDefault();
+            }
+        }, { passive: false }); // 'passive: false' jest konieczne, aby preventDefault() działało
+
+        // Zapobiegaj zoomowi za pomocą klawiszy Ctrl + '+' / Ctrl + '-' / Ctrl + '0'
+        document.addEventListener('keydown', function(event) {
+            if (event.ctrlKey && (event.key === '+' || event.key === '-' || event.key === '0')) {
+                event.preventDefault();
+            }
+        });
+    </script>
 </head>
 <body>
+    <!-- Canvas dla tła menu, który będzie za div#lobby -->
+    <canvas id="menuCanvas"></canvas>
+
     <div id="lobby">
-        <h1>Witaj w Lobby!</h1>
+        <h1>Catch</h1>
         <p>Twoja nazwa: <span id="myUsername"></span> (Kolor: <span id="myColorDisplay" style="display: inline-block; width: 20px; height: 20px; border: 1px solid black;"></span>)</p>
 
         <div class="room-actions">
@@ -30,16 +51,16 @@
     </div>
 
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script> 
-    
-    <!-- Socket.io do komunikacji z serwerem SYGNALIZACYJNYM -->
     <script src="/socket.io/socket.io.js"></script> 
-    
+
+    <!-- Skrypty gry -->
     <script src="js/biomemanager.js"></script>
-    
-    <!-- Nasza nowa logika hosta -->
     <script src="js/host.js"></script> 
     
-    <!-- Główny skrypt klienta -->
+    <!-- Nowy skrypt do obsługi świata w tle menu -->
+    <script src="js/menuworld.js"></script>
+
+    <!-- Główny skrypt klienta (pozostaje na końcu) -->
     <script src="script.js"></script>
 </body>
 </html>
