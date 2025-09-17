@@ -87,7 +87,7 @@ const JUMP_LEG_OPPOSITE_ROTATION_ANGLE = JUMP_LEG_OPPOSITE_ROTATION_DEGREES * (M
 const JUMP_LEG_WAVE_ANGLE = JUMP_LEG_WAVE_DEGREES * (Math.PI / 180);
 const JUMP_ARM_WAVE_ANGLE = JUMP_ARM_WAVE_DEGREES * (Math.PI / 180);
 let currentZoomLevel = 1.0;
-const MIN_ZOOM = 0.76;
+const MIN_ZOOM = 0.0735;
 const MAX_ZOOM = 1.5;
 const ZOOM_SENSITIVITY = 0.1;
 const ITEM_NONE = 'none';
@@ -118,7 +118,7 @@ const exampleCustomItemPaths = {
     items: {'rod':{path:'img/item/rod.png',width:playerSize*2,height:playerSize,pivotX_in_img:Math.round(20*(playerSize/128)),pivotY_in_round:(20*(playerSize/128))},'lantern':{path:'img/item/lantern.png',width:playerSize,height:playerSize,pivotX_in_img:playerSize/2,pivotY_in_img:playerSize/2},'float':{path:'img/item/float.png',width:32,height:62,pivotX_in_img:FLOAT_SIZE/2,pivotY_in_img:FLOAT_SIZE/2}}
 };
 
-let localPlayer = { id: null, username: 'Player' + Math.floor(Math.random()*1000), color: '#' + Math.floor(Math.random()*16777215).toString(16).padStart(6,'0'), x: 50, y: DEDICATED_GAME_HEIGHT-50-playerSize, isJumping: false, velocityY: 0, isWalking: false, isIdle: false, animationFrame: 0, idleAnimationFrame: 0, direction: 1, velocityX: 0, currentMouseX: undefined, currentMouseY: undefined, customizations: { hat:'none', hair:'none', accessories:'none', beard:'none', clothes:'none', pants:'none', shoes:'none', rightHandItem:ITEM_NONE, hairSaturation:100, hairHue:0, hairBrightness:100, beardSaturation:100, beardHue:0, beardBrightness:100 }, isCasting:false, castingPower:0, fishingBarSliderPosition:0, fishingBarTime:0, castingDirectionAngle:0, hasLineCast:false, floatWorldX:null, floatWorldY:null, rodTipWorldX:null, rodTipWorldY:null, lineAnchorWorldY:null };
+let localPlayer = { id: null, username: 'Gracz' + Math.floor(Math.random()*1000), color: '#' + Math.floor(Math.random()*16777215).toString(16).padStart(6,'0'), x: 50, y: DEDICATED_GAME_HEIGHT-50-playerSize, isJumping: false, velocityY: 0, isWalking: false, isIdle: false, animationFrame: 0, idleAnimationFrame: 0, direction: 1, velocityX: 0, currentMouseX: undefined, currentMouseY: undefined, customizations: { hat:'none', hair:'none', accessories:'none', beard:'none', clothes:'none', pants:'none', shoes:'none', rightHandItem:ITEM_NONE, hairSaturation:100, hairHue:0, hairBrightness:100, beardSaturation:100, beardHue:0, beardBrightness:100 }, isCasting:false, castingPower:0, fishingBarSliderPosition:0, fishingBarTime:0, castingDirectionAngle:0, hasLineCast:false, floatWorldX:null, floatWorldY:null, rodTipWorldX:null, rodTipWorldY:null, lineAnchorWorldY:null };
 myUsernameSpan.textContent = localPlayer.username; myColorDisplay.style.backgroundColor = localPlayer.color;
 
 let playersInRoom = {};
@@ -148,7 +148,7 @@ let lastTime = 0;
 // === SEKCJA 2: FUNKCJE RYSOWANIA (bez zmian) ===
 // ====================================================================
 
-function loadImages(callback){const allPaths={...characterImagePaths,...customizationUIPaths,...sliderUIPaths};let a=Object.keys(allPaths).length;for(const b in exampleCustomItemPaths.items)a++;for(const c in exampleCustomItemPaths){if(c==="items")continue;for(const d in exampleCustomItemPaths[c])a++;}if(a===0){biomeManager.loadBiomeImages(callback);return}let e=0;const f=g=>{e++;if(e===a)biomeManager.loadBiomeImages(()=>callback())};for(const h in allPaths){const i=new Image;i.src=allPaths[h];i.onload=()=>{characterImagePaths[h]?characterImages[h]=i:(customizationUIPaths[h]||sliderUIPaths[h])&&(customizationUIImages[h]=i),f(i.src)},i.onerror=()=>{console.error(`Image loading error: ${i.src}`),f(i.src)}}for(const j in exampleCustomItemPaths){if(j==="items")continue;const k=exampleCustomItemPaths[j];for(const l in k){const m=k[l],n=new Image;n.src=m,n.onload=()=>{characterCustomImages[j]||(characterCustomImages[j]={}),characterCustomImages[j][l]=n,f(n.src)},n.onerror=()=>{console.error(`Image loading error: (${j}/${l}): ${n.src}`),characterCustomImages[j]||(characterCustomImages[j]={}),characterCustomImages[j][l]=null,f(n.src)}}}const o=exampleCustomItemPaths.items;for(const p in o){const q=o[p],r=new Image;r.src=q.path,r.onload=()=>{characterCustomImages.items[p]=r,f(r.src)},r.onerror=()=>{console.error(`Item Image loading error:: ${r.src}`),f(r.src)}}}
+function loadImages(callback){const allPaths={...characterImagePaths,...customizationUIPaths,...sliderUIPaths};let a=Object.keys(allPaths).length;for(const b in exampleCustomItemPaths.items)a++;for(const c in exampleCustomItemPaths){if(c==="items")continue;for(const d in exampleCustomItemPaths[c])a++;}if(a===0){biomeManager.loadBiomeImages(callback);return}let e=0;const f=g=>{e++;if(e===a)biomeManager.loadBiomeImages(()=>callback())};for(const h in allPaths){const i=new Image;i.src=allPaths[h];i.onload=()=>{characterImagePaths[h]?characterImages[h]=i:(customizationUIPaths[h]||sliderUIPaths[h])&&(customizationUIImages[h]=i),f(i.src)},i.onerror=()=>{console.error(`Błąd ładowania obrazu: ${i.src}`),f(i.src)}}for(const j in exampleCustomItemPaths){if(j==="items")continue;const k=exampleCustomItemPaths[j];for(const l in k){const m=k[l],n=new Image;n.src=m,n.onload=()=>{characterCustomImages[j]||(characterCustomImages[j]={}),characterCustomImages[j][l]=n,f(n.src)},n.onerror=()=>{console.error(`Błąd ładowania obrazu personalizacji (${j}/${l}): ${n.src}`),characterCustomImages[j]||(characterCustomImages[j]={}),characterCustomImages[j][l]=null,f(n.src)}}}const o=exampleCustomItemPaths.items;for(const p in o){const q=o[p],r=new Image;r.src=q.path,r.onload=()=>{characterCustomImages.items[p]=r,f(r.src)},r.onerror=()=>{console.error(`Błąd ładowania obrazu przedmiotu: ${r.src}`),f(r.src)}}}
 function lerp(start, end, amt) {
     return (1 - amt) * start + amt * end;
 }
@@ -178,9 +178,18 @@ function updateCamera() {
     const playerWorldCenterY = localPlayer.y + playerSize / 2;
 
     const visibleWorldWidth = DEDICATED_GAME_WIDTH / currentZoomLevel;
+    biomeManager.drawParallaxBackground(ctx, cameraX, visibleWorldWidth);
+    if (currentRoom && currentRoom.gameData && currentRoom.gameData.biome) {
+        const biomeName = currentRoom.gameData.biome;
+        const groundLevel = currentRoom.gameData.groundLevel;
+        biomeManager.drawBackgroundBiomeGround(ctx, biomeName, groundLevel);
+        biomeManager.drawBackgroundTrees(ctx);
+        biomeManager.drawBackgroundPlants(ctx);
+        biomeManager.drawForegroundBiomeGround(ctx, biomeName, groundLevel);
+        biomeManager.drawBuildings(ctx, groundLevel, cameraX, DEDICATED_GAME_WIDTH / currentZoomLevel);
+    }
     const visibleWorldHeight = DEDICATED_GAME_HEIGHT / currentZoomLevel;
 
-    // --- Obliczenia docelowej pozycji X (bez zmian) ---
     let targetCameraX = playerWorldCenterX - visibleWorldWidth / 2;
     if (targetCameraX < 0) {
         targetCameraX = 0;
@@ -192,18 +201,7 @@ function updateCamera() {
         targetCameraX = (currentWorldWidth / 2) - (visibleWorldWidth / 2);
     }
 
-    // =================================================================
-    // === TUTAJ ZNAJDUJE SIĘ KLUCZOWA ZMIANA ===
-    // Nowy, prostszy sposób obliczania docelowej pozycji Y kamery.
-    // Chcemy, aby punkt docelowy kamery znajdował się niżej niż gracz.
-    // Używamy CAMERA_VERTICAL_BIAS do określenia, jak bardzo "poniżej" gracza ma patrzeć kamera.
-    
-    // Obliczamy "przesunięcie" w dół na podstawie wysokości widocznego świata.
-    const verticalOffset = visibleWorldHeight * (CAMERA_VERTICAL_BIAS - 0.5);
-    let targetCameraY = (playerWorldCenterY + verticalOffset) - (visibleWorldHeight / 2);
-    // =================================================================
-
-    // Ograniczenia dla osi Y (bez zmian)
+    let targetCameraY = playerWorldCenterY - visibleWorldHeight / 2;
     if (targetCameraY < 0) {
         targetCameraY = 0;
     }
@@ -214,21 +212,8 @@ function updateCamera() {
         targetCameraY = (DEDICATED_GAME_HEIGHT / 2) - (visibleWorldHeight / 2);
     }
 
-    // Płynne przejście do nowej pozycji (bez zmian)
-    cameraX = lerp(cameraX, targetCameraX, CAMERA_SMOOTHING_FACTOR);
-    cameraY = lerp(cameraY, targetCameraY, 1);
-
-    // Rysowanie tła z nową pozycją kamery (bez zmian)
-    biomeManager.drawParallaxBackground(ctx, cameraX, visibleWorldWidth);
-    if (currentRoom && currentRoom.gameData && currentRoom.gameData.biome) {
-        const biomeName = currentRoom.gameData.biome;
-        const groundLevel = currentRoom.gameData.groundLevel;
-        biomeManager.drawBackgroundBiomeGround(ctx, biomeName, groundLevel);
-        biomeManager.drawBackgroundTrees(ctx);
-        biomeManager.drawBackgroundPlants(ctx);
-        biomeManager.drawForegroundBiomeGround(ctx, biomeName, groundLevel);
-        biomeManager.drawBuildings(ctx, groundLevel, cameraX, DEDICATED_GAME_WIDTH / currentZoomLevel);
-    }
+    cameraX = targetCameraX;
+    cameraY = targetCameraY * 1.2;
 }
 function drawFilteredCharacterPart(a,b,c,d,e,f,g=100,h=0,i=100){if(!b||!b.complete)return;const j=document.createElement("canvas");j.width=e,j.height=f;const k=j.getContext("2d");k.imageSmoothingEnabled=!1,k.drawImage(b,0,0,e,f);const l=[];100!==g&&l.push(`saturate(${g}%)`),0!==h&&l.push(`hue-rotate(${h}deg)`),100!==i&&l.push(`brightness(${i}%)`),l.length>0?(a.save(),a.filter=l.join(" "),a.drawImage(j,c,d,e,f),a.restore()):a.drawImage(j,c,d,e,f)}
 function drawPlayer(p){if(!characterImages.body||!characterImages.body.complete){ctx.fillStyle=p.color,ctx.fillRect(p.x,p.y,playerSize,playerSize);return}ctx.save();let a=0,b=0,c=0,d=0,e=0,f=0,g=0,h=0;const i=(Number(p.animationFrame||0)%animationCycleLength)/animationCycleLength,j=(Number(p.idleAnimationFrame||0)%IDLE_ANIM_CYCLE_LENGTH)/IDLE_ANIM_CYCLE_LENGTH,k=p.isWalking===!0,l=p.isIdle===!0,m=p.isJumping===!0;let n=0;const o=p.x,q=p.y;let r=0,s=0;if(p.id===localPlayer.id&&void 0!==localPlayer.currentMouseX){const t=localPlayer.currentMouseX,u=localPlayer.currentMouseY,v=o+headPivotInImageX,w=q+(headInitialOffsetY+headPivotInImageY),x=(t-v)*p.direction,y=u-w,z=Math.sqrt(x*x+y*y);if(z>0){const A=x/z,B=y/z;r=A*Math.min(z,eyeMaxMovementRadius),s=B*Math.min(z,eyeMaxMovementRadius)}}if(k&&!m)n=Math.sin(2*i*Math.PI),a=-bodyHeadPulseAmount*Math.abs(n),b=n*armRotationAngle,c=-b,d=n*legRotationAngle,e=-d,f=n*headRotationAngleAmount,g=Math.sin(4*i*Math.PI)*bodyHeadPulseAmount*headOscillationAmplitudeFactor;else if(l&&!m)n=Math.sin(2*j*Math.PI),a=-IDLE_BODY_HEAD_PULSE_AMOUNT*Math.abs(n),b=n*IDLE_ARM_ROTATION_ANGLE,c=-b,d=0,e=0,f=n*IDLE_HEAD_ROTATION_ANGLE_AMOUNT,g=Math.sin(4*j*Math.PI)*IDLE_BODY_HEAD_PULSE_AMOUNT*IDLE_HEAD_OSCILLATION_AMPLITUDE_FACTOR;else if(m){const C=18,D=54;p.velocityY>0?h=JUMP_BODY_TILT_ANGLE*(1-Math.min(1,Math.max(0,p.velocityY/C))):h=JUMP_BODY_TILT_ANGLE*(1-Math.min(1,Math.max(0,Math.abs(p.velocityY)/D)));const E=Math.min(1,Math.abs(p.velocityY)/Math.max(C,D));d=-E*JUMP_LEG_OPPOSITE_ROTATION_ANGLE,e=E*JUMP_LEG_WAVE_ANGLE,b=E*JUMP_ARM_WAVE_ANGLE,c=-.7*b,f=.5*h,g=0,a=0}ctx.translate(o+playerSize/2,q+playerSize/2),ctx.scale(p.direction,1),m&&ctx.rotate(h*p.direction),ctx.translate(-(o+playerSize/2),-(q+playerSize/2));function t(a,b,c,d,e,f=0,g=playerSize,h=playerSize){if(!a||!a.complete)return;ctx.save();const i=o+b,j=q+c;ctx.translate(i+d,j+e),ctx.rotate(f),ctx.drawImage(a,-d,-e,g,h),ctx.restore()}t(characterImages.leg,backLegOffsetX,0,legPivotInImageX,legPivotInImageY,e),t(characterImages.arm,backArmOffsetX,0,originalArmPivotInImageX,originalArmPivotInImageY,c),t(characterImages.leg,frontLegOffsetX,0,legPivotInImageX,legPivotInImageY,d),ctx.drawImage(characterImages.body,o,q+a,playerSize,playerSize);const u=headInitialOffsetY+a+g;t(characterImages.head,0,u,headPivotInImageX,headPivotInImageY,f),t(characterImages.eye,LEFT_EYE_BASE_X_REL_HEAD_TL+r,u+EYE_BASE_Y_REL_HEAD_TL+s,eyePivotInImage,eyePivotInImage,0,eyeSpriteSize,eyeSpriteSize),t(characterImages.eye,RIGHT_EYE_BASE_X_REL_HEAD_TL+r,u+EYE_BASE_Y_REL_HEAD_TL+s,eyePivotInImage,eyePivotInImage,0,eyeSpriteSize,eyeSpriteSize);const v=p.customizations||{},w=v.hair;if(w&&"none"!==w){const x=characterCustomImages.hair[w];x&&x.complete&&(ctx.save(),ctx.translate(o+headPivotInImageX,q+u+HAIR_VERTICAL_OFFSET+headPivotInImageY-HAIR_VERTICAL_OFFSET),ctx.rotate(f),drawFilteredCharacterPart(ctx,x,-headPivotInImageX,-(headPivotInImageY-HAIR_VERTICAL_OFFSET),playerSize,playerSize,v.hairSaturation,v.hairHue,v.hairBrightness),ctx.restore())}const y=v.beard;if(y&&"none"!==y){const z=characterCustomImages.beard[y];if(z&&z.complete){const A=Math.round(15*(playerSize/32));ctx.save(),ctx.translate(o+headPivotInImageX,q+u+A+headPivotInImageY-A),ctx.rotate(f),drawFilteredCharacterPart(ctx,z,-headPivotInImageX,-(headPivotInImageY-A),playerSize,playerSize,v.beardSaturation,v.beardHue,v.brightness),ctx.restore()}}const B=v.hat;if(B&&"none"!==B){const C=characterCustomImages.hat[B];C&&C.complete&&t(C,0,u-Math.round(20*(playerSize/32)),headPivotInImageX,headPivotInImageY- -Math.round(20*(playerSize/32)),f,playerSize,playerSize)}const D=v.rightHandItem;if(D&&D!==ITEM_NONE){const E=exampleCustomItemPaths.items[D],F=characterCustomImages.items[D];E&&F&&F.complete&&t(F,frontArmOffsetX,0,originalArmPivotInImageX,originalArmPivotInImageY,b,E.width,E.height)}t(characterImages.arm,frontArmOffsetX,0,originalArmPivotInImageX,originalArmPivotInImageY,b),ctx.restore(),p.customizations&&p.customizations.rightHandItem===ITEM_ROD?(p.rodTipWorldX=p.x+playerSize/2+(frontArmOffsetX+originalArmPivotInImageX-playerSize/2)*p.direction+(ROD_TIP_OFFSET_X*Math.cos(b)-ROD_TIP_OFFSET_Y*Math.sin(b))*p.direction,p.rodTipWorldY=p.y+playerSize/2+(0+originalArmPivotInImageY-playerSize/2)+(ROD_TIP_OFFSET_X*Math.sin(b)+ROD_TIP_OFFSET_Y*Math.cos(b)),p.id===localPlayer.id&&(localPlayer.rodTipWorldX=p.rodTipWorldX,localPlayer.rodTipWorldY=p.rodTipWorldY)):(p.rodTipWorldX=null,p.rodTipWorldY=null,p.id===localPlayer.id&&(localPlayer.rodTipWorldX=null,localPlayer.rodTipWorldY=null)),ctx.fillStyle="white",ctx.font=`${DEFAULT_FONT_SIZE_USERNAME}px ${PIXEL_FONT}`,ctx.textAlign="center",ctx.fillText(p.username||p.id.substring(0,5),p.x+playerSize/2,p.y-10+a)}
@@ -340,7 +325,7 @@ function drawInsects() {
 
 function initializeSignaling() {
     signalingSocket = io();
-    signalingSocket.on('connect', () => console.log('Connected to the signaling server.', signalingSocket.id));
+    signalingSocket.on('connect', () => console.log('Połączono z serwerem sygnalizacyjnym.', signalingSocket.id));
     // === ZMIANA: Aktualizujemy globalną zmienną availableRooms ===
     signalingSocket.on('roomListUpdate', (hosts) => {
         availableRooms = hosts; // Przechowujemy listę pokoi globalnie
@@ -352,7 +337,7 @@ function initializeSignaling() {
                 for (let peerId in hosts) {
                     const room = hosts[peerId];
                     const li = document.createElement('li');
-                    li.innerHTML = `<span>${room.name} (Players: ${room.playerCount})</span><button data-peer-id="${peerId}">Dołącz</button>`;
+                    li.innerHTML = `<span>${room.name} (Graczy: ${room.playerCount})</span><button data-peer-id="${peerId}">Dołącz</button>`;
                     li.querySelector('button').addEventListener('click', () => joinRoom(peerId));
                     roomListUl.appendChild(li);
                 }
@@ -402,23 +387,23 @@ function initializePeer(callback) {
 peer = new Peer(undefined, peerConfig);
 
     peer.on('open', (id) => {
-        console.log('My ID in the P2P network (from the PeerJS cloud server): ' + id);
+        console.log('Moje ID w sieci P2P (z serwera chmurowego PeerJS): ' + id);
         if (callback) callback(id);
     });
 
     peer.on('error', (err) => {
-    console.error("MAIN PEER OBJECT ERROR: ", err);
-    alert("A fatal PeerJS error occurred. Check the console. Error type: " + err.type);
+    console.error("BŁĄD GŁÓWNEGO OBIEKTU PEER:", err);
+    alert("Wystąpił krytyczny błąd PeerJS. Sprawdź konsolę. Typ błędu: " + err.type);
 });
 
 // DODAJ TE ZDARZENIA DIAGNOSTYCZNE
 peer.on('disconnected', () => {
-    console.warn(`PEERJS: Disconnected from PeerJS broker server. I'm trying to reconnect...`);
+    console.warn('PEERJS: Rozłączono z serwerem brokerskim PeerJS. Próbuję połączyć ponownie...');
     // PeerJS automatycznie spróbuje się połączyć ponownie
 });
 
 peer.on('close', () => {
-    console.error(`PEERJS: The connection to the broker server has been permanently closed. New connections cannot be made.`);
+    console.error('PEERJS: Połączenie z serwerem brokerskim zostało trwale zamknięte. Nie można nawiązać nowych połączeń.');
 });
 }
 // === ZMIANA: Funkcja teraz akceptuje hostPeerId ===
@@ -428,11 +413,11 @@ function onSuccessfulJoin(roomData, hostPeerId = null) {
         if (hostPeerId && availableRooms[hostPeerId] && availableRooms[hostPeerId].name) {
             roomData = roomData || {}; // Upewnij się, że roomData istnieje
             roomData.name = availableRooms[hostPeerId].name; // Pobierz nazwę z listy lobby
-            console.log(`[INFO] The room name was empty, I'm using the name from the lobby list: ${roomData.name}`);
+            console.log(`[INFO] Nazwa pokoju była pusta, używam nazwy z listy lobby: ${roomData.name}`);
         } else {
-            console.warn(`[WARN] Failed to determine room name. Room details: `, roomData);
+            console.warn(`[WARN] Nie udało się ustalić nazwy pokoju. Dane pokoju:`, roomData);
             roomData = roomData || {};
-            roomData.name = "Undefined room"; // Placeholder, jeśli nazwa nie zostanie znaleziona
+            roomData.name = "Nieznany pokój"; // Placeholder, jeśli nazwa nie zostanie znaleziona
         }
     }
     // ====================================================
@@ -483,7 +468,7 @@ function onSuccessfulJoin(roomData, hostPeerId = null) {
     lobbyDiv.style.display = 'none';
     gameContainerDiv.style.display = 'block';
     // Logowanie nazwy pokoju, która mogła zostać uzupełniona
-    console.log(`Successfully joined the room: "${currentRoom.name}"`); 
+    console.log(`Pomyślnie dołączono do pokoju: "${currentRoom.name}"`); 
 }
 
 
@@ -620,15 +605,15 @@ createRoomBtn.addEventListener('click', () => {
 
     initializePeer((peerId) => {
         if (!peerId) {
-            console.error("Failed to obtain Peer ID. Unable to create room.");
-            alert("Network error, unable to create room.");
+            console.error("Nie udało się uzyskać Peer ID. Nie można stworzyć pokoju.");
+            alert("Błąd sieci, nie można stworzyć pokoju.");
             isHost = false; 
             createRoomBtn.disabled = false;
             newRoomNameInput.disabled = false;
             return;
         }
         
-        console.log(`Peer ID obtained: ${peerId}. Initializing the game host...`);
+        console.log(`Uzyskano Peer ID: ${peerId}. Inicjuję hosta gry...`);
         localPlayer.id = peerId;
 
         gameHostInstance = new GameHost();
@@ -662,7 +647,7 @@ createRoomBtn.addEventListener('click', () => {
                             // Wysyłamy wiadomość roomJoined z pełnymi danymi
                             conn.send({ type: 'roomJoined', payload: roomDataToSend });
                         } else {
-                            console.error("Host: Unable to send roomJoined - hostRoomConfiguration missing!");
+                            console.error("Host: Nie można wysłać roomJoined - brak hostRoomConfiguration!");
                             // Opcjonalnie można wysłać błąd do klienta
                             // conn.send({ type: 'joinError', payload: 'Host configuration missing.' });
                         }
@@ -677,7 +662,7 @@ createRoomBtn.addEventListener('click', () => {
             conn.on('close', () => { gameHostInstance.removePlayer(conn.peer); signalingSocket.emit('notify-leave', peerId); });
         });
         
-        console.log(`[HOST] Background server running. Room "${roomConfig.name}" is now visible in the lobby.`);
+        console.log(`[HOST] Serwer w tle uruchomiony. Pokój "${roomConfig.name}" jest teraz widoczny w lobby.`);
     });
 });
 
@@ -686,7 +671,7 @@ function joinRoom(hostPeerId) {
         localPlayer.id = myPeerId;
 
         if (isHost && myPeerId === hostPeerId) {
-            console.log('[HOST] Joining to own room detected. Using a simulated connection.');
+            console.log('[HOST] Wykryto dołączanie do własnego pokoju. Używanie symulowanego połączenia.');
             
             const simulatedConnection = {
                 peer: myPeerId,
@@ -708,12 +693,12 @@ function joinRoom(hostPeerId) {
                         case 'playerJoinedRoom':
                             if (!playersInRoom[data.payload.id]) {
                                 playersInRoom[data.payload.id] = data.payload.playerData;
-                                console.log(`Player ${data.payload.username} has joined.`);
+                                console.log(`Gracz ${data.payload.username} dołączył.`);
                             }
                             break;
                         case 'playerLeftRoom':
                             if (playersInRoom[data.payload]) {
-                                console.log(`Player ${playersInRoom[data.payload].username} has left the room.`);
+                                console.log(`Gracz ${playersInRoom[data.payload].username} opuścił.`);
                                 delete playersInRoom[data.payload];
                             }
                             break;
@@ -740,27 +725,27 @@ function joinRoom(hostPeerId) {
         // Przypadek 2: Zwykły gość dołącza do gry.
         else {
             isHost = false;
-            console.log(`[GUEST] I'm trying to establish a P2P connection with host ID: ${hostPeerId}`);
+            console.log(`[GOŚĆ] Próbuję nawiązać połączenie P2P z hostem o ID: ${hostPeerId}`);
             
             hostConnection = peer.connect(hostPeerId, { reliable: true });
 
             if (!hostConnection) {
-                console.error("[GUEST] FATAL ERROR: peer.connect() returned null.");
-                alert("Failed to initialize connection to host.");
+                console.error("[GOŚĆ] BŁĄD KRYTYCZNY: peer.connect() zwróciło null.");
+                alert("Nie udało się zainicjować połączenia z hostem.");
                 return;
             }
 
-            console.log("[GUEST] The connection object has been created. I'm waiting for events...");
+            console.log("[GOŚĆ] Obiekt połączenia został stworzony. Oczekuję na zdarzenia...");
 
             hostConnection.on('open', () => {
-                console.log(`[GUEST] SUCCESS! A P2P connection to the host (${hostPeerId}) has been opened.`);
+                console.log(`[GOŚĆ] SUKCES! Połączenie P2P z hostem (${hostPeerId}) zostało otwarte.`);
                 signalingSocket.emit('notify-join', hostPeerId);
                 hostConnection.send({ type: 'requestJoin', payload: localPlayer });
             });
             
             hostConnection.on('error', (err) => {
-            console.error(`[GUEST] ERROR P2P CONNECTING TO HOST:`, err);
-            alert('An error occurred while trying to connect to the host. Check your console.');
+            console.error(`[GOŚĆ] BŁĄD POŁĄCZENIA P2P Z HOSTEM:`, err);
+            alert('Wystąpił błąd podczas próby połączenia z hostem. Sprawdź konsolę.');
         });
 
             hostConnection.on('data', (data) => {
@@ -782,10 +767,10 @@ function joinRoom(hostPeerId) {
                     case 'playerJoinedRoom': 
                         if (!playersInRoom[data.payload.id]) {
                             playersInRoom[data.payload.id] = data.payload.playerData; 
-                            console.log(`Player ${data.payload.username} joined.`);
+                            console.log(`Gracz ${data.payload.username} dołączył.`);
                         }
                         break;
-                    case 'playerLeftRoom': if(playersInRoom[data.payload]) { console.log(`Player ${playersInRoom[data.payload].username} has left.`); delete playersInRoom[data.payload]; } break;
+                    case 'playerLeftRoom': if(playersInRoom[data.payload]) { console.log(`Gracz ${playersInRoom[data.payload].username} opuścił.`); delete playersInRoom[data.payload]; } break;
                     case 'playerCustomizationUpdated': if(playersInRoom[data.payload.id]) playersInRoom[data.payload.id].customizations = data.payload.customizations; break;
                     case 'grassSwaying': 
                         if (biomeManager) biomeManager.startSwayAnimation(data.payload.grassId, data.payload.direction);
@@ -794,13 +779,13 @@ function joinRoom(hostPeerId) {
             });
 
             hostConnection.on('error', (err) => {
-                console.error(`[GUEST] P2P CONNECTION ERROR:`, err);
-                alert('An error occurred while communicating with the host.');
+                console.error(`[GOŚĆ] BŁĄD POŁĄCZENIA P2P:`, err);
+                alert('Wystąpił błąd podczas komunikacji z hostem.');
             });
 
             hostConnection.on('close', () => { 
-                console.warn("[GUEST] The P2P connection to the host has been closed.");
-                alert('The host closed the room or the connection was lost.'); 
+                console.warn("[GOŚĆ] Połączenie P2P z hostem zostało zamknięte.");
+                alert('Host zamknął pokój lub utracono połączenie.'); 
                 leaveCurrentRoomUI();
             });
         }
@@ -841,7 +826,7 @@ function leaveCurrentRoomUI() {
 
     currentWorldWidth=DEDICATED_GAME_WIDTH * 2; biomeManager.worldWidth=currentWorldWidth; biomeManager.setBiome('jurassic');
     keys={}; cameraX=0; cameraY=0; isCustomizationMenuOpen=false;
-    console.log('You left the room, returned to the lobby.');
+    console.log('Opuściłeś pokój, wrócono do lobby.');
 }
 
 
@@ -849,42 +834,13 @@ function leaveCurrentRoomUI() {
 // === SEKCJA 6: OBSŁUGA ZDARZEŃ KLAWIATURY I MYSZY ===
 // ====================================================================
 function getMousePosOnCanvas(canvas, evt) {
-    // Stałe wymiary wewnętrzne płótna gry
-    const gameWidth = 1920;
-    const gameHeight = 1080;
-    const gameAspectRatio = gameWidth / gameHeight;
-
-    // Pobierz rzeczywiste wymiary elementu canvas na stronie
     const rect = canvas.getBoundingClientRect();
-    const windowAspectRatio = rect.width / rect.height;
-
-    let renderWidth, renderHeight, offsetX, offsetY;
-
-    // Porównaj proporcje, aby dowiedzieć się, jak przeglądarka wyrenderowała canvas
-    if (windowAspectRatio > gameAspectRatio) {
-        // Ekran jest szerszy niż gra (np. 21:9). Wysokość jest dopasowana w 100%.
-        renderWidth = rect.height * gameAspectRatio;
-        renderHeight = rect.height;
-        offsetX = (rect.width - renderWidth) / 2;
-        offsetY = 0;
-    } else {
-        // Ekran jest węższy lub równy grze (np. 16:9, 4:3, pionowy). Szerokość jest dopasowana w 100%.
-        renderWidth = rect.width;
-        renderHeight = rect.width / gameAspectRatio;
-        offsetX = 0;
-        offsetY = (rect.height - renderHeight) / 2;
-    }
-
-    // Oblicz pozycję myszy wewnątrz wyrenderowanego obszaru
-    const mouseXInRenderedArea = evt.clientX - rect.left - offsetX;
-    const mouseYInRenderedArea = evt.clientY - rect.top - offsetY;
-
-    // Przeskaluj pozycję myszy do wewnętrznej rozdzielczości gry
-    const scale = gameWidth / renderWidth;
-    const gameX = mouseXInRenderedArea * scale;
-    const gameY = mouseYInRenderedArea * scale;
-    
-    return { x: gameX, y: gameY };
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+    return {
+        x: (evt.clientX - rect.left) * scaleX,
+        y: (evt.clientY - rect.top) * scaleY
+    };
 }
 
 document.addEventListener('keydown', (event) => {
@@ -984,9 +940,9 @@ canvas.addEventListener('mouseup', (event) => {
 });
 
 canvas.addEventListener('wheel', (event) => {
-event.preventDefault();
-const zoomDelta = event.deltaY < 0 ? ZOOM_SENSITIVITY : -ZOOM_SENSITIVITY;
-currentZoomLevel = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, currentZoomLevel + zoomDelta));
+    event.preventDefault();
+    const zoomDelta = event.deltaY < 0 ? ZOOM_SENSITIVITY : -ZOOM_SENSITIVITY;
+    currentZoomLevel = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, currentZoomLevel + zoomDelta));
 }, { passive: false });
 
 
@@ -994,9 +950,9 @@ currentZoomLevel = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, currentZoomLevel + zoom
 // === SEKCJA 7: INICJALIZACJA ===
 // ====================================================================
 
-console.log("Initializing P2P client...");
+console.log("Inicjalizacja klienta P2P...");
 initializeSignaling();
 loadImages(() => {
-    console.log("All images loaded, starting render loop.");
+    console.log("Wszystkie obrazy załadowane, uruchamiam pętlę renderowania.");
     requestAnimationFrame(gameLoop);
 });
