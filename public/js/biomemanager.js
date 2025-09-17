@@ -530,7 +530,7 @@ class BiomeManager {
 
             img.onload = onLoaded;
             img.onerror = () => {
-                console.error(`Błąd ładowania obrazka biomu: ${src}`);
+                console.error(`Image loading error: ${src}`);
                 onLoaded(); // Mimo błędu, kontynuuj, aby nie blokować gry
             };
         });
