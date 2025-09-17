@@ -361,35 +361,16 @@ function initializePeer(callback) {
 
     // Użycie `new Peer()` bez opcji łączy z domyślnym serwerem PeerJS
     const peerConfig = {
-    // Możesz zostawić puste, aby łączyć się z domyślnym serwerem PeerJS Cloud,
-    // albo podać dane swojego serwera PeerJS, jeśli go hostujesz.
-    // host: 'twoj-peerjs-server.onrender.com',
-    // secure: true,
-    
-    // NAJWAŻNIEJSZA CZĘŚĆ: Konfiguracja STUN/TURN
+    // DODAJEMY TĘ LINIĘ
+    debug: 3, // 0 (off), 1 (errors), 2 (warnings), 3 (all logs)
+
     config: {
         'iceServers': [
-            // Dodajemy publiczne serwery STUN od Google. Zazwyczaj wystarczają.
             { urls: 'stun:stun.l.google.com:19302' },
             { urls: 'stun:stun1.l.google.com:19302' },
-            
-            // --- WAŻNE: Dodaj serwer TURN jako fallback ---
-            // Serwery TURN rzadko są darmowe, ponieważ zużywają transfer.
-            // Poniżej jest przykład. Musisz uzyskać własne dane uwierzytelniające
-            // od dostawcy takiego jak Twilio, Metered, lub postawić własny (coturn).
-            /*
-            {
-                urls: 'turn:adres-twojego-serwera-turn.com:3478',
-                username: 'twoja-nazwa-uzytkownika',
-                credential: 'twoje-haslo'
-            }
-            */
         ]
     }
 };
-
-// Inicjalizujemy Peer z nową konfiguracją.
-// Przekazujemy 'undefined' jako pierwszy argument, aby serwer sam przydzielił nam ID.
 peer = new Peer(undefined, peerConfig);
 
     peer.on('open', (id) => {
@@ -398,12 +379,20 @@ peer = new Peer(undefined, peerConfig);
     });
 
     peer.on('error', (err) => {
-        console.error("Błąd krytyczny PeerJS: ", err);
-        alert("Wystąpił błąd sieciowy P2P. Spróbuj odświeżyć stronę. Błąd: " + err.type);
-        if (callback) callback(null);
-    });
-}
+    console.error("BŁĄD GŁÓWNEGO OBIEKTU PEER:", err);
+    alert("Wystąpił krytyczny błąd PeerJS. Sprawdź konsolę. Typ błędu: " + err.type);
+});
 
+// DODAJ TE ZDARZENIA DIAGNOSTYCZNE
+peer.on('disconnected', () => {
+    console.warn('PEERJS: Rozłączono z serwerem brokerskim PeerJS. Próbuję połączyć ponownie...');
+    // PeerJS automatycznie spróbuje się połączyć ponownie
+});
+
+peer.on('close', () => {
+    console.error('PEERJS: Połączenie z serwerem brokerskim zostało trwale zamknięte. Nie można nawiązać nowych połączeń.');
+});
+}
 // === ZMIANA: Funkcja teraz akceptuje hostPeerId ===
 function onSuccessfulJoin(roomData, hostPeerId = null) { 
     // Jeśli nazwa pokoju jest brakująca, spróbuj ją pobrać z listy dostępnych pokoi
@@ -740,6 +729,11 @@ function joinRoom(hostPeerId) {
                 signalingSocket.emit('notify-join', hostPeerId);
                 hostConnection.send({ type: 'requestJoin', payload: localPlayer });
             });
+            
+            hostConnection.on('error', (err) => {
+            console.error(`[GOŚĆ] BŁĄD POŁĄCZENIA P2P Z HOSTEM:`, err);
+            alert('Wystąpił błąd podczas próby połączenia z hostem. Sprawdź konsolę.');
+        });
 
             hostConnection.on('data', (data) => {
                 switch(data.type) {
