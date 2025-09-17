@@ -360,7 +360,37 @@ function initializePeer(callback) {
     }
 
     // Użycie `new Peer()` bez opcji łączy z domyślnym serwerem PeerJS
-    peer = new Peer();
+    const peerConfig = {
+    // Możesz zostawić puste, aby łączyć się z domyślnym serwerem PeerJS Cloud,
+    // albo podać dane swojego serwera PeerJS, jeśli go hostujesz.
+    // host: 'twoj-peerjs-server.onrender.com',
+    // secure: true,
+    
+    // NAJWAŻNIEJSZA CZĘŚĆ: Konfiguracja STUN/TURN
+    config: {
+        'iceServers': [
+            // Dodajemy publiczne serwery STUN od Google. Zazwyczaj wystarczają.
+            { urls: 'stun:stun.l.google.com:19302' },
+            { urls: 'stun:stun1.l.google.com:19302' },
+            
+            // --- WAŻNE: Dodaj serwer TURN jako fallback ---
+            // Serwery TURN rzadko są darmowe, ponieważ zużywają transfer.
+            // Poniżej jest przykład. Musisz uzyskać własne dane uwierzytelniające
+            // od dostawcy takiego jak Twilio, Metered, lub postawić własny (coturn).
+            /*
+            {
+                urls: 'turn:adres-twojego-serwera-turn.com:3478',
+                username: 'twoja-nazwa-uzytkownika',
+                credential: 'twoje-haslo'
+            }
+            */
+        ]
+    }
+};
+
+// Inicjalizujemy Peer z nową konfiguracją.
+// Przekazujemy 'undefined' jako pierwszy argument, aby serwer sam przydzielił nam ID.
+peer = new Peer(undefined, peerConfig);
 
     peer.on('open', (id) => {
         console.log('Moje ID w sieci P2P (z serwera chmurowego PeerJS): ' + id);
