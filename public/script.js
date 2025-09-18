@@ -1,4 +1,3 @@
-
 'use strict';
 
 // ====================================================================
@@ -11,11 +10,35 @@ let isHost = false;
 let gameHostInstance;
 let hostConnection;
 
-// === NOWA ZMIENNA GLOBALNA: Przechowuje listę dostępnych pokoi z serwera sygnalizacyjnego ===
-let availableRooms = {}; 
-// === NOWA ZMIENNA GLOBALNA: Przechowuje konfigurację pokoju hosta ===
-let hostRoomConfiguration = null; 
+let availableRooms = {};
+let hostRoomConfiguration = null;
 // ========================================================================================
+
+// ================= POCZĄTEK ZMIAN: Rozbudowany Helper (Samouczek) =================
+// Ten obiekt i cała logika z nim związana istnieje TYLKO w przeglądarce lokalnego gracza.
+// Serwer ani inni gracze nie mają do niego dostępu.
+const tutorial = {
+    state: 1, // Aktualny krok samouczka (1-5) lub 'finished'
+    activeImage: { key: 'info1', alpha: 1, yOffset: 0, startTime: Date.now() },
+    fadingOutImage: null, // Obiekt dla obrazka, który znika
+};
+
+const TUTORIAL_IMAGE_SCALE = 2.4;
+const TUTORIAL_Y_OFFSET = -28;
+const TUTORIAL_ROCKING_ANGLE_DEGREES = 10;
+const TUTORIAL_ROCKING_SPEED = 4;
+const TUTORIAL_FADE_DURATION_MS = 600; // Czas trwania animacji fade in/out w milisekundach
+const TUTORIAL_FADE_UP_DISTANCE = 250; // Jak wysoko obrazek uniesie się podczas znikania
+
+const tutorialImagePaths = {
+    info1: 'img/ui/info1.png',
+    info2: 'img/ui/info2.png',
+    info3: 'img/ui/info3.png',
+    info4: 'img/ui/info4.png',
+    info5: 'img/ui/info5.png'
+};
+const tutorialImages = {};
+// ================= KONIEC ZMIAN =================
 
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
@@ -43,7 +66,7 @@ const roomListUl = document.getElementById('roomList');
 const leaveRoomBtn = document.getElementById('leaveRoomBtn');
 
 const playerSize = 128;
-const animationCycleLength = 30;
+const animationCycleLength = 60;
 const armRotationDegrees = 45;
 const legRotationDegrees = 45;
 const bodyHeadPulseAmount = Math.round(2 * (playerSize / 36));
@@ -59,6 +82,7 @@ const headRotationAngleAmount = (Math.PI / 180 * 2);
 const headOscillationAmplitudeFactor = 0.5;
 const headInitialOffsetY = 0;
 const HAIR_VERTICAL_OFFSET = -Math.round(10 * (playerSize / 32));
+const BEARD_VERTICAL_OFFSET = -Math.round(10 * (playerSize / 32));
 const backArmOffsetX = Math.round(8 * (playerSize / 36));
 const backLegOffsetX = Math.round(9 * (playerSize / 36));
 const frontArmOffsetX = 0;
@@ -106,19 +130,20 @@ const customizationUIPaths = { frame: 'img/ui/frame.png' };
 const sliderUIPaths = { bar: 'img/ui/bar.png', sliderHandle: 'img/ui/slider.png', fishingBar: 'img/ui/fishingbar.png' };
 const characterImages = {};
 const customizationUIImages = {};
-const characterCustomImages = { hat: {}, hair: {}, accessories: {}, beard: {}, clothes: {}, pants: {}, shoes: {}, items: {} };
+const characterCustomImages = { hat: {}, hair: {}, accessories: {}, beard: {}, clothes: {}, clothes_arm: {}, pants: {}, shoes: {}, items: {} };
 const exampleCustomItemPaths = {
-    hat: { 'hat1': 'img/character/custom/hat/type1.png', 'hat2': 'img/character/custom/hat/type2.png', 'hat3': 'img/character/custom/hat/type3.png' },
-    hair: {'hair1':'img/character/custom/hair/type1.png','hair2':'img/character/custom/hair/type2.png','hair3':'img/character/custom/hair/type3.png','hair4':'img/character/custom/hair/type4.png','hair5':'img/character/custom/hair/type5.png','hair6':'img/character/custom/hair/type6.png','hair7':'img/character/custom/hair/type7.png','hair8':'img/character/custom/hair/type8.png','hair9':'img/character/custom/hair/type9.png','hair10':'img/character/custom/hair/type10.png','hair11':'img/character/custom/hair/type11.png','hair12':'img/character/custom/hair/type12.png','hair13':'img/character/custom/hair/type13.png','hair14':'img/character/custom/hair/type14.png','hair15':'img/character/custom/hair/type15.png','hair16':'img/character/custom/hair/type16.png','hair20':'img/character/custom/hair/type20.png'},
-    accessories: { 'glasses': 'img/character/custom/accessories/type1.png', 'scarf': 'img/character/custom/accessories/type2.png' },
-    beard: { 'beard1': 'img/character/custom/beard/type1.png' },
-    clothes: { 'shirt1': 'img/character/custom/clothes/type1.png', 'shirt2': 'img/character/custom/clothes/type2.png' },
+    hat: { 'red cap': 'img/character/custom/hat/type1.png', 'blue cap': 'img/character/custom/hat/type2.png', 'special': 'img/character/custom/hat/type3.png', 'street cap': 'img/character/custom/hat/type4.png', 'pink cap': 'img/character/custom/hat/type5.png', 'black cap': 'img/character/custom/hat/type6.png', 'oldschool cap': 'img/character/custom/hat/type7.png', 'blue straight cap': 'img/character/custom/hat/type8.png', 'green straight cap': 'img/character/custom/hat/type9.png', 'kiddo cap': 'img/character/custom/hat/type10.png' },
+    hair: {'Curly':'img/character/custom/hair/type1.png','Curly Short':'img/character/custom/hair/type2.png','Short':'img/character/custom/hair/type3.png','Plodder':'img/character/custom/hair/type4.png','"Cool Kid"':'img/character/custom/hair/type5.png','inmate':'img/character/custom/hair/type6.png','maniac':'img/character/custom/hair/type7.png','alopecia':'img/character/custom/hair/type8.png','Mrs. Robinson':'img/character/custom/hair/type9.png','Bob':'img/character/custom/hair/type10.png','Mod':'img/character/custom/hair/type11.png','hair12':'img/character/custom/hair/type12.png','hair13':'img/character/custom/hair/type13.png','hair14':'img/character/custom/hair/type14.png','hair15':'img/character/custom/hair/type15.png','hair16':'img/character/custom/hair/type16.png','hair20':'img/character/custom/hair/type20.png'},
+    accessories: { 'librarian glasses': 'img/character/custom/accessories/type1.png', 'mole glasses': 'img/character/custom/accessories/type2.png', 'square glasses': 'img/character/custom/accessories/type3.png', 'black glasses': 'img/character/custom/accessories/type4.png', 'red glasses': 'img/character/custom/accessories/type5.png', '"cool" glasses': 'img/character/custom/accessories/type6.png', 'sunglasses': 'img/character/custom/accessories/type7.png', 'windsor glasses': 'img/character/custom/accessories/type8.png', 'eye patch': 'img/character/custom/accessories/type9.png'},
+    beard: { 'goatee': 'img/character/custom/beard/type1.png', 'overgrown goatee': 'img/character/custom/beard/type2.png' },
+    clothes: { 'white shirt': 'img/character/custom/clothes/type1.png', 'black shirt': 'img/character/custom/clothes/type2.png', 'hawaii shirt': 'img/character/custom/clothes/type3.png' },
+    clothes_arm: { 'white shirt': 'img/character/custom/clothes/arm/type1.png', 'black shirt': 'img/character/custom/clothes/arm/type2.png', 'hawaii shirt': 'img/character/custom/clothes/arm/type3.png' },
     pants: { 'pants1': 'img/character/custom/pants/type1.png' },
     shoes: { 'shoes1': 'img/character/custom/shoes/type1.png' },
     items: {'rod':{path:'img/item/rod.png',width:playerSize*2,height:playerSize,pivotX_in_img:Math.round(20*(playerSize/128)),pivotY_in_round:(20*(playerSize/128))},'lantern':{path:'img/item/lantern.png',width:playerSize,height:playerSize,pivotX_in_img:playerSize/2,pivotY_in_img:playerSize/2},'float':{path:'img/item/float.png',width:32,height:62,pivotX_in_img:FLOAT_SIZE/2,pivotY_in_img:FLOAT_SIZE/2}}
 };
 
-let localPlayer = { id: null, username: 'Player' + Math.floor(Math.random()*1000), color: '#' + Math.floor(Math.random()*16777215).toString(16).padStart(6,'0'), x: 50, y: DEDICATED_GAME_HEIGHT-50-playerSize, isJumping: false, velocityY: 0, isWalking: false, isIdle: false, animationFrame: 0, idleAnimationFrame: 0, direction: 1, velocityX: 0, currentMouseX: undefined, currentMouseY: undefined, customizations: { hat:'none', hair:'none', accessories:'none', beard:'none', clothes:'none', pants:'none', shoes:'none', rightHandItem:ITEM_NONE, hairSaturation:100, hairHue:0, hairBrightness:100, beardSaturation:100, beardHue:0, beardBrightness:100 }, isCasting:false, castingPower:0, fishingBarSliderPosition:0, fishingBarTime:0, castingDirectionAngle:0, hasLineCast:false, floatWorldX:null, floatWorldY:null, rodTipWorldX:null, rodTipWorldY:null, lineAnchorWorldY:null };
+let localPlayer = { id: null, username: 'Player' + Math.floor(Math.random()*1000), color: '#' + Math.floor(Math.random()*16777215).toString(16).padStart(6,'0'), x: 50, y: DEDICATED_GAME_HEIGHT-50-playerSize, isJumping: false, velocityY: 0, isWalking: false, isIdle: false, animationFrame: 0, idleAnimationFrame: 0, direction: 1, velocityX: 0, currentMouseX: undefined, currentMouseY: undefined, customizations: { hat:'none', hair:'none', accessories:'none', beard:'none', clothes:'none', pants:'none', shoes:'none', rightHandItem:ITEM_NONE, hairSaturation:50, hairHue:180, hairBrightness:50, beardSaturation:50, beardHue:180, beardBrightness:50 }, isCasting:false, castingPower:0, fishingBarSliderPosition:0, fishingBarTime:0, castingDirectionAngle:0, hasLineCast:false, floatWorldX:null, floatWorldY:null, rodTipWorldX:null, rodTipWorldY:null, lineAnchorWorldY:null };
 myUsernameSpan.textContent = localPlayer.username; myColorDisplay.style.backgroundColor = localPlayer.color;
 
 let playersInRoom = {};
@@ -137,18 +162,65 @@ let isCustomizationMenuOpen = false;
 const customizationCategories = [ 'hat', 'hair', 'accessories', 'beard', 'clothes', 'pants', 'shoes' ];
 let selectedCategoryIndex = 0;
 let localPlayerCustomizations = { hat: 'none', hair: 'none', accessories: 'none', beard: 'none', clothes: 'none', pants: 'none', shoes: 'none', rightHandItem: ITEM_NONE, hairSaturation: 100, hairHue: 0, hairBrightness: 100, beardSaturation: 100, beardHue: 0, beardBrightness: 100 };
-const customizationOptions = { hat: ['none', 'hat1', 'hat2', 'hat3'], hair: ['none', 'hair1', 'hair2', 'hair3', 'hair4', 'hair5', 'hair6', 'hair7', 'hair8', 'hair9', 'hair10', 'hair11', 'hair12', 'hair13', 'hair14', 'hair15', 'hair16', 'hair17', 'hair18', 'hair19', 'hair20'], accessories: ['none', 'glasses', 'scarf'], beard: ['none', 'beard1'], clothes: ['none', 'shirt1', 'shirt2'], pants: ['none', 'pants1'], shoes: ['none', 'shoes1'] };
+const customizationOptions = { hat: ['none', 'red cap', 'blue cap', 'special', 'street cap', 'pink cap', 'black cap', 'oldschool cap', 'blue straight cap', 'green straight cap', 'kiddo cap'], hair: ['none', 'Curly', 'Curly Short', 'Short', 'Plodder', '"Cool Kid"', 'inmate', 'maniac', 'alopecia', 'Mrs. Robinson', 'Bob', 'Mod', 'hair12', 'hair13', 'hair14', 'hair15', 'hair16', 'hair17', 'hair18', 'hair19', 'hair20'], accessories: ['none', 'librarian glasses', 'mole glasses', 'square glasses', 'black glasses', 'red glasses', '"cool" glasses', 'sunglasses', 'windsor glasses', 'eye patch'], beard: ['none', 'goatee', 'overgrown goatee'], clothes: ['none', 'white shirt', 'black shirt', 'hawaii shirt'], pants: ['none', 'pants1'], shoes: ['none', 'shoes1'] };
 let currentCustomizationOptionIndices = { hat: 0, hair: 0, accessories: 0, beard: 0, clothes: 0, pants: 0, shoes: 0 };
-const MENU_WIDTH=150,MENU_TEXT_COLOR='white',MENU_HIGHLIGHT_COLOR='yellow',MENU_ITEM_HEIGHT=40,MENU_X_OFFSET_FROM_PLAYER=20,MENU_Y_OFFSET_FROM_PLAYER_TOP_CENTER_SELECTED=-40,ROLLER_VISIBLE_COUNT=3,ROLLER_ITEM_VERTICAL_SPACING=1.2*MENU_ITEM_HEIGHT,ROLLER_DIMMED_SCALE=.7,ROLLER_DIMMED_ALPHA=.3,FRAME_SIZE=186,FRAME_OFFSET_X_FROM_MENU_TEXT=30,FRAME_OSCILLATION_SPEED=.05,FRAME_ROTATION_DEGREES=5;let frameOscillationTime=0;const PIXEL_FONT='Segoe UI, monospace',DEFAULT_FONT_SIZE_USERNAME=16,DEFAULT_FONT_SIZE_MENU=24,SLIDER_WIDTH=256,SLIDER_HEIGHT=16,SLIDER_HANDLE_SIZE=36,SLIDER_HANDLE_HITBOX_EXTEND=50,SLIDER_OFFSET_FROM_MENU_X=MENU_WIDTH+FRAME_OFFSET_X_FROM_MENU_TEXT+FRAME_SIZE+20,SLIDER_ITEM_VERTICAL_SPACING=64,HAIR_SATURATION_MIN=0,HAIR_SATURATION_MAX=200,HAIR_BRIGHTNESS_MIN=40,HAIR_BRIGHTNESS_MAX=200,HAIR_HUE_MIN=0,HAIR_HUE_MAX=360,BEARD_SATURATION_MIN=0,BEARD_SATURATION_MAX=200,BEARD_BRIGHTNESS_MIN=40,BEARD_BRIGHTNESS_MAX=200,BEARD_HUE_MIN=0,BEARD_HUE_MAX=360;
-let currentSliderBounds = []; let draggingSlider = null;
+
+const MENU_WIDTH=150,MENU_TEXT_COLOR='white',MENU_HIGHLIGHT_COLOR='yellow',MENU_ITEM_HEIGHT=40,MENU_X_OFFSET_FROM_PLAYER=0,MENU_Y_OFFSET_FROM_PLAYER_TOP_CENTER_SELECTED=-40,ROLLER_VISIBLE_COUNT=3,ROLLER_ITEM_VERTICAL_SPACING=1.2*MENU_ITEM_HEIGHT,ROLLER_DIMMED_SCALE=.7,ROLLER_DIMMED_ALPHA=.3,FRAME_SIZE=186,FRAME_OFFSET_X_FROM_MENU_TEXT=30,FRAME_OSCILLATION_SPEED=.05,FRAME_ROTATION_DEGREES=5;let frameOscillationTime=0;const PIXEL_FONT='Segoe UI, monospace',DEFAULT_FONT_SIZE_USERNAME=16,DEFAULT_FONT_SIZE_MENU=24,HAIR_SATURATION_MIN=0,HAIR_SATURATION_MAX=200,HAIR_BRIGHTNESS_MIN=40,HAIR_BRIGHTNESS_MAX=200,HAIR_HUE_MIN=0,HAIR_HUE_MAX=360,BEARD_SATURATION_MIN=0,BEARD_SATURATION_MAX=200,BEARD_BRIGHTNESS_MIN=40,BEARD_BRIGHTNESS_MAX=200,BEARD_HUE_MIN=0,BEARD_HUE_MAX=360;
+let customizationMenuState = 'category'; // 'category', 'value', 'color', 'adjust_value'
+let selectedColorPropertyIndex = 0;
+const colorProperties = ['brightness', 'saturation', 'hue'];
 let lastTime = 0;
 
 
 // ====================================================================
-// === SEKCJA 2: FUNKCJE RYSOWANIA (bez zmian) ===
+// === SEKCJA 2: FUNKCJE RYSOWANIA (z modyfikacjami) ===
 // ====================================================================
 
-function loadImages(callback){const allPaths={...characterImagePaths,...customizationUIPaths,...sliderUIPaths};let a=Object.keys(allPaths).length;for(const b in exampleCustomItemPaths.items)a++;for(const c in exampleCustomItemPaths){if(c==="items")continue;for(const d in exampleCustomItemPaths[c])a++;}if(a===0){biomeManager.loadBiomeImages(callback);return}let e=0;const f=g=>{e++;if(e===a)biomeManager.loadBiomeImages(()=>callback())};for(const h in allPaths){const i=new Image;i.src=allPaths[h];i.onload=()=>{characterImagePaths[h]?characterImages[h]=i:(customizationUIPaths[h]||sliderUIPaths[h])&&(customizationUIImages[h]=i),f(i.src)},i.onerror=()=>{console.error(`Image loading error: ${i.src}`),f(i.src)}}for(const j in exampleCustomItemPaths){if(j==="items")continue;const k=exampleCustomItemPaths[j];for(const l in k){const m=k[l],n=new Image;n.src=m,n.onload=()=>{characterCustomImages[j]||(characterCustomImages[j]={}),characterCustomImages[j][l]=n,f(n.src)},n.onerror=()=>{console.error(`Image loading error: (${j}/${l}): ${n.src}`),characterCustomImages[j]||(characterCustomImages[j]={}),characterCustomImages[j][l]=null,f(n.src)}}}const o=exampleCustomItemPaths.items;for(const p in o){const q=o[p],r=new Image;r.src=q.path,r.onload=()=>{characterCustomImages.items[p]=r,f(r.src)},r.onerror=()=>{console.error(`Item Image loading error:: ${r.src}`),f(r.src)}}}
+function mapToDisplayRange(internalValue, internalMin, internalMax) {
+    if (internalMax - internalMin === 0) return 0;
+    const percentage = (internalValue - internalMin) / (internalMax - internalMin);
+    return Math.round(percentage * 100);
+}
+
+function mapFromDisplayRange(displayValue, internalMin, internalMax) {
+    const percentage = displayValue / 100;
+    return Math.round(internalMin + percentage * (internalMax - internalMin));
+}
+
+function loadImages(callback) {
+    const allPaths = { ...characterImagePaths, ...customizationUIPaths, ...sliderUIPaths, ...tutorialImagePaths };
+    let a = Object.keys(allPaths).length;
+    for (const b in exampleCustomItemPaths.items) a++;
+    for (const c in exampleCustomItemPaths) { if (c === "items") continue; for (const d in exampleCustomItemPaths[c]) a++; }
+    if (a === 0) { biomeManager.loadBiomeImages(callback); return }
+    let e = 0;
+    const f = g => { e++; if (e === a) biomeManager.loadBiomeImages(() => callback()) };
+    for (const h in allPaths) {
+        const i = new Image;
+        i.src = allPaths[h];
+        i.onload = () => {
+            if (characterImagePaths[h]) characterImages[h] = i;
+            else if (customizationUIPaths[h] || sliderUIPaths[h]) customizationUIImages[h] = i;
+            else if (tutorialImagePaths[h]) tutorialImages[h] = i;
+            f(i.src)
+        }, i.onerror = () => { console.error(`Image loading error: ${i.src}`), f(i.src) }
+    }
+    for (const j in exampleCustomItemPaths) {
+        if (j === "items") continue;
+        const k = exampleCustomItemPaths[j];
+        for (const l in k) {
+            const m = k[l],
+                n = new Image;
+            n.src = m, n.onload = () => { characterCustomImages[j] || (characterCustomImages[j] = {}), characterCustomImages[j][l] = n, f(n.src) }, n.onerror = () => { console.error(`Image loading error: (${j}/${l}): ${n.src}`), characterCustomImages[j] || (characterCustomImages[j] = {}), characterCustomImages[j][l] = null, f(n.src) }
+        }
+    }
+    const o = exampleCustomItemPaths.items;
+    for (const p in o) {
+        const q = o[p],
+            r = new Image;
+        r.src = q.path, r.onload = () => { characterCustomImages.items[p] = r, f(r.src) }, r.onerror = () => { console.error(`Item Image loading error:: ${r.src}`), f(r.src) }
+    }
+}
 function lerp(start, end, amt) {
     return (1 - amt) * start + amt * end;
 }
@@ -180,7 +252,6 @@ function updateCamera() {
     const visibleWorldWidth = DEDICATED_GAME_WIDTH / currentZoomLevel;
     const visibleWorldHeight = DEDICATED_GAME_HEIGHT / currentZoomLevel;
 
-    // --- Obliczenia docelowej pozycji X (bez zmian) ---
     let targetCameraX = playerWorldCenterX - visibleWorldWidth / 2;
     if (targetCameraX < 0) {
         targetCameraX = 0;
@@ -192,18 +263,9 @@ function updateCamera() {
         targetCameraX = (currentWorldWidth / 2) - (visibleWorldWidth / 2);
     }
 
-    // =================================================================
-    // === TUTAJ ZNAJDUJE SIĘ KLUCZOWA ZMIANA ===
-    // Nowy, prostszy sposób obliczania docelowej pozycji Y kamery.
-    // Chcemy, aby punkt docelowy kamery znajdował się niżej niż gracz.
-    // Używamy CAMERA_VERTICAL_BIAS do określenia, jak bardzo "poniżej" gracza ma patrzeć kamera.
-    
-    // Obliczamy "przesunięcie" w dół na podstawie wysokości widocznego świata.
     const verticalOffset = visibleWorldHeight * (CAMERA_VERTICAL_BIAS - 0.5);
     let targetCameraY = (playerWorldCenterY + verticalOffset) - (visibleWorldHeight / 2);
-    // =================================================================
 
-    // Ograniczenia dla osi Y (bez zmian)
     if (targetCameraY < 0) {
         targetCameraY = 0;
     }
@@ -214,11 +276,9 @@ function updateCamera() {
         targetCameraY = (DEDICATED_GAME_HEIGHT / 2) - (visibleWorldHeight / 2);
     }
 
-    // Płynne przejście do nowej pozycji (bez zmian)
     cameraX = lerp(cameraX, targetCameraX, CAMERA_SMOOTHING_FACTOR);
     cameraY = lerp(cameraY, targetCameraY, 1);
 
-    // Rysowanie tła z nową pozycją kamery (bez zmian)
     biomeManager.drawParallaxBackground(ctx, cameraX, visibleWorldWidth);
     if (currentRoom && currentRoom.gameData && currentRoom.gameData.biome) {
         const biomeName = currentRoom.gameData.biome;
@@ -231,35 +291,240 @@ function updateCamera() {
     }
 }
 function drawFilteredCharacterPart(a,b,c,d,e,f,g=100,h=0,i=100){if(!b||!b.complete)return;const j=document.createElement("canvas");j.width=e,j.height=f;const k=j.getContext("2d");k.imageSmoothingEnabled=!1,k.drawImage(b,0,0,e,f);const l=[];100!==g&&l.push(`saturate(${g}%)`),0!==h&&l.push(`hue-rotate(${h}deg)`),100!==i&&l.push(`brightness(${i}%)`),l.length>0?(a.save(),a.filter=l.join(" "),a.drawImage(j,c,d,e,f),a.restore()):a.drawImage(j,c,d,e,f)}
-function drawPlayer(p){if(!characterImages.body||!characterImages.body.complete){ctx.fillStyle=p.color,ctx.fillRect(p.x,p.y,playerSize,playerSize);return}ctx.save();let a=0,b=0,c=0,d=0,e=0,f=0,g=0,h=0;const i=(Number(p.animationFrame||0)%animationCycleLength)/animationCycleLength,j=(Number(p.idleAnimationFrame||0)%IDLE_ANIM_CYCLE_LENGTH)/IDLE_ANIM_CYCLE_LENGTH,k=p.isWalking===!0,l=p.isIdle===!0,m=p.isJumping===!0;let n=0;const o=p.x,q=p.y;let r=0,s=0;if(p.id===localPlayer.id&&void 0!==localPlayer.currentMouseX){const t=localPlayer.currentMouseX,u=localPlayer.currentMouseY,v=o+headPivotInImageX,w=q+(headInitialOffsetY+headPivotInImageY),x=(t-v)*p.direction,y=u-w,z=Math.sqrt(x*x+y*y);if(z>0){const A=x/z,B=y/z;r=A*Math.min(z,eyeMaxMovementRadius),s=B*Math.min(z,eyeMaxMovementRadius)}}if(k&&!m)n=Math.sin(2*i*Math.PI),a=-bodyHeadPulseAmount*Math.abs(n),b=n*armRotationAngle,c=-b,d=n*legRotationAngle,e=-d,f=n*headRotationAngleAmount,g=Math.sin(4*i*Math.PI)*bodyHeadPulseAmount*headOscillationAmplitudeFactor;else if(l&&!m)n=Math.sin(2*j*Math.PI),a=-IDLE_BODY_HEAD_PULSE_AMOUNT*Math.abs(n),b=n*IDLE_ARM_ROTATION_ANGLE,c=-b,d=0,e=0,f=n*IDLE_HEAD_ROTATION_ANGLE_AMOUNT,g=Math.sin(4*j*Math.PI)*IDLE_BODY_HEAD_PULSE_AMOUNT*IDLE_HEAD_OSCILLATION_AMPLITUDE_FACTOR;else if(m){const C=18,D=54;p.velocityY>0?h=JUMP_BODY_TILT_ANGLE*(1-Math.min(1,Math.max(0,p.velocityY/C))):h=JUMP_BODY_TILT_ANGLE*(1-Math.min(1,Math.max(0,Math.abs(p.velocityY)/D)));const E=Math.min(1,Math.abs(p.velocityY)/Math.max(C,D));d=-E*JUMP_LEG_OPPOSITE_ROTATION_ANGLE,e=E*JUMP_LEG_WAVE_ANGLE,b=E*JUMP_ARM_WAVE_ANGLE,c=-.7*b,f=.5*h,g=0,a=0}ctx.translate(o+playerSize/2,q+playerSize/2),ctx.scale(p.direction,1),m&&ctx.rotate(h*p.direction),ctx.translate(-(o+playerSize/2),-(q+playerSize/2));function t(a,b,c,d,e,f=0,g=playerSize,h=playerSize){if(!a||!a.complete)return;ctx.save();const i=o+b,j=q+c;ctx.translate(i+d,j+e),ctx.rotate(f),ctx.drawImage(a,-d,-e,g,h),ctx.restore()}t(characterImages.leg,backLegOffsetX,0,legPivotInImageX,legPivotInImageY,e),t(characterImages.arm,backArmOffsetX,0,originalArmPivotInImageX,originalArmPivotInImageY,c),t(characterImages.leg,frontLegOffsetX,0,legPivotInImageX,legPivotInImageY,d),ctx.drawImage(characterImages.body,o,q+a,playerSize,playerSize);const u=headInitialOffsetY+a+g;t(characterImages.head,0,u,headPivotInImageX,headPivotInImageY,f),t(characterImages.eye,LEFT_EYE_BASE_X_REL_HEAD_TL+r,u+EYE_BASE_Y_REL_HEAD_TL+s,eyePivotInImage,eyePivotInImage,0,eyeSpriteSize,eyeSpriteSize),t(characterImages.eye,RIGHT_EYE_BASE_X_REL_HEAD_TL+r,u+EYE_BASE_Y_REL_HEAD_TL+s,eyePivotInImage,eyePivotInImage,0,eyeSpriteSize,eyeSpriteSize);const v=p.customizations||{},w=v.hair;if(w&&"none"!==w){const x=characterCustomImages.hair[w];x&&x.complete&&(ctx.save(),ctx.translate(o+headPivotInImageX,q+u+HAIR_VERTICAL_OFFSET+headPivotInImageY-HAIR_VERTICAL_OFFSET),ctx.rotate(f),drawFilteredCharacterPart(ctx,x,-headPivotInImageX,-(headPivotInImageY-HAIR_VERTICAL_OFFSET),playerSize,playerSize,v.hairSaturation,v.hairHue,v.hairBrightness),ctx.restore())}const y=v.beard;if(y&&"none"!==y){const z=characterCustomImages.beard[y];if(z&&z.complete){const A=Math.round(15*(playerSize/32));ctx.save(),ctx.translate(o+headPivotInImageX,q+u+A+headPivotInImageY-A),ctx.rotate(f),drawFilteredCharacterPart(ctx,z,-headPivotInImageX,-(headPivotInImageY-A),playerSize,playerSize,v.beardSaturation,v.beardHue,v.brightness),ctx.restore()}}const B=v.hat;if(B&&"none"!==B){const C=characterCustomImages.hat[B];C&&C.complete&&t(C,0,u-Math.round(20*(playerSize/32)),headPivotInImageX,headPivotInImageY- -Math.round(20*(playerSize/32)),f,playerSize,playerSize)}const D=v.rightHandItem;if(D&&D!==ITEM_NONE){const E=exampleCustomItemPaths.items[D],F=characterCustomImages.items[D];E&&F&&F.complete&&t(F,frontArmOffsetX,0,originalArmPivotInImageX,originalArmPivotInImageY,b,E.width,E.height)}t(characterImages.arm,frontArmOffsetX,0,originalArmPivotInImageX,originalArmPivotInImageY,b),ctx.restore(),p.customizations&&p.customizations.rightHandItem===ITEM_ROD?(p.rodTipWorldX=p.x+playerSize/2+(frontArmOffsetX+originalArmPivotInImageX-playerSize/2)*p.direction+(ROD_TIP_OFFSET_X*Math.cos(b)-ROD_TIP_OFFSET_Y*Math.sin(b))*p.direction,p.rodTipWorldY=p.y+playerSize/2+(0+originalArmPivotInImageY-playerSize/2)+(ROD_TIP_OFFSET_X*Math.sin(b)+ROD_TIP_OFFSET_Y*Math.cos(b)),p.id===localPlayer.id&&(localPlayer.rodTipWorldX=p.rodTipWorldX,localPlayer.rodTipWorldY=p.rodTipWorldY)):(p.rodTipWorldX=null,p.rodTipWorldY=null,p.id===localPlayer.id&&(localPlayer.rodTipWorldX=null,localPlayer.rodTipWorldY=null)),ctx.fillStyle="white",ctx.font=`${DEFAULT_FONT_SIZE_USERNAME}px ${PIXEL_FONT}`,ctx.textAlign="center",ctx.fillText(p.username||p.id.substring(0,5),p.x+playerSize/2,p.y-10+a)}
+function drawPlayer(p) {
+    if (!characterImages.body || !characterImages.body.complete) {
+        ctx.fillStyle = p.color;
+        ctx.fillRect(p.x, p.y, playerSize, playerSize);
+        return;
+    }
+    ctx.save();
+    let a = 0, b = 0, c = 0, d = 0, e = 0, f = 0, g = 0, h = 0;
+    const i = (Number(p.animationFrame || 0) % animationCycleLength) / animationCycleLength,
+        j = (Number(p.idleAnimationFrame || 0) % IDLE_ANIM_CYCLE_LENGTH) / IDLE_ANIM_CYCLE_LENGTH,
+        k = p.isWalking === !0,
+        l = p.isIdle === !0,
+        m = p.isJumping === !0;
+    let n = 0;
+    const o = p.x,
+        q = p.y;
+    let r = 0,
+        s = 0;
+    if (p.id === localPlayer.id && void 0 !== localPlayer.currentMouseX) {
+        const t = localPlayer.currentMouseX,
+            u = localPlayer.currentMouseY,
+            v = o + headPivotInImageX,
+            w = q + (headInitialOffsetY + headPivotInImageY),
+            x = (t - v) * p.direction,
+            y = u - w,
+            z = Math.sqrt(x * x + y * y);
+        if (z > 0) {
+            const A = x / z,
+                B = y / z;
+            r = A * Math.min(z, eyeMaxMovementRadius), s = B * Math.min(z, eyeMaxMovementRadius)
+        }
+    }
+    if (k && !m) n = Math.sin(2 * i * Math.PI), a = -bodyHeadPulseAmount * Math.abs(n), b = n * armRotationAngle, c = -b, d = n * legRotationAngle, e = -d, f = n * headRotationAngleAmount, g = Math.sin(4 * i * Math.PI) * bodyHeadPulseAmount * headOscillationAmplitudeFactor;
+    else if (l && !m) n = Math.sin(2 * j * Math.PI), a = -IDLE_BODY_HEAD_PULSE_AMOUNT * Math.abs(n), b = n * IDLE_ARM_ROTATION_ANGLE, c = -b, d = 0, e = 0, f = n * IDLE_HEAD_ROTATION_ANGLE_AMOUNT, g = Math.sin(4 * j * Math.PI) * IDLE_BODY_HEAD_PULSE_AMOUNT * IDLE_HEAD_OSCILLATION_AMPLITUDE_FACTOR;
+    else if (m) {
+        const C = 18,
+            D = 54;
+        p.velocityY > 0 ? h = JUMP_BODY_TILT_ANGLE * (1 - Math.min(1, Math.max(0, p.velocityY / C))) : h = JUMP_BODY_TILT_ANGLE * (1 - Math.min(1, Math.max(0, Math.abs(p.velocityY) / D)));
+        const E = Math.min(1, Math.abs(p.velocityY) / Math.max(C, D));
+        d = -E * JUMP_LEG_OPPOSITE_ROTATION_ANGLE, e = E * JUMP_LEG_WAVE_ANGLE, b = E * JUMP_ARM_WAVE_ANGLE, c = -.7 * b, f = .5 * h, g = 0, a = 0
+    }
+    ctx.translate(o + playerSize / 2, q + playerSize / 2), ctx.scale(p.direction, 1), m && ctx.rotate(h * p.direction), ctx.translate(-(o + playerSize / 2), -(q + playerSize / 2));
+
+    function t(a, b, c, d, e, f = 0, g = playerSize, h = playerSize) {
+        if (!a || !a.complete) return;
+        ctx.save();
+        const i = o + b,
+            j = q + c;
+        ctx.translate(i + d, j + e), ctx.rotate(f), ctx.drawImage(a, -d, -e, g, h), ctx.restore()
+    }
+
+    const v = p.customizations || {};
+    const playerClothes = v.clothes;
+
+    t(characterImages.leg, backLegOffsetX, 0, legPivotInImageX, legPivotInImageY, e);
+    t(characterImages.arm, backArmOffsetX, 0, originalArmPivotInImageX, originalArmPivotInImageY, c);
+    
+    if (playerClothes && "none" !== playerClothes) {
+        const clothesArmImage = characterCustomImages.clothes_arm[playerClothes];
+        if (clothesArmImage && clothesArmImage.complete) {
+            t(clothesArmImage, backArmOffsetX, 0, originalArmPivotInImageX, originalArmPivotInImageY, c);
+        }
+    }
+
+    t(characterImages.leg, frontLegOffsetX, 0, legPivotInImageX, legPivotInImageY, d);
+    
+    ctx.drawImage(characterImages.body, o, q + a, playerSize, playerSize);
+
+    if (playerClothes && "none" !== playerClothes) {
+        const clothesImage = characterCustomImages.clothes[playerClothes];
+        if (clothesImage && clothesImage.complete) {
+            ctx.drawImage(clothesImage, o, q + a, playerSize, playerSize);
+        }
+    }
+
+    const u = headInitialOffsetY + a + g;
+    t(characterImages.head, 0, u, headPivotInImageX, headPivotInImageY, f);
+    t(characterImages.eye, LEFT_EYE_BASE_X_REL_HEAD_TL + r, u + EYE_BASE_Y_REL_HEAD_TL + s, eyePivotInImage, eyePivotInImage, 0, eyeSpriteSize, eyeSpriteSize);
+    t(characterImages.eye, RIGHT_EYE_BASE_X_REL_HEAD_TL + r, u + EYE_BASE_Y_REL_HEAD_TL + s, eyePivotInImage, eyePivotInImage, 0, eyeSpriteSize, eyeSpriteSize);
+
+    const accessories = v.accessories;
+    if (accessories && "none" !== accessories) {
+        const accessoriesImage = characterCustomImages.accessories[accessories];
+        if (accessoriesImage && accessoriesImage.complete) {
+            ctx.save();
+            ctx.translate(o + headPivotInImageX, q + u + headPivotInImageY);
+            ctx.rotate(f);
+            ctx.drawImage(accessoriesImage, -headPivotInImageX, -headPivotInImageY, playerSize, playerSize);
+            ctx.restore();
+        }
+    }
+
+    const w = v.hair;
+    if (w && "none" !== w) {
+        const x = characterCustomImages.hair[w];
+        x && x.complete && (ctx.save(), ctx.translate(o + headPivotInImageX, q + u + HAIR_VERTICAL_OFFSET + headPivotInImageY - HAIR_VERTICAL_OFFSET), ctx.rotate(f), drawFilteredCharacterPart(ctx, x, -headPivotInImageX, -(headPivotInImageY - HAIR_VERTICAL_OFFSET), playerSize, playerSize, v.hairSaturation, v.hairHue, v.hairBrightness), ctx.restore())
+    }
+    
+    const y = v.beard;
+    if (y && "none" !== y) {
+        const z = characterCustomImages.beard[y];
+        if (z && z.complete) {
+            ctx.save();
+            ctx.translate(o + headPivotInImageX, q + u + BEARD_VERTICAL_OFFSET + headPivotInImageY - BEARD_VERTICAL_OFFSET);
+            ctx.rotate(f);
+            drawFilteredCharacterPart(ctx, z, -headPivotInImageX, -(headPivotInImageY - BEARD_VERTICAL_OFFSET), playerSize, playerSize, v.beardSaturation, v.beardHue, v.beardBrightness);
+            ctx.restore();
+        }
+    }
+
+    const B = v.hat;
+    if (B && "none" !== B) {
+        const C = characterCustomImages.hat[B];
+        C && C.complete && t(C, 0, u - Math.round(20 * (playerSize / 32)) + 44, headPivotInImageX, headPivotInImageY - 44 - -Math.round(20 * (playerSize / 32)), f, playerSize, playerSize)
+    }
+
+    const D = v.rightHandItem;
+    if (D && D !== ITEM_NONE) {
+        const E = exampleCustomItemPaths.items[D],
+            F = characterCustomImages.items[D];
+        E && F && F.complete && t(F, frontArmOffsetX, 0, originalArmPivotInImageX, originalArmPivotInImageY, b, E.width, E.height)
+    }
+
+    t(characterImages.arm, frontArmOffsetX, 0, originalArmPivotInImageX, originalArmPivotInImageY, b);
+    
+    if (playerClothes && "none" !== playerClothes) {
+        const clothesArmImage = characterCustomImages.clothes_arm[playerClothes];
+        if (clothesArmImage && clothesArmImage.complete) {
+            t(clothesArmImage, frontArmOffsetX, 0, originalArmPivotInImageX, originalArmPivotInImageY, b);
+        }
+    }
+
+    ctx.restore();
+
+    p.customizations && p.customizations.rightHandItem === ITEM_ROD ? (p.rodTipWorldX = p.x + playerSize / 2 + (frontArmOffsetX + originalArmPivotInImageX - playerSize / 2) * p.direction + (ROD_TIP_OFFSET_X * Math.cos(b) - ROD_TIP_OFFSET_Y * Math.sin(b)) * p.direction, p.rodTipWorldY = p.y + playerSize / 2 + (0 + originalArmPivotInImageY - playerSize / 2) + (ROD_TIP_OFFSET_X * Math.sin(b) + ROD_TIP_OFFSET_Y * Math.cos(b)), p.id === localPlayer.id && (localPlayer.rodTipWorldX = p.rodTipWorldX, localPlayer.rodTipWorldY = p.rodTipWorldY)) : (p.rodTipWorldX = null, p.rodTipWorldY = null, p.id === localPlayer.id && (localPlayer.rodTipWorldX = null, localPlayer.rodTipWorldY = null)), ctx.fillStyle = "white", ctx.font = `${DEFAULT_FONT_SIZE_USERNAME}px ${PIXEL_FONT}`, ctx.textAlign = "center", ctx.fillText(p.username || p.id.substring(0, 5), p.x + playerSize / 2, p.y - 10 + a)
+}
+
+
 function drawCustomizationMenu() {
+    const ROLLER_X_OFFSET_FROM_PLAYER = playerSize * currentZoomLevel * 1.5;
+    const ROLLER_Y_OFFSET = -playerSize * currentZoomLevel * 0.5;
+    const ROLLER_ITEM_SPACING = 50;
+    const ALPHAS = [0.2, 0.5, 1, 0.5, 0.2];
+    const FONT_SIZES = [16, 20, 24, 20, 16];
+
     const playerScreenX = (localPlayer.x - cameraX) * currentZoomLevel;
     const playerScreenY = (localPlayer.y - cameraY) * currentZoomLevel;
-    const menuX = playerScreenX + (playerSize / 2) * currentZoomLevel;
-    const menuY = playerScreenY;
+
+    const menuX = playerScreenX + (playerSize / 2) * currentZoomLevel + ROLLER_X_OFFSET_FROM_PLAYER;
+    const menuY = playerScreenY + (playerSize / 2) * currentZoomLevel + ROLLER_Y_OFFSET;
+    
     ctx.save();
     ctx.setTransform(1, 0, 0, 1, 0, 0);
-    ctx.font = `${DEFAULT_FONT_SIZE_MENU}px ${PIXEL_FONT}`;
     ctx.textAlign = 'left';
     ctx.textBaseline = 'middle';
-    customizationCategories.forEach((category, index) => {
-        const itemY = menuY + (index - selectedCategoryIndex) * MENU_ITEM_HEIGHT;
-        if (index === selectedCategoryIndex) {
-            ctx.fillStyle = MENU_HIGHLIGHT_COLOR;
-            ctx.fillText(`> ${category.toUpperCase()}`, menuX + 20, itemY);
+
+    if (customizationMenuState === 'adjust_value') {
+        const category = customizationCategories[selectedCategoryIndex];
+        const property = colorProperties[selectedColorPropertyIndex];
+        const propertyCapitalized = property.charAt(0).toUpperCase() + property.slice(1);
+        const key = category + propertyCapitalized;
+        
+        let currentDisplayValue, minDisplay, maxDisplay, internalMin, internalMax;
+
+        if (property === 'hue') {
+            currentDisplayValue = localPlayer.customizations[key];
+            minDisplay = HAIR_HUE_MIN;
+            maxDisplay = HAIR_HUE_MAX;
         } else {
-            ctx.fillStyle = MENU_TEXT_COLOR;
-            ctx.fillText(category, menuX + 40, itemY);
+            internalMin = (category === 'hair' ? (property === 'brightness' ? HAIR_BRIGHTNESS_MIN : HAIR_SATURATION_MIN) : (property === 'brightness' ? BEARD_BRIGHTNESS_MIN : BEARD_SATURATION_MIN));
+            internalMax = (category === 'hair' ? (property === 'brightness' ? HAIR_BRIGHTNESS_MAX : HAIR_SATURATION_MAX) : (property === 'brightness' ? BEARD_BRIGHTNESS_MAX : BEARD_SATURATION_MAX));
+            currentDisplayValue = mapToDisplayRange(localPlayer.customizations[key], internalMin, internalMax);
+            minDisplay = 0;
+            maxDisplay = 100;
         }
-    });
-    const selectedCategory = customizationCategories[selectedCategoryIndex];
-    const optionIndex = currentCustomizationOptionIndices[selectedCategory];
-    const optionName = customizationOptions[selectedCategory][optionIndex];
-    ctx.fillStyle = 'white';
-    ctx.textAlign = 'right';
-    ctx.fillText(`< ${optionName} >`, menuX + 250, menuY);
+
+        const valuesToShow = [];
+        if (currentDisplayValue > minDisplay) valuesToShow.push(currentDisplayValue - 1);
+        else valuesToShow.push(null);
+
+        valuesToShow.push(currentDisplayValue);
+        
+        if (currentDisplayValue < maxDisplay) valuesToShow.push(currentDisplayValue + 1);
+        else valuesToShow.push(null);
+
+        for (let i = -1; i <= 1; i++) {
+            const value = valuesToShow[i + 1];
+            if (value === null) continue;
+
+            const text = String(value);
+            const yPos = menuY + i * ROLLER_ITEM_SPACING;
+            
+            const isCenter = (i === 0);
+            const alpha = isCenter ? ALPHAS[2] : ALPHAS[1];
+            const fontSize = isCenter ? FONT_SIZES[2] : FONT_SIZES[1];
+
+            ctx.fillStyle = isCenter ? `rgba(255, 255, 0, ${alpha})` : `rgba(255, 255, 255, ${alpha})`;
+            ctx.font = `${fontSize}px ${PIXEL_FONT}`;
+            ctx.fillText(text, menuX, yPos);
+        }
+
+    } else { 
+        let listToDraw;
+        let selectedIndex;
+
+        if (customizationMenuState === 'category') {
+            listToDraw = customizationCategories;
+            selectedIndex = selectedCategoryIndex;
+        } else if (customizationMenuState === 'value') {
+            const currentCategory = customizationCategories[selectedCategoryIndex];
+            listToDraw = customizationOptions[currentCategory];
+            selectedIndex = currentCustomizationOptionIndices[currentCategory];
+        } else {
+            listToDraw = colorProperties;
+            selectedIndex = selectedColorPropertyIndex;
+        }
+
+        const displayRange = 2;
+        for (let i = -displayRange; i <= displayRange; i++) {
+            let itemIndex = (selectedIndex + i + listToDraw.length) % listToDraw.length;
+            const text = listToDraw[itemIndex].toUpperCase();
+            const yPos = menuY + i * ROLLER_ITEM_SPACING;
+            const focusIndex = i + displayRange;
+            const alpha = ALPHAS[focusIndex];
+            const fontSize = FONT_SIZES[focusIndex];
+
+            ctx.fillStyle = (i === 0) ? `rgba(255, 255, 0, ${alpha})` : `rgba(255, 255, 255, ${alpha})`;
+            ctx.font = `${fontSize}px ${PIXEL_FONT}`;
+            ctx.fillText(text, menuX, yPos);
+        }
+    }
     ctx.restore();
 }
+
 function drawFishingBar(p) {
     const barScreenX = DEDICATED_GAME_WIDTH / 2 - FISHING_BAR_WIDTH / 2;
     const barScreenY = DEDICATED_GAME_HEIGHT - 100;
@@ -302,6 +567,54 @@ function drawFishingLine(p) {
     ctx.restore();
 }
 
+// ================= POCZĄTEK ZMIAN: Rozbudowany Helper (Samouczek) =================
+/**
+ * Rysuje pojedynczą grafikę samouczka z uwzględnieniem animacji.
+ * Ta funkcja jest wywoływana z pętli głównej i rysuje TYLKO na lokalnym canvasie.
+ * @param {object} imageInfo - Obiekt z informacjami o grafice do narysowania.
+ */
+function drawSingleTutorialImage(imageInfo) {
+    if (!imageInfo) return;
+
+    const image = tutorialImages[imageInfo.key];
+    if (!image || !image.complete) return;
+
+    const playerScreenX = (localPlayer.x - cameraX + playerSize / 2) * currentZoomLevel;
+    const playerScreenY = (localPlayer.y - cameraY) * currentZoomLevel;
+
+    const drawWidth = image.width * TUTORIAL_IMAGE_SCALE;
+    const drawHeight = image.height * TUTORIAL_IMAGE_SCALE;
+
+    const x = playerScreenX - drawWidth / 2;
+    const y = playerScreenY + TUTORIAL_Y_OFFSET - drawHeight + imageInfo.yOffset;
+
+    const rockingAngle = Math.sin(Date.now() / 1000 * TUTORIAL_ROCKING_SPEED) * (TUTORIAL_ROCKING_ANGLE_DEGREES * Math.PI / 180);
+
+    ctx.save();
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.globalAlpha = imageInfo.alpha; // Ustaw przezroczystość
+
+    ctx.translate(x + drawWidth / 2, y + drawHeight / 2);
+    ctx.rotate(rockingAngle);
+
+    ctx.drawImage(image, -drawWidth / 2, -drawHeight / 2, drawWidth, drawHeight);
+    ctx.restore();
+}
+
+
+/**
+ * Główna funkcja rysująca samouczek, która obsługuje wiele obrazków naraz (dla płynnych przejść).
+ */
+function drawTutorialHelper() {
+    if (tutorial.state === 'finished') return;
+
+    // Rysuj obrazek, który znika
+    drawSingleTutorialImage(tutorial.fadingOutImage);
+    // Rysuj obrazek, który jest aktywny (lub właśnie się pojawia)
+    drawSingleTutorialImage(tutorial.activeImage);
+}
+// ================= KONIEC ZMIAN =================
+
 function drawInsects() {
     const insectImage = biomeManager.getCurrentInsectImage();
     if (!insectImage || !insectImage.complete) return;
@@ -335,16 +648,15 @@ function drawInsects() {
 }
 
 // ====================================================================
-// === SEKCJA 3: NOWA LOGIKA SIECIOWA (P2P & SYGNALIZACJA) ===
+// === SEKCJA 3: LOGIKA SIECIOWA (bez zmian) ===
 // ====================================================================
 
 function initializeSignaling() {
     signalingSocket = io();
     signalingSocket.on('connect', () => console.log('Connected to the signaling server.', signalingSocket.id));
-    // === ZMIANA: Aktualizujemy globalną zmienną availableRooms ===
     signalingSocket.on('roomListUpdate', (hosts) => {
-        availableRooms = hosts; // Przechowujemy listę pokoi globalnie
-        if (!currentRoom) { // Aktualizujemy lobby tylko jeśli nie jesteśmy w grze
+        availableRooms = hosts;
+        if (!currentRoom) {
             roomListUl.innerHTML = '';
             if (Object.keys(hosts).length === 0) {
                 roomListUl.innerHTML = '<li>Brak dostępnych pokoi. Stwórz jeden!</li>';
@@ -359,7 +671,6 @@ function initializeSignaling() {
             }
         }
     });
-    // =============================================================
     signalingSocket.on('roomRemoved', (removedRoomId) => {
         if (hostConnection && hostConnection.peer === removedRoomId) {
             alert('Pokój, w którym byłeś, został usunięty!');
@@ -373,18 +684,12 @@ function initializePeer(callback) {
     if (peer && !peer.destroyed) {
         return callback(peer.id);
     }
-
-    // Użycie `new Peer()` bez opcji łączy z domyślnym serwerem PeerJS
     const peerConfig = {
-    debug: 3, 
+    debug: 3,
     config: {
         'iceServers': [
-            // Standardowe serwery STUN
             { urls: 'stun:stun.l.google.com:19302' },
             { urls: 'stun:stun1.l.google.com:19302' },
-
-            // DODAJEMY PUBLICZNY SERWER TURN (tylko do testów!)
-            // Dane z: https://github.com/open-relay/open-relay
             {
                 urls: "turn:openrelay.metered.ca:80",
                 username: "openrelayproject",
@@ -411,31 +716,26 @@ peer = new Peer(undefined, peerConfig);
     alert("A fatal PeerJS error occurred. Check the console. Error type: " + err.type);
 });
 
-// DODAJ TE ZDARZENIA DIAGNOSTYCZNE
 peer.on('disconnected', () => {
     console.warn(`PEERJS: Disconnected from PeerJS broker server. I'm trying to reconnect...`);
-    // PeerJS automatycznie spróbuje się połączyć ponownie
 });
 
 peer.on('close', () => {
     console.error(`PEERJS: The connection to the broker server has been permanently closed. New connections cannot be made.`);
 });
 }
-// === ZMIANA: Funkcja teraz akceptuje hostPeerId ===
-function onSuccessfulJoin(roomData, hostPeerId = null) { 
-    // Jeśli nazwa pokoju jest brakująca, spróbuj ją pobrać z listy dostępnych pokoi
+function onSuccessfulJoin(roomData, hostPeerId = null) {
     if (!roomData || !roomData.name) {
         if (hostPeerId && availableRooms[hostPeerId] && availableRooms[hostPeerId].name) {
-            roomData = roomData || {}; // Upewnij się, że roomData istnieje
-            roomData.name = availableRooms[hostPeerId].name; // Pobierz nazwę z listy lobby
+            roomData = roomData || {};
+            roomData.name = availableRooms[hostPeerId].name;
             console.log(`[INFO] The room name was empty, I'm using the name from the lobby list: ${roomData.name}`);
         } else {
             console.warn(`[WARN] Failed to determine room name. Room details: `, roomData);
             roomData = roomData || {};
-            roomData.name = "Undefined room"; // Placeholder, jeśli nazwa nie zostanie znaleziona
+            roomData.name = "Undefined room";
         }
     }
-    // ====================================================
 
     currentRoom = roomData;
     playersInRoom = roomData.playersInRoom;
@@ -445,7 +745,6 @@ function onSuccessfulJoin(roomData, hostPeerId = null) {
         biomeManager.worldWidth = currentWorldWidth;
         biomeManager.setBiome(roomData.gameData.biome);
         biomeManager.setVillageData(roomData.gameData.villageType, roomData.gameData.villageXPosition, roomData.gameData.placedBuildings);
-        
         biomeManager.initializeGroundPlants(roomData.gameData.groundPlants || []);
         biomeManager.initializeTrees(roomData.gameData.trees || []);
         insectsInRoom = roomData.gameData.insects || [];
@@ -482,38 +781,75 @@ function onSuccessfulJoin(roomData, hostPeerId = null) {
 
     lobbyDiv.style.display = 'none';
     gameContainerDiv.style.display = 'block';
-    // Logowanie nazwy pokoju, która mogła zostać uzupełniona
-    console.log(`Successfully joined the room: "${currentRoom.name}"`); 
+    console.log(`Successfully joined the room: "${currentRoom.name}"`);
 }
 
 
 // ====================================================================
-// === SEKCJA 4: GŁÓWNA PĘTLA GRY I FUNKCJE KOMUNIKACYJNE ===
+// === SEKCJA 4: GŁÓWNA PĘTLA GRY I KOMUNIKACJA (z modyfikacjami) ===
 // ====================================================================
 
+// ================= POCZĄTEK ZMIAN: Rozbudowany Helper (Samouczek) =================
+/**
+ * Aktualizuje stan animacji dla grafik samouczka (fade in/out).
+ */
+function updateTutorialAnimations() {
+    if (tutorial.state === 'finished') return;
+
+    const now = Date.now();
+
+    // Aktualizuj animację znikania
+    if (tutorial.fadingOutImage) {
+        const elapsed = now - tutorial.fadingOutImage.startTime;
+        if (elapsed >= TUTORIAL_FADE_DURATION_MS) {
+            tutorial.fadingOutImage = null; // Animacja zakończona
+        } else {
+            const progress = elapsed / TUTORIAL_FADE_DURATION_MS;
+            tutorial.fadingOutImage.alpha = 1 - progress;
+            tutorial.fadingOutImage.yOffset = -TUTORIAL_FADE_UP_DISTANCE * progress;
+        }
+    }
+
+    // Aktualizuj animację pojawiania się
+    if (tutorial.activeImage) {
+        const elapsed = now - tutorial.activeImage.startTime;
+        if (elapsed < TUTORIAL_FADE_DURATION_MS) {
+            const progress = elapsed / TUTORIAL_FADE_DURATION_MS;
+            tutorial.activeImage.alpha = progress;
+        } else {
+            tutorial.activeImage.alpha = 1; // Upewnij się, że jest w pełni widoczny po zakończeniu
+        }
+    }
+}
+// ================= KONIEC ZMIAN =================
+
 function sendPlayerInput() {
-    const isPlayerInputLocked = isCustomizationMenuOpen || draggingSlider;
+    const isPlayerInputLocked = isCustomizationMenuOpen;
     const inputPayload = {
         keys: isPlayerInputLocked ? {} : keys,
         currentMouseX: localPlayer.currentMouseX,
         currentMouseY: localPlayer.currentMouseY,
     };
 
-    if (hostConnection) { 
+    if (hostConnection) {
         hostConnection.send({ type: 'playerInput', payload: inputPayload });
     }
 }
 
 function sendPlayerAction(type, payload = {}) {
     const actionPayload = { type, payload };
-    
-    if (hostConnection) { 
+
+    if (hostConnection) {
         hostConnection.send({ type: 'playerAction', payload: actionPayload });
     }
 }
 
 function gameLoop(currentTime) {
     function updateLocalPlayerMovement() {
+    const PLAYER_WALK_SPEED = 5;
+    const DECELERATION_FACTOR = 0.9;
+    const MIN_VELOCITY_FOR_WALK_ANIMATION = 0.1;
+
     let targetVelocityX = 0;
     if (keys['ArrowLeft'] || keys['KeyA']) {
         targetVelocityX = -PLAYER_WALK_SPEED;
@@ -535,7 +871,7 @@ function gameLoop(currentTime) {
         requestAnimationFrame(gameLoop);
         return;
     }
-    
+
     if (insectsInRoom.length > 0 && currentRoom.gameData) {
         const worldWidth = currentRoom.gameData.worldWidth || 0;
         insectsInRoom.forEach(insect => {
@@ -550,6 +886,8 @@ function gameLoop(currentTime) {
     }
 
     if (Object.keys(playersInRoom).length > 0 && currentRoom.gameData) {
+        const PLAYER_WALK_SPEED = 5;
+        const MIN_VELOCITY_FOR_WALK_ANIMATION = 0.1;
         const groundY_target_for_player_top = DEDICATED_GAME_HEIGHT - currentRoom.gameData.groundLevel - playerSize;
         for (const id in playersInRoom) {
             const p = playersInRoom[id];
@@ -569,10 +907,12 @@ function gameLoop(currentTime) {
              }
         }
     }
-    
+
     bobberAnimationTime += BOBBER_ANIMATION_SPEED;
     biomeManager.updateAnimations(deltaTime);
     
+    updateTutorialAnimations();
+
     sendPlayerInput();
     updateLocalPlayerMovement();
     reconcilePlayerPosition();
@@ -582,64 +922,63 @@ function gameLoop(currentTime) {
         localPlayer.fishingBarSliderPosition = (Math.sin(localPlayer.fishingBarTime) + 1) / 2;
         localPlayer.castingPower = localPlayer.fishingBarSliderPosition;
     }
-    
+
     ctx.clearRect(0, 0, DEDICATED_GAME_WIDTH, DEDICATED_GAME_HEIGHT);
     biomeManager.drawBackground(ctx);
     ctx.save();
     ctx.scale(currentZoomLevel, currentZoomLevel);
     ctx.translate(-cameraX, -cameraY);
-    
+
     biomeManager.drawParallaxBackground(ctx, cameraX, cameraY, DEDICATED_GAME_WIDTH / currentZoomLevel);
-    
+
     if (currentRoom?.gameData?.biome) {
         const { biome: b, groundLevel: g } = currentRoom.gameData;
         biomeManager.drawBackgroundBiomeGround(ctx,b,g); biomeManager.drawBackgroundTrees(ctx); biomeManager.drawBackgroundPlants(ctx); biomeManager.drawBuildings(ctx,g,cameraX,DEDICATED_GAME_WIDTH/currentZoomLevel);
     }
-    
+
     Object.values(playersInRoom).sort((a,b)=>(a.y+playerSize)-(b.y+playerSize)).forEach(p=>drawPlayer(p));
-    
+
     if(currentRoom?.gameData?.biome){const {biome:b,groundLevel:g}=currentRoom.gameData;biomeManager.drawForegroundPlants(ctx);biomeManager.drawForegroundTrees(ctx);;drawInsects();biomeManager.drawForegroundBiomeGround(ctx,b,g);biomeManager.drawWater(ctx,b,cameraX)}
-    
+
     ctx.restore();for(const id in playersInRoom) drawFishingLine(playersInRoom[id]);
-    
+
+    drawTutorialHelper();
     if(isCustomizationMenuOpen) drawCustomizationMenu();
     if(localPlayer.isCasting) drawFishingBar(localPlayer);
-    
+
     requestAnimationFrame(gameLoop);
 }
 
 // ====================================================================
-// === SEKCJA 5: OBSŁUGA ZDARZEŃ UI i P2P (NOWA LOGIKA) ===
+// === SEKCJA 5: OBSŁUGA UI i P2P (bez zmian) ===
 // ====================================================================
 
 createRoomBtn.addEventListener('click', () => {
-    if (isHost) return; 
+    if (isHost) return;
     isHost = true;
-    createRoomBtn.disabled = true; 
+    createRoomBtn.disabled = true;
     newRoomNameInput.disabled = true;
 
     initializePeer((peerId) => {
         if (!peerId) {
             console.error("Failed to obtain Peer ID. Unable to create room.");
             alert("Network error, unable to create room.");
-            isHost = false; 
+            isHost = false;
             createRoomBtn.disabled = false;
             newRoomNameInput.disabled = false;
             return;
         }
-        
+
         console.log(`Peer ID obtained: ${peerId}. Initializing the game host...`);
         localPlayer.id = peerId;
 
         gameHostInstance = new GameHost();
-        // --- ZMIANA: Przechowujemy konfigurację pokoju hosta ---
         const roomConfig = gameHostInstance.start({ id: peerId, username: localPlayer.username, color: localPlayer.color, customizations: localPlayer.customizations });
-        hostRoomConfiguration = roomConfig; // Zapisujemy konfigurację pokoju
-        // ========================================================
+        hostRoomConfiguration = roomConfig;
 
         signalingSocket.emit('register-host', {
             peerId,
-            name: newRoomNameInput.value.trim() || roomConfig.name, // Nazwa dla lobby
+            name: newRoomNameInput.value.trim() || roomConfig.name,
             biome: roomConfig.gameData.biome,
             worldWidth: roomConfig.gameData.worldWidth,
             villageType: roomConfig.gameData.villageType
@@ -648,27 +987,20 @@ createRoomBtn.addEventListener('click', () => {
         peer.on('connection', (conn) => {
             conn.on('open', () => {
                 conn.on('data', (data) => {
-                    if (data.type === 'requestJoin') { 
-                        gameHostInstance.addPlayer(conn, data.payload); 
+                    if (data.type === 'requestJoin') {
+                        gameHostInstance.addPlayer(conn, data.payload);
 
-                        // --- ZMIANA: Host jawnie wysyła nazwę pokoju ---
-                        // Sprawdzamy, czy mamy nazwę pokoju w naszej globalnej zmiennej
-                        if (hostRoomConfiguration) { 
+                        if (hostRoomConfiguration) {
                             const roomDataToSend = {
-                                name: hostRoomConfiguration.name, // Używamy nazwy pokoju hosta
-                                playersInRoom: playersInRoom, // Aktualna lista graczy
-                                gameData: hostRoomConfiguration.gameData // Dane gry
+                                name: hostRoomConfiguration.name,
+                                playersInRoom: playersInRoom,
+                                gameData: hostRoomConfiguration.gameData
                             };
-                            // Wysyłamy wiadomość roomJoined z pełnymi danymi
                             conn.send({ type: 'roomJoined', payload: roomDataToSend });
                         } else {
                             console.error("Host: Unable to send roomJoined - hostRoomConfiguration missing!");
-                            // Opcjonalnie można wysłać błąd do klienta
-                            // conn.send({ type: 'joinError', payload: 'Host configuration missing.' });
                         }
-                        // --- KONIEC ZMIANY ---
-                        
-                        signalingSocket.emit('notify-join', peerId); 
+                        signalingSocket.emit('notify-join', peerId);
                     }
                     else if (data.type === 'playerInput') { gameHostInstance.handlePlayerInput(conn.peer, data.payload); }
                     else if (data.type === 'playerAction') { gameHostInstance.handlePlayerAction(conn.peer, data.payload); }
@@ -676,7 +1008,7 @@ createRoomBtn.addEventListener('click', () => {
             });
             conn.on('close', () => { gameHostInstance.removePlayer(conn.peer); signalingSocket.emit('notify-leave', peerId); });
         });
-        
+
         console.log(`[HOST] Background server running. Room "${roomConfig.name}" is now visible in the lobby.`);
     });
 });
@@ -687,13 +1019,13 @@ function joinRoom(hostPeerId) {
 
         if (isHost && myPeerId === hostPeerId) {
             console.log('[HOST] Joining to own room detected. Using a simulated connection.');
-            
+
             const simulatedConnection = {
                 peer: myPeerId,
                 open: true,
                 send: (data) => {
                     switch (data.type) {
-                        case 'roomJoined': onSuccessfulJoin(data.payload); break; // Host sam sobie wysyła roomJoined
+                        case 'roomJoined': onSuccessfulJoin(data.payload); break;
                         case 'gameStateUpdate':
                             const map = {};
                             for (const p of data.payload) {
@@ -736,12 +1068,11 @@ function joinRoom(hostPeerId) {
             };
             hostConnection = { send: (data) => simulatedConnection.sendToServer(data) };
             gameHostInstance.addPlayer(simulatedConnection, localPlayer);
-        } 
-        // Przypadek 2: Zwykły gość dołącza do gry.
+        }
         else {
             isHost = false;
             console.log(`[GUEST] I'm trying to establish a P2P connection with host ID: ${hostPeerId}`);
-            
+
             hostConnection = peer.connect(hostPeerId, { reliable: true });
 
             if (!hostConnection) {
@@ -757,7 +1088,7 @@ function joinRoom(hostPeerId) {
                 signalingSocket.emit('notify-join', hostPeerId);
                 hostConnection.send({ type: 'requestJoin', payload: localPlayer });
             });
-            
+
             hostConnection.on('error', (err) => {
             console.error(`[GUEST] ERROR P2P CONNECTING TO HOST:`, err);
             alert('An error occurred while trying to connect to the host. Check your console.');
@@ -766,10 +1097,8 @@ function joinRoom(hostPeerId) {
             hostConnection.on('data', (data) => {
                 switch(data.type) {
                     case 'roomJoined':
-                        // === ZMIANA: Przekazujemy hostPeerId do onSuccessfulJoin ===
-                        onSuccessfulJoin(data.payload, hostPeerId); 
+                        onSuccessfulJoin(data.payload, hostPeerId);
                         break;
-                    // ===============================================================
                     case 'gameStateUpdate':
                         const map = {};
                         for (const p of data.payload) {
@@ -779,15 +1108,15 @@ function joinRoom(hostPeerId) {
                         playersInRoom = map;
                         if (playersInRoom[localPlayer.id]) Object.assign(localPlayer, playersInRoom[localPlayer.id]);
                         break;
-                    case 'playerJoinedRoom': 
+                    case 'playerJoinedRoom':
                         if (!playersInRoom[data.payload.id]) {
-                            playersInRoom[data.payload.id] = data.payload.playerData; 
+                            playersInRoom[data.payload.id] = data.payload.playerData;
                             console.log(`Player ${data.payload.username} joined.`);
                         }
                         break;
                     case 'playerLeftRoom': if(playersInRoom[data.payload]) { console.log(`Player ${playersInRoom[data.payload].username} has left.`); delete playersInRoom[data.payload]; } break;
                     case 'playerCustomizationUpdated': if(playersInRoom[data.payload.id]) playersInRoom[data.payload.id].customizations = data.payload.customizations; break;
-                    case 'grassSwaying': 
+                    case 'grassSwaying':
                         if (biomeManager) biomeManager.startSwayAnimation(data.payload.grassId, data.payload.direction);
                         break;
                 }
@@ -798,9 +1127,9 @@ function joinRoom(hostPeerId) {
                 alert('An error occurred while communicating with the host.');
             });
 
-            hostConnection.on('close', () => { 
+            hostConnection.on('close', () => {
                 console.warn("[GUEST] The P2P connection to the host has been closed.");
-                alert('The host closed the room or the connection was lost.'); 
+                alert('The host closed the room or the connection was lost.');
                 leaveCurrentRoomUI();
             });
         }
@@ -810,21 +1139,21 @@ function joinRoom(hostPeerId) {
 leaveRoomBtn.addEventListener('click', () => {
     const hostPeerId = hostConnection?.peer || (isHost ? peer?.id : null);
 
-    if(isHost) { 
+    if(isHost) {
         if(gameHostInstance) gameHostInstance.stop();
         setTimeout(() => {
             if(peer && !peer.destroyed) peer.destroy();
         }, 500);
-    } 
-    
-    if (!isHost && hostConnection) { 
-        hostConnection.close(); 
+    }
+
+    if (!isHost && hostConnection) {
+        hostConnection.close();
     }
 
     if (hostPeerId) {
         signalingSocket.emit('notify-leave', hostPeerId);
     }
-    
+
     leaveCurrentRoomUI();
 });
 
@@ -832,13 +1161,11 @@ leaveRoomBtn.addEventListener('click', () => {
 function leaveCurrentRoomUI() {
     gameContainerDiv.style.display='none'; lobbyDiv.style.display='block';
     currentRoom=null; playersInRoom={}; insectsInRoom=[];
-    isHost=false; 
-    hostConnection=null; 
+    isHost=false;
+    hostConnection=null;
     gameHostInstance=null;
-    
     createRoomBtn.disabled = false;
     newRoomNameInput.disabled = false;
-
     currentWorldWidth=DEDICATED_GAME_WIDTH * 2; biomeManager.worldWidth=currentWorldWidth; biomeManager.setBiome('jurassic');
     keys={}; cameraX=0; cameraY=0; isCustomizationMenuOpen=false;
     console.log('You left the room, returned to the lobby.');
@@ -846,57 +1173,110 @@ function leaveCurrentRoomUI() {
 
 
 // ====================================================================
-// === SEKCJA 6: OBSŁUGA ZDARZEŃ KLAWIATURY I MYSZY ===
+// === SEKCJA 6: OBSŁUGA KLAWIATURY I MYSZY (z modyfikacjami) ===
 // ====================================================================
+
+// ================= POCZĄTEK ZMIAN: Rozbudowany Helper (Samouczek) =================
+/**
+ * Inicjuje przejście do następnego kroku samouczka.
+ * @param {number | 'finished'} nextState - Numer następnego kroku lub 'finished' aby zakończyć.
+ */
+function advanceTutorialStep(nextState) {
+    if (tutorial.state === 'finished' || tutorial.state === nextState) return;
+
+    // Przenieś aktualny obrazek do 'fadingOut', aby rozpocząć animację znikania
+    if (tutorial.activeImage) {
+        tutorial.fadingOutImage = { ...tutorial.activeImage, startTime: Date.now() };
+    }
+
+    tutorial.state = nextState;
+
+    if (nextState !== 'finished') {
+        // Ustaw nowy aktywny obrazek jako niewidoczny, aby mógł się pojawić
+        tutorial.activeImage = {
+            key: 'info' + nextState,
+            alpha: 0,
+            yOffset: 0,
+            startTime: Date.now()
+        };
+    } else {
+        // Koniec samouczka, nie ma nowego aktywnego obrazka
+        tutorial.activeImage = null;
+    }
+}
+// ================= KONIEC ZMIAN =================
+
 function getMousePosOnCanvas(canvas, evt) {
-    // Stałe wymiary wewnętrzne płótna gry
     const gameWidth = 1920;
     const gameHeight = 1080;
     const gameAspectRatio = gameWidth / gameHeight;
-
-    // Pobierz rzeczywiste wymiary elementu canvas na stronie
     const rect = canvas.getBoundingClientRect();
     const windowAspectRatio = rect.width / rect.height;
-
     let renderWidth, renderHeight, offsetX, offsetY;
-
-    // Porównaj proporcje, aby dowiedzieć się, jak przeglądarka wyrenderowała canvas
     if (windowAspectRatio > gameAspectRatio) {
-        // Ekran jest szerszy niż gra (np. 21:9). Wysokość jest dopasowana w 100%.
         renderWidth = rect.height * gameAspectRatio;
         renderHeight = rect.height;
         offsetX = (rect.width - renderWidth) / 2;
         offsetY = 0;
     } else {
-        // Ekran jest węższy lub równy grze (np. 16:9, 4:3, pionowy). Szerokość jest dopasowana w 100%.
         renderWidth = rect.width;
         renderHeight = rect.width / gameAspectRatio;
         offsetX = 0;
         offsetY = (rect.height - renderHeight) / 2;
     }
-
-    // Oblicz pozycję myszy wewnątrz wyrenderowanego obszaru
     const mouseXInRenderedArea = evt.clientX - rect.left - offsetX;
     const mouseYInRenderedArea = evt.clientY - rect.top - offsetY;
-
-    // Przeskaluj pozycję myszy do wewnętrznej rozdzielczości gry
     const scale = gameWidth / renderWidth;
     const gameX = mouseXInRenderedArea * scale;
     const gameY = mouseYInRenderedArea * scale;
-    
     return { x: gameX, y: gameY };
 }
 
 document.addEventListener('keydown', (event) => {
     if (!currentRoom) return;
+
+    // Ta sekcja obsługuje logikę samouczka.
+    // Zauważ, że nie ma tu `event.preventDefault()` ani `return`.
+    // Oznacza to, że po sprawdzeniu klawisza pod kątem samouczka,
+    // kod kontynuuje działanie i pozwala grze normalnie zareagować na ten sam klawisz.
+    if (tutorial.state !== 'finished') {
+        switch (tutorial.state) {
+            case 1:
+                if (event.code === 'ArrowLeft' || event.code === 'ArrowRight' || event.code === 'KeyA' || event.code === 'KeyD') {
+                    advanceTutorialStep(2);
+                }
+                break;
+            case 2:
+                if (event.code === 'Space') {
+                    advanceTutorialStep(3);
+                }
+                break;
+            case 3:
+                if (['Digit1', 'Numpad1', 'Digit2', 'Numpad2', 'Digit3', 'Numpad3'].includes(event.code)) {
+                    advanceTutorialStep(4);
+                }
+                break;
+            case 4:
+                if (event.code === 'KeyT') {
+                    advanceTutorialStep(5);
+                }
+                break;
+            case 5:
+                if (event.code === 'KeyE') {
+                    advanceTutorialStep('finished');
+                }
+                break;
+        }
+    }
+
     keys[event.code] = true;
-    
+
     if (event.code.startsWith('Digit') || event.code.startsWith('Numpad')) {
         let item = localPlayer.customizations.rightHandItem;
-        if(event.code.includes('1')) item=ITEM_NONE; 
-        if(event.code.includes('2')) item=ITEM_ROD; 
+        if(event.code.includes('1')) item=ITEM_NONE;
+        if(event.code.includes('2')) item=ITEM_ROD;
         if(event.code.includes('3')) item=ITEM_LANTERN;
-        
+
         if(localPlayer.customizations.rightHandItem !== item) {
             localPlayer.customizations.rightHandItem = item;
             localPlayerCustomizations.rightHandItem = item;
@@ -904,36 +1284,103 @@ document.addEventListener('keydown', (event) => {
         }
         event.preventDefault();
 
-    } if (event.code === 'KeyE') {
+    } else if (event.code === 'KeyE' || (event.code === 'Escape' && isCustomizationMenuOpen)) {
         isCustomizationMenuOpen = !isCustomizationMenuOpen;
+        if (isCustomizationMenuOpen) {
+            customizationMenuState = 'category';
+        }
         event.preventDefault();
-        draggingSlider = null;
+        
     } else if (isCustomizationMenuOpen) {
-        event.preventDefault(); 
+        event.preventDefault();
 
-        const currentCategory = customizationCategories[selectedCategoryIndex];
-        const options = customizationOptions[currentCategory];
-        let optionIndex = currentCustomizationOptionIndices[currentCategory];
-        let needsUpdate = false;
+        if (customizationMenuState === 'category') {
+            if (event.code === 'ArrowUp') {
+                selectedCategoryIndex = (selectedCategoryIndex - 1 + customizationCategories.length) % customizationCategories.length;
+            } else if (event.code === 'ArrowDown') {
+                selectedCategoryIndex = (selectedCategoryIndex + 1) % customizationCategories.length;
+            } else if (event.code === 'ArrowRight') {
+                customizationMenuState = 'value';
+            }
+        } else if (customizationMenuState === 'value') {
+            const currentCategory = customizationCategories[selectedCategoryIndex];
+            const options = customizationOptions[currentCategory];
+            let optionIndex = currentCustomizationOptionIndices[currentCategory];
+            let selectionChanged = false;
 
-        if (event.code === 'ArrowUp') {
-            selectedCategoryIndex = (selectedCategoryIndex - 1 + customizationCategories.length) % customizationCategories.length;
-        } else if (event.code === 'ArrowDown') {
-            selectedCategoryIndex = (selectedCategoryIndex + 1) % customizationCategories.length;
-        } else if (event.code === 'ArrowLeft') {
-            optionIndex = (optionIndex - 1 + options.length) % options.length;
-            needsUpdate = true;
-        } else if (event.code === 'ArrowRight') {
-            optionIndex = (optionIndex + 1) % options.length;
-            needsUpdate = true;
+            if (event.code === 'ArrowUp') {
+                optionIndex = (optionIndex - 1 + options.length) % options.length;
+                selectionChanged = true;
+            } else if (event.code === 'ArrowDown') {
+                optionIndex = (optionIndex + 1) % options.length;
+                selectionChanged = true;
+            } else if (event.code === 'ArrowLeft') {
+                customizationMenuState = 'category';
+            } else if (event.code === 'ArrowRight' && (currentCategory === 'hair' || currentCategory === 'beard')) {
+                customizationMenuState = 'color';
+                selectedColorPropertyIndex = 0;
+            }
+
+            if (selectionChanged) {
+                currentCustomizationOptionIndices[currentCategory] = optionIndex;
+                const newValue = options[optionIndex];
+                localPlayer.customizations[currentCategory] = newValue;
+
+                if (currentCategory === 'hat' && newValue !== 'none') {
+                    localPlayer.customizations.hair = 'none';
+                    currentCustomizationOptionIndices['hair'] = 0;
+                }
+                if (currentCategory === 'hair' && newValue !== 'none') {
+                    localPlayer.customizations.hat = 'none';
+                    currentCustomizationOptionIndices['hat'] = 0;
+                }
+                sendPlayerAction('updateCustomization', localPlayer.customizations);
+            }
+        } else if (customizationMenuState === 'color') {
+            if (event.code === 'ArrowUp') {
+                selectedColorPropertyIndex = (selectedColorPropertyIndex - 1 + colorProperties.length) % colorProperties.length;
+            } else if (event.code === 'ArrowDown') {
+                selectedColorPropertyIndex = (selectedColorPropertyIndex + 1) % colorProperties.length;
+            } else if (event.code === 'ArrowLeft') {
+                customizationMenuState = 'value';
+            } else if (event.code === 'ArrowRight') {
+                customizationMenuState = 'adjust_value';
+            }
+        } else if (customizationMenuState === 'adjust_value') {
+            if (event.code === 'ArrowLeft') {
+                customizationMenuState = 'color';
+            } else if (event.code === 'ArrowUp' || event.code === 'ArrowDown') {
+                const isIncrement = event.code === 'ArrowUp';
+                const category = customizationCategories[selectedCategoryIndex];
+                const property = colorProperties[selectedColorPropertyIndex];
+                const propertyCapitalized = property.charAt(0).toUpperCase() + property.slice(1);
+                const key = category + propertyCapitalized;
+
+                if (property === 'hue') {
+                    let currentValue = localPlayer.customizations[key];
+                    let newValue = isIncrement ? currentValue + 1 : currentValue - 1;
+                    newValue = Math.max(HAIR_HUE_MIN, Math.min(HAIR_HUE_MAX, newValue));
+                    if (localPlayer.customizations[key] !== newValue) {
+                        localPlayer.customizations[key] = newValue;
+                        sendPlayerAction('updateCustomization', localPlayer.customizations);
+                    }
+                } else {
+                    const internalMin = (category === 'hair' ? (property === 'brightness' ? HAIR_BRIGHTNESS_MIN : HAIR_SATURATION_MIN) : (property === 'brightness' ? BEARD_BRIGHTNESS_MIN : BEARD_SATURATION_MIN));
+                    const internalMax = (category === 'hair' ? (property === 'brightness' ? HAIR_BRIGHTNESS_MAX : HAIR_SATURATION_MAX) : (property === 'brightness' ? BEARD_BRIGHTNESS_MAX : BEARD_SATURATION_MAX));
+                    
+                    let currentDisplayValue = mapToDisplayRange(localPlayer.customizations[key], internalMin, internalMax);
+                    let newDisplayValue = isIncrement ? currentDisplayValue + 1 : currentDisplayValue - 1;
+                    newDisplayValue = Math.max(0, Math.min(100, newDisplayValue));
+
+                    const newInternalValue = mapFromDisplayRange(newDisplayValue, internalMin, internalMax);
+
+                    if (localPlayer.customizations[key] !== newInternalValue) {
+                        localPlayer.customizations[key] = newInternalValue;
+                        sendPlayerAction('updateCustomization', localPlayer.customizations);
+                    }
+                }
+            }
         }
-
-        if (needsUpdate) {
-            currentCustomizationOptionIndices[currentCategory] = optionIndex;
-            localPlayer.customizations[currentCategory] = options[optionIndex];
-            sendPlayerAction('updateCustomization', localPlayer.customizations);
-        }
-
     } else if (event.code === 'Space' && !localPlayer.isJumping) {
         sendPlayerAction('playerJump');
     }
@@ -955,6 +1402,7 @@ canvas.addEventListener('mousemove', (event) => {
 
 canvas.addEventListener('mousedown', (event) => {
     if(event.button !== 0 || !currentRoom) return;
+
     if (!isCustomizationMenuOpen && localPlayer.customizations.rightHandItem === ITEM_ROD && !localPlayer.hasLineCast) {
         localPlayer.isCasting = true;
         localPlayer.fishingBarTime = 0;
@@ -968,11 +1416,11 @@ canvas.addEventListener('mouseup', (event) => {
             localPlayer.isCasting = false;
             const angle = Math.atan2(localPlayer.currentMouseY - localPlayer.rodTipWorldY, localPlayer.currentMouseX - localPlayer.rodTipWorldX);
 
-            sendPlayerAction('castFishingLine', { 
-                power: localPlayer.castingPower, 
-                angle: angle, 
-                startX: localPlayer.rodTipWorldX, 
-                startY: localPlayer.rodTipWorldY 
+            sendPlayerAction('castFishingLine', {
+                power: localPlayer.castingPower,
+                angle: angle,
+                startX: localPlayer.rodTipWorldX,
+                startY: localPlayer.rodTipWorldY
             });
             event.preventDefault();
         } else if (localPlayer.hasLineCast) {
@@ -980,7 +1428,6 @@ canvas.addEventListener('mouseup', (event) => {
             event.preventDefault();
         }
     }
-    draggingSlider = null;
 });
 
 canvas.addEventListener('wheel', (event) => {

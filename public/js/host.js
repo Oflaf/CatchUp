@@ -21,7 +21,7 @@ const WATER_TOP_Y_WORLD = DEDICATED_GAME_HEIGHT - 164;
 const FLOAT_GRAVITY = 0.3;
 const FLOAT_WATER_FRICTION = 0.9;
 const FLOAT_HITBOX_RADIUS = 32 / 2;
-const CASTING_POWER_MULTIPLIER = 13;
+const CASTING_POWER_MULTIPLIER = 11.5;
 const GRASS_SWAY_DURATION_MS = 1800;
 const GRASS_DENSITY_FACTOR = 0.075;
 const GRASS_SPRITE_WIDTH = 32 * 3.8;
@@ -33,8 +33,8 @@ const INSECT_DENSITY_FACTOR = 0.0009;
 
 // === ZMIANA START ===
 // Nowe stałe do kontrolowania "zrywania" żyłki.
-const MAX_CAST_DISTANCE = 950; // Maksymalna odległość, na jaką spławik może polecieć od gracza podczas rzutu.
-const MAX_PLAYER_FLOAT_DISTANCE = 1050; // Maksymalna odległość między graczem a spławikiem, zanim żyłka się "zerwie".
+const MAX_CAST_DISTANCE = 850; // Maksymalna odległość, na jaką spławik może polecieć od gracza podczas rzutu.
+const MAX_PLAYER_FLOAT_DISTANCE = 950; // Maksymalna odległość między graczem a spławikiem, zanim żyłka się "zerwie".
 // === ZMIANA KONIEC ===
 
 
