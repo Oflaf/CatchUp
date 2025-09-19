@@ -45,6 +45,7 @@ const ctx = canvas.getContext('2d');
 
 const DEDICATED_GAME_WIDTH = 1920;
 
+
 let currentWorldWidth = DEDICATED_GAME_WIDTH * 2;
 
 canvas.width = DEDICATED_GAME_WIDTH;
@@ -55,6 +56,190 @@ ctx.msImageSmoothingEnabled = false;
 ctx.imageSmoothingEnabled = false;
 
 const biomeManager = new BiomeManager(currentWorldWidth, DEDICATED_GAME_HEIGHT);
+
+// ====================================================================
+// === SEKCJA NPC: Nowa klasa do zarządzania NPC ===
+// ====================================================================
+
+class NPCManager {
+    constructor(drawPlayerFunc) {
+        this.npcs = [];
+        this.npcAssets = {}; // Przechowuje załadowane assety dla każdego biomu
+        this.areAssetsLoaded = false;
+        this.currentBiome = null;
+        this.drawPlayer = drawPlayerFunc;
+
+        this.villageBounds = { minX: 0, maxX: 0 };
+    }
+
+    loadCurrentBiomeAssets(biomeName, callback) {
+        if (this.currentBiome === biomeName && this.areAssetsLoaded) {
+            if (callback) callback();
+            return;
+        }
+
+        this.currentBiome = biomeName;
+        this.areAssetsLoaded = false;
+        const basePath = `img/world/biome/${biomeName}/npc/`;
+        const assetKeys = ['leg', 'body', 'arm', 'head', 'eye'];
+        const promises = [];
+
+        this.npcAssets = {};
+
+        for (const key of assetKeys) {
+            const promise = new Promise((resolve, reject) => {
+                const img = new Image();
+                img.src = `${basePath}${key}.png`;
+                img.onload = () => {
+                    this.npcAssets[key] = img;
+                    resolve();
+                };
+                img.onerror = () => {
+                    console.error(`Failed to load NPC asset: ${img.src}`);
+                    // Mimo błędu, resolve, aby nie blokować gry. NPC po prostu się nie pojawi.
+                    resolve();
+                };
+            });
+            promises.push(promise);
+        }
+
+        Promise.all(promises).then(() => {
+            console.log(`All NPC assets for biome '${biomeName}' loaded.`);
+            this.areAssetsLoaded = true;
+            if (callback) callback();
+        });
+    }
+
+    spawnNPCs(gameData) {
+        this.clear();
+        if (!gameData || gameData.villageType === 'none' || !gameData.placedBuildings || gameData.placedBuildings.length === 0) {
+            return;
+        }
+
+        const groundY = DEDICATED_GAME_HEIGHT - gameData.groundLevel - playerSize;
+        const buildings = gameData.placedBuildings;
+
+        // Określ granice wioski
+        const xCoords = buildings.map(b => b.x);
+        const widths = buildings.map(b => b.width);
+        this.villageBounds.minX = Math.min(...xCoords) - 150; // Dodatkowy margines
+        this.villageBounds.maxX = Math.max(...xCoords.map((x, i) => x + widths[i])) + 150;
+
+        buildings.forEach(building => {
+            const npcCount = 1 + Math.floor(Math.random() * 2); // Od 1 do 2 NPC na domek
+            for (let i = 0; i < npcCount; i++) {
+                // === POCZĄTEK ZMIANY: Losowanie włosów dla NPC ===
+               const availableHairs = customizationOptions.hair;
+                // Losujemy indeks od 0 do 3, aby NPC mogły mieć fryzury od 'none' do 'type3' ('Short')
+                const randomIndex = Math.floor(Math.random() * 4); // Zmiana tutaj
+                const randomHair = availableHairs[randomIndex];
+                // === KONIEC ZMIANY ===
+                const randomBrightness = Math.floor(Math.random() * (HAIR_BRIGHTNESS_MAX - HAIR_BRIGHTNESS_MIN + 1)) + HAIR_BRIGHTNESS_MIN;
+                const npc = {
+                    id: `npc_${this.npcs.length}`,
+                    x: building.x + (building.width / 2) + (Math.random() * 200 - 100),
+                    y: groundY,
+                    direction: Math.random() < 0.5 ? 1 : -1,
+                    isWalking: false,
+                    isIdle: true,
+                    isJumping: false,
+                    animationFrame: 0,
+                    idleAnimationFrame: 0,
+                    velocityX: 0,
+                    velocityY: 0,
+                    
+                    // Logika stanu NPC
+                    state: 'idle', // 'walking' or 'idle'
+                    stateTimer: Math.random() * 7 + 2, // Czas w sekundach do następnej zmiany stanu
+                    // NPC mają teraz losowe włosy
+                                       customizations: { 
+                        hat: 'none', 
+                        hair: randomHair, 
+                        accessories: 'none', 
+                        beard: 'none', 
+                        clothes: 'none', 
+                        pants: 'none', 
+                        shoes: 'none', 
+                        rightHandItem: ITEM_NONE,
+                        // Dodane właściwości koloru włosów
+                        hairHue: 150,
+                        hairBrightness: randomBrightness,
+                        hairSaturation: 100, // Ustawiamy domyślne nasycenie, aby kolor był widoczny
+                        beardHue: 0,        // Domyślne wartości dla brody, na wszelki wypadek
+                        beardBrightness: 100,
+                        beardSaturation: 100
+                    }
+                };
+                this.npcs.push(npc);
+            }
+        });
+        console.log(`Spawned ${this.npcs.length} NPCs for the village.`);
+    }
+
+    update(deltaTime) {
+        if (!this.areAssetsLoaded || this.npcs.length === 0) return;
+        const PLAYER_WALK_SPEED = 5;
+
+        this.npcs.forEach(npc => {
+            npc.stateTimer -= deltaTime;
+
+            // Zmiana stanu
+            if (npc.stateTimer <= 0) {
+                if (npc.state === 'idle') {
+                    npc.state = 'walking';
+                    npc.stateTimer = Math.random() * 6 + 4; // Chodź przez 4-10 sekund
+                    npc.direction = Math.random() < 0.5 ? 1 : -1; // Losowy kierunek przy rozpoczęciu chodzenia
+                } else {
+                    npc.state = 'idle';
+                    npc.stateTimer = Math.random() * 4 + 2; // Stój przez 2-6 sekund
+                }
+            }
+            
+
+            // Aktualizacja logiki na podstawie stanu
+            if (npc.state === 'walking') {
+                npc.isWalking = true;
+                npc.isIdle = false;
+                npc.velocityX = 5 * npc.direction; // Stała prędkość NPC
+                npc.x += npc.velocityX;
+
+                // Sprawdzanie granic wioski
+                if (npc.x < this.villageBounds.minX) {
+                    npc.x = this.villageBounds.minX;
+                    npc.direction = 1;
+                } else if (npc.x > this.villageBounds.maxX - playerSize) {
+                    npc.x = this.villageBounds.maxX - playerSize;
+                    npc.direction = -1;
+                }
+                
+                // Obliczamy speedFactor tak jak dla gracza
+                const speedFactor = Math.abs(npc.velocityX / PLAYER_WALK_SPEED);
+                npc.animationFrame = (npc.animationFrame + speedFactor*1.5)
+            } else { // Stan 'idle'
+                npc.isWalking = false;
+                npc.isIdle = true;
+                npc.velocityX = 0;
+                npc.idleAnimationFrame = (npc.idleAnimationFrame + 1) % IDLE_ANIM_CYCLE_LENGTH;
+            }
+        });
+    }
+
+    draw(ctx) {
+        if (!this.areAssetsLoaded || this.npcs.length === 0) return;
+
+        const sortedNPCs = [...this.npcs].sort((a, b) => (a.y + playerSize) - (b.y + playerSize));
+        sortedNPCs.forEach(npc => {
+            // Używamy funkcji drawPlayer, przekazując jej dane NPC i specjalny zestaw assetów NPC
+            this.drawPlayer(npc, this.npcAssets);
+        });
+    }
+
+    clear() {
+        this.npcs = [];
+    }
+}
+
+// ====================================================================
 
 const lobbyDiv = document.getElementById('lobby');
 const gameContainerDiv = document.getElementById('gameContainer');
@@ -112,7 +297,7 @@ const JUMP_LEG_WAVE_ANGLE = JUMP_LEG_WAVE_DEGREES * (Math.PI / 180);
 const JUMP_ARM_WAVE_ANGLE = JUMP_ARM_WAVE_DEGREES * (Math.PI / 180);
 let currentZoomLevel = 1.0;
 const MIN_ZOOM = 0.76;
-const MAX_ZOOM = 1.5;
+const MAX_ZOOM = 1.8;
 const ZOOM_SENSITIVITY = 0.1;
 const ITEM_NONE = 'none';
 const ITEM_ROD = 'rod';
@@ -171,10 +356,16 @@ let selectedColorPropertyIndex = 0;
 const colorProperties = ['brightness', 'saturation', 'hue'];
 let lastTime = 0;
 
+// ================= POCZĄTEK ZMIAN: Zmienne dla bali podtrzymujących pomost =================
+const pierSpanImages = {};
+let pierSupportData = [];
+// ================= KONIEC ZMIAN =================
+
 
 // ====================================================================
 // === SEKCJA 2: FUNKCJE RYSOWANIA (z modyfikacjami) ===
 // ====================================================================
+const npcManager = new NPCManager(drawPlayer);
 
 function mapToDisplayRange(internalValue, internalMin, internalMax) {
     if (internalMax - internalMin === 0) return 0;
@@ -192,9 +383,49 @@ function loadImages(callback) {
     let a = Object.keys(allPaths).length;
     for (const b in exampleCustomItemPaths.items) a++;
     for (const c in exampleCustomItemPaths) { if (c === "items") continue; for (const d in exampleCustomItemPaths[c]) a++; }
-    if (a === 0) { biomeManager.loadBiomeImages(callback); return }
+    
+    // ================= POCZĄTEK ZMIAN: Dodanie ładowania grafik bali =================
+    const biomeDefsForPierSpans = {
+        jurassic: 'img/world/biome/jurassic/pierspan.png',
+        grassland: 'img/world/biome/grassland/pierspan.png'
+    };
+    for (const biome in biomeDefsForPierSpans) {
+        a++;
+    }
+    // ================= KONIEC ZMIAN =================
+
+    if (a === 0) {
+        biomeManager.loadBiomeImages(() => {
+            npcManager.loadCurrentBiomeAssets(biomeManager.currentBiomeName, callback);
+        });
+        return;
+    }
     let e = 0;
-    const f = g => { e++; if (e === a) biomeManager.loadBiomeImages(() => callback()) };
+    const f = g => {
+        e++;
+        if (e === a) {
+            biomeManager.loadBiomeImages(() => {
+                npcManager.loadCurrentBiomeAssets(biomeManager.currentBiomeName, callback);
+            });
+        }
+    };
+
+    // ================= POCZĄTEK ZMIAN: Logika ładowania grafik bali =================
+    for (const biomeName in biomeDefsForPierSpans) {
+        const path = biomeDefsForPierSpans[biomeName];
+        const img = new Image();
+        img.src = path;
+        img.onload = () => {
+            pierSpanImages[biomeName] = img;
+            f(img.src);
+        };
+        img.onerror = () => {
+            console.error(`Pier span image loading error: ${img.src}`);
+            f(img.src);
+        };
+    }
+    // ================= KONIEC ZMIAN =================
+
     for (const h in allPaths) {
         const i = new Image;
         i.src = allPaths[h];
@@ -221,6 +452,7 @@ function loadImages(callback) {
         r.src = q.path, r.onload = () => { characterCustomImages.items[p] = r, f(r.src) }, r.onerror = () => { console.error(`Item Image loading error:: ${r.src}`), f(r.src) }
     }
 }
+
 function lerp(start, end, amt) {
     return (1 - amt) * start + amt * end;
 }
@@ -291,10 +523,71 @@ function updateCamera() {
     }
 }
 function drawFilteredCharacterPart(a,b,c,d,e,f,g=100,h=0,i=100){if(!b||!b.complete)return;const j=document.createElement("canvas");j.width=e,j.height=f;const k=j.getContext("2d");k.imageSmoothingEnabled=!1,k.drawImage(b,0,0,e,f);const l=[];100!==g&&l.push(`saturate(${g}%)`),0!==h&&l.push(`hue-rotate(${h}deg)`),100!==i&&l.push(`brightness(${i}%)`),l.length>0?(a.save(),a.filter=l.join(" "),a.drawImage(j,c,d,e,f),a.restore()):a.drawImage(j,c,d,e,f)}
-function drawPlayer(p) {
-    if (!characterImages.body || !characterImages.body.complete) {
-        ctx.fillStyle = p.color;
-        ctx.fillRect(p.x, p.y, playerSize, playerSize);
+
+
+// ================= POCZĄTEK ZMIAN: Nowa funkcja do rysowania bali pod pomostem =================
+function drawPierSupports(ctx) {
+    if (!pierSupportData || pierSupportData.length === 0 || !currentRoom || !currentRoom.gameData) return;
+
+    const biomeName = currentRoom.gameData.biome;
+    const supportImage = pierSpanImages[biomeName];
+
+    if (!supportImage || !supportImage.complete) return;
+
+    const PILE_GFX_WIDTH = 32;
+    const PILE_GFX_HEIGHT = 128;
+    const SCALED_TILE_SIZE = 32*4; // Wartość z biomeManager (32 * 3.75)
+    const scaledPierGfxHeight = SCALED_TILE_SIZE; // Wysokość grafiki pomostu
+
+    pierSupportData.forEach((pierData, pierIndex) => {
+        // Upewniamy się, że mamy dostęp do oryginalnych danych pomostu w biomeManager
+        if (pierIndex >= biomeManager.placedPiers.length) return;
+        const originalPier = biomeManager.placedPiers[pierIndex];
+        if (!originalPier) return;
+
+        pierData.sections.forEach((sectionData, sectionIndex) => {
+            const sectionBaseX = originalPier.x + sectionIndex * SCALED_TILE_SIZE;
+
+            // Obliczenia Y na podstawie logiki rysowania z biomeManager.drawPiers
+            const pierPlankTopY = originalPier.y - scaledPierGfxHeight + 116;
+            const PIER_PLANK_THICKNESS = 20; // Założona grubość deski pomostu
+            const pileStartY = pierPlankTopY + PIER_PLANK_THICKNESS;
+
+            sectionData.piles.forEach(pile => {
+                const renderWidth = PILE_GFX_WIDTH * pile.scale;
+                const renderHeight = PILE_GFX_HEIGHT * pile.scale;
+                const pileDrawX = sectionBaseX + pile.x;
+
+                ctx.save();
+                // Przesuwamy punkt odniesienia do górnej-środkowej krawędzi bala, aby rotacja działała poprawnie
+                ctx.translate(pileDrawX + renderWidth / 2, pileStartY);
+                ctx.rotate(pile.rotation);
+
+                ctx.drawImage(
+                    supportImage,
+                    0, 0, // source x, y
+                    PILE_GFX_WIDTH, PILE_GFX_HEIGHT, // source w, h
+                    -renderWidth / 2, 0, // rysuj względem nowego punktu (0,0)
+                    renderWidth*2.5, renderHeight*2.5 // draw w, h
+                );
+
+                ctx.restore();
+            });
+        });
+    });
+}
+// ================= KONIEC ZMIAN =================
+
+
+// ZMODYFIKOWANA FUNKCJA
+function drawPlayer(p, imageSet = characterImages) {
+    // Sprawdzenie czy podstawowe assety (z przekazanego zestawu) są załadowane
+    if (!imageSet.body || !imageSet.body.complete) {
+        // Fallback, jeśli obrazki się nie załadują (np. dla NPC)
+        if (p.color) { // Gracze mają kolor, NPC nie
+             ctx.fillStyle = p.color;
+             ctx.fillRect(p.x, p.y, playerSize, playerSize);
+        }
         return;
     }
     ctx.save();
@@ -345,8 +638,8 @@ function drawPlayer(p) {
     const v = p.customizations || {};
     const playerClothes = v.clothes;
 
-    t(characterImages.leg, backLegOffsetX, 0, legPivotInImageX, legPivotInImageY, e);
-    t(characterImages.arm, backArmOffsetX, 0, originalArmPivotInImageX, originalArmPivotInImageY, c);
+    t(imageSet.leg, backLegOffsetX, 0, legPivotInImageX, legPivotInImageY, e);
+    t(imageSet.arm, backArmOffsetX, 0, originalArmPivotInImageX, originalArmPivotInImageY, c);
     
     if (playerClothes && "none" !== playerClothes) {
         const clothesArmImage = characterCustomImages.clothes_arm[playerClothes];
@@ -355,9 +648,9 @@ function drawPlayer(p) {
         }
     }
 
-    t(characterImages.leg, frontLegOffsetX, 0, legPivotInImageX, legPivotInImageY, d);
+    t(imageSet.leg, frontLegOffsetX, 0, legPivotInImageX, legPivotInImageY, d);
     
-    ctx.drawImage(characterImages.body, o, q + a, playerSize, playerSize);
+    ctx.drawImage(imageSet.body, o, q + a, playerSize, playerSize);
 
     if (playerClothes && "none" !== playerClothes) {
         const clothesImage = characterCustomImages.clothes[playerClothes];
@@ -367,9 +660,9 @@ function drawPlayer(p) {
     }
 
     const u = headInitialOffsetY + a + g;
-    t(characterImages.head, 0, u, headPivotInImageX, headPivotInImageY, f);
-    t(characterImages.eye, LEFT_EYE_BASE_X_REL_HEAD_TL + r, u + EYE_BASE_Y_REL_HEAD_TL + s, eyePivotInImage, eyePivotInImage, 0, eyeSpriteSize, eyeSpriteSize);
-    t(characterImages.eye, RIGHT_EYE_BASE_X_REL_HEAD_TL + r, u + EYE_BASE_Y_REL_HEAD_TL + s, eyePivotInImage, eyePivotInImage, 0, eyeSpriteSize, eyeSpriteSize);
+    t(imageSet.head, 0, u, headPivotInImageX, headPivotInImageY, f);
+    t(imageSet.eye, LEFT_EYE_BASE_X_REL_HEAD_TL + r, u + EYE_BASE_Y_REL_HEAD_TL + s, eyePivotInImage, eyePivotInImage, 0, eyeSpriteSize, eyeSpriteSize);
+    t(imageSet.eye, RIGHT_EYE_BASE_X_REL_HEAD_TL + r, u + EYE_BASE_Y_REL_HEAD_TL + s, eyePivotInImage, eyePivotInImage, 0, eyeSpriteSize, eyeSpriteSize);
 
     const accessories = v.accessories;
     if (accessories && "none" !== accessories) {
@@ -414,7 +707,7 @@ function drawPlayer(p) {
         E && F && F.complete && t(F, frontArmOffsetX, 0, originalArmPivotInImageX, originalArmPivotInImageY, b, E.width, E.height)
     }
 
-    t(characterImages.arm, frontArmOffsetX, 0, originalArmPivotInImageX, originalArmPivotInImageY, b);
+    t(imageSet.arm, frontArmOffsetX, 0, originalArmPivotInImageX, originalArmPivotInImageY, b);
     
     if (playerClothes && "none" !== playerClothes) {
         const clothesArmImage = characterCustomImages.clothes_arm[playerClothes];
@@ -425,7 +718,10 @@ function drawPlayer(p) {
 
     ctx.restore();
 
-    p.customizations && p.customizations.rightHandItem === ITEM_ROD ? (p.rodTipWorldX = p.x + playerSize / 2 + (frontArmOffsetX + originalArmPivotInImageX - playerSize / 2) * p.direction + (ROD_TIP_OFFSET_X * Math.cos(b) - ROD_TIP_OFFSET_Y * Math.sin(b)) * p.direction, p.rodTipWorldY = p.y + playerSize / 2 + (0 + originalArmPivotInImageY - playerSize / 2) + (ROD_TIP_OFFSET_X * Math.sin(b) + ROD_TIP_OFFSET_Y * Math.cos(b)), p.id === localPlayer.id && (localPlayer.rodTipWorldX = p.rodTipWorldX, localPlayer.rodTipWorldY = p.rodTipWorldY)) : (p.rodTipWorldX = null, p.rodTipWorldY = null, p.id === localPlayer.id && (localPlayer.rodTipWorldX = null, localPlayer.rodTipWorldY = null)), ctx.fillStyle = "white", ctx.font = `${DEFAULT_FONT_SIZE_USERNAME}px ${PIXEL_FONT}`, ctx.textAlign = "center", ctx.fillText(p.username || p.id.substring(0, 5), p.x + playerSize / 2, p.y - 10 + a)
+    // Rysowanie nazwy użytkownika tylko dla graczy, a nie dla NPC
+    if (p.username) {
+        p.customizations && p.customizations.rightHandItem === ITEM_ROD ? (p.rodTipWorldX = p.x + playerSize / 2 + (frontArmOffsetX + originalArmPivotInImageX - playerSize / 2) * p.direction + (ROD_TIP_OFFSET_X * Math.cos(b) - ROD_TIP_OFFSET_Y * Math.sin(b)) * p.direction, p.rodTipWorldY = p.y + playerSize / 2 + (0 + originalArmPivotInImageY - playerSize / 2) + (ROD_TIP_OFFSET_X * Math.sin(b) + ROD_TIP_OFFSET_Y * Math.cos(b)), p.id === localPlayer.id && (localPlayer.rodTipWorldX = p.rodTipWorldX, localPlayer.rodTipWorldY = p.rodTipWorldY)) : (p.rodTipWorldX = null, p.rodTipWorldY = null, p.id === localPlayer.id && (localPlayer.rodTipWorldX = null, localPlayer.rodTipWorldY = null)), ctx.fillStyle = "white", ctx.font = `${DEFAULT_FONT_SIZE_USERNAME}px ${PIXEL_FONT}`, ctx.textAlign = "center", ctx.fillText(p.username || p.id.substring(0, 5), p.x + playerSize / 2, p.y - 10 + a)
+    }
 }
 
 
@@ -743,10 +1039,56 @@ function onSuccessfulJoin(roomData, hostPeerId = null) {
     if (roomData.gameData) {
         currentWorldWidth = roomData.gameData.worldWidth;
         biomeManager.worldWidth = currentWorldWidth;
+        
+        // Zmiana: Ładuj assety NPC dla nowego biomu i dopiero potem spawnuj NPC
+        npcManager.loadCurrentBiomeAssets(roomData.gameData.biome, () => {
+            npcManager.spawnNPCs(roomData.gameData);
+        });
+        
         biomeManager.setBiome(roomData.gameData.biome);
         biomeManager.setVillageData(roomData.gameData.villageType, roomData.gameData.villageXPosition, roomData.gameData.placedBuildings);
         biomeManager.initializeGroundPlants(roomData.gameData.groundPlants || []);
         biomeManager.initializeTrees(roomData.gameData.trees || []);
+        
+        if (biomeManager.initializePiers) {
+            biomeManager.initializePiers(roomData.gameData.piers || []);
+        }
+
+        // ================= POCZĄTEK ZMIAN: Generowanie danych dla bali podtrzymujących =================
+        pierSupportData = []; // Wyczyść stare dane
+        const serverPiers = roomData.gameData.piers || [];
+        const SCALED_TILE_SIZE = 120; // 32 * 3.75, wartość z biomeManager
+
+        serverPiers.forEach(pier => {
+            const newPierSupport = {
+                sections: []
+            };
+
+            // --- POCZĄTEK POPRAWKI ---
+            // Zmieniamy pętlę tak, aby iterowała po wszystkich sekcjach Z WYJĄTKIEM OSTATNIEJ.
+            // Warunek "i < pier.sections.length - 1" sprawia, że dla ostatniej sekcji
+            // kod generujący filary w ogóle się nie wykona.
+            for (let i = 0; i < pier.sections.length - 1; i++) {
+                const piles = [];
+                const sectionWidth = SCALED_TILE_SIZE;
+                const PILE_GFX_WIDTH = 32;
+                const PILE_RENDER_SCALE = 1.5;
+                const PILE_RENDER_WIDTH = PILE_GFX_WIDTH * PILE_RENDER_SCALE;
+                const margin = 25; 
+                const maxStartPosition = sectionWidth - PILE_RENDER_WIDTH - margin;
+                const pileX = margin + Math.random() * (maxStartPosition - margin);
+                const rotation = (Math.random() * 16 - 8) * (Math.PI / 180);
+                
+                piles.push({ x: pileX, rotation: rotation, scale: PILE_RENDER_SCALE });
+                
+                newPierSupport.sections.push({ piles: piles });
+            }
+            // --- KONIEC POPRAWKI ---
+
+            pierSupportData.push(newPierSupport);
+        });
+        // ================= KONIEC ZMIAN =================
+        
         insectsInRoom = roomData.gameData.insects || [];
     }
 
@@ -911,6 +1253,9 @@ function gameLoop(currentTime) {
     bobberAnimationTime += BOBBER_ANIMATION_SPEED;
     biomeManager.updateAnimations(deltaTime);
     
+    // Aktualizacja NPC
+    npcManager.update(deltaTime);
+    
     updateTutorialAnimations();
 
     sendPlayerInput();
@@ -936,9 +1281,28 @@ function gameLoop(currentTime) {
         biomeManager.drawBackgroundBiomeGround(ctx,b,g); biomeManager.drawBackgroundTrees(ctx); biomeManager.drawBackgroundPlants(ctx); biomeManager.drawBuildings(ctx,g,cameraX,DEDICATED_GAME_WIDTH/currentZoomLevel);
     }
 
-    Object.values(playersInRoom).sort((a,b)=>(a.y+playerSize)-(b.y+playerSize)).forEach(p=>drawPlayer(p));
+    // Połącz graczy i NPC w jedną listę do sortowania i rysowania
+    const allCharacters = [...Object.values(playersInRoom), ...npcManager.npcs];
+    allCharacters.sort((a,b)=>(a.y+playerSize)-(b.y+playerSize)).forEach(p => {
+        if (p.username) { // To jest gracz
+            drawPlayer(p);
+        } else { // To jest NPC
+            npcManager.drawPlayer(p, npcManager.npcAssets);
+        }
+    });
 
-    if(currentRoom?.gameData?.biome){const {biome:b,groundLevel:g}=currentRoom.gameData;biomeManager.drawForegroundPlants(ctx);biomeManager.drawForegroundTrees(ctx);;drawInsects();biomeManager.drawForegroundBiomeGround(ctx,b,g);biomeManager.drawWater(ctx,b,cameraX)}
+    if(currentRoom?.gameData?.biome){const {biome:b,groundLevel:g}=currentRoom.gameData;biomeManager.drawForegroundPlants(ctx);biomeManager.drawForegroundTrees(ctx);;drawInsects();biomeManager.drawForegroundBiomeGround(ctx,b,g);
+    
+    // ================= POCZĄTEK ZMIAN: Rysowanie bali i pomostów w odpowiedniej kolejności =================
+    // Rysujemy najpierw bale, aby znalazły się pod pomostem.
+    drawPierSupports(ctx);
+
+    if (biomeManager.drawPiers) {
+        biomeManager.drawPiers(ctx);
+    }
+    // ================= KONIEC ZMIAN =================
+    
+    biomeManager.drawWater(ctx,b,cameraX)}
 
     ctx.restore();for(const id in playersInRoom) drawFishingLine(playersInRoom[id]);
 
@@ -1161,6 +1525,14 @@ leaveRoomBtn.addEventListener('click', () => {
 function leaveCurrentRoomUI() {
     gameContainerDiv.style.display='none'; lobbyDiv.style.display='block';
     currentRoom=null; playersInRoom={}; insectsInRoom=[];
+    
+    // ================= POCZĄTEK ZMIAN: Czyszczenie danych o balach =================
+    pierSupportData = [];
+    // ================= KONIEC ZMIAN =================
+
+    // Czyszczenie NPC
+    npcManager.clear();
+
     isHost=false;
     hostConnection=null;
     gameHostInstance=null;

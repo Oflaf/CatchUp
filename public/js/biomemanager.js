@@ -7,7 +7,10 @@ class BiomeManager {
 
         this.biomeTiles = {};
         this.biomeBuildingsImages = {};
-        this.biomeInsectImages = {}; // NOWA ZMIENNA DO PRZECHOWYWANIA OBRAZKÓW INSEKTÓW
+        this.biomeInsectImages = {};
+        this.biomePierImages = {}; 
+        this.biomePierSpanImages = {}; // <-- NOWE: Do przechowywania obrazków bali
+        this.placedPiers = [];     
 
         this.backgroundImage = new Image();
         this.backgroundLoaded = false;
@@ -34,7 +37,9 @@ class BiomeManager {
                 background2Path: 'img/world/biome/jurassic/background2.png',
                 imgPath: 'img/world/biome/jurassic/ground.png',
                 buildingsPath: 'img/world/biome/jurassic/buildings.png',
-                insectPath: 'img/world/biome/jurassic/insect.png', // <-- NOWA ŚCIEŻKA
+                insectPath: 'img/world/biome/jurassic/insect.png',
+                pierPath: 'img/world/biome/jurassic/pier.png',
+                pierSpanPath: 'img/world/biome/jurassic/pierspan.png', // <-- NOWE
                 buildingDefinitions: [
                     { id: 'j_house1', x: 0, y: 0, width: BASE_BUILDING_SOURCE_TILE_SIZE, height: BASE_BUILDING_SOURCE_TILE_SIZE },
                     { id: 'j_house2', x: BASE_BUILDING_SOURCE_TILE_SIZE, y: 0, width: BASE_BUILDING_SOURCE_TILE_SIZE, height: BASE_BUILDING_SOURCE_TILE_SIZE },
@@ -79,11 +84,14 @@ class BiomeManager {
                 ]
             },
             grassland: {
+                 // ... (reszta definicji biomu grassland)
                 backgroundPath: 'img/world/biome/grassland/background.png',
                 background2Path: 'img/world/biome/grassland/background2.png',
                 imgPath: 'img/world/biome/grassland/ground.png',
                 buildingsPath: 'img/world/biome/grassland/buildings.png',
-                insectPath: 'img/world/biome/grassland/insect.png', // <-- NOWA ŚCIEŻKA
+                insectPath: 'img/world/biome/grassland/insect.png',
+                pierPath: 'img/world/biome/grassland/pier.png',
+                pierSpanPath: 'img/world/biome/grassland/pierspan.png', // <-- NOWE
                 buildingDefinitions: [
                     { id: 'g_hut1', x: 0, y: 0, width: BASE_BUILDING_SOURCE_TILE_SIZE, height: BASE_BUILDING_SOURCE_TILE_SIZE },
                     { id: 'g_hut2', x: BASE_BUILDING_SOURCE_TILE_SIZE, y: 0, width: BASE_BUILDING_SOURCE_TILE_SIZE, height: BASE_BUILDING_SOURCE_TILE_SIZE },
@@ -169,8 +177,7 @@ class BiomeManager {
         this.setBiome(this.currentBiomeName);
         this._generateFirstLayerTileGrid();
     }
-
-    // === NOWA FUNKCJA DO POBIERANIA OBRAZKA INSEKTA ===
+    
     getCurrentInsectImage() {
         return this.biomeInsectImages[this.currentBiomeName];
     }
@@ -194,6 +201,7 @@ class BiomeManager {
         this.treesLoaded = false;
         this.backgroundLoaded = false;
         this.background2Loaded = false;
+        this.placedPiers = []; // Czyścimy pomosty przy zmianie biomu
         if (this.currentBiomeDef.backgroundPath) {
             this.backgroundImage.onload = () => { this.backgroundLoaded = true; };
             this.backgroundImage.onerror = () => { console.error(`Failed to load background.png for ${newBiomeName}`); };
@@ -232,6 +240,10 @@ class BiomeManager {
         for (let x = 0; x < numTilesX; x++) {
             this.firstLayerTilesGrid.push(possibleTiles[Math.floor(Math.random() * possibleTiles.length)]);
         }
+    }
+    
+    initializePiers(piersData) {
+        this.placedPiers = piersData || [];
     }
 
     initializeGroundPlants(plantsData) {
@@ -278,7 +290,7 @@ class BiomeManager {
 
     _updateGroundPlantsAnimation(deltaTime) {
         const allPlants = [...this.backgroundGroundPlants, ...this.foregroundGroundPlants];
-        const SWAY_DURATION = 1.8;
+        const SWAY_DURATION = 2.1;
         allPlants.forEach(grass => {
             if (grass.isSwaying) {
                 grass.swayAnimationTime += deltaTime;
@@ -373,18 +385,16 @@ class BiomeManager {
         ctx.fillRect(0, 0, this.worldWidth, this.gameHeight);
     }
 
-    // FINALNA, POPRAWIONA WERSJA `drawParallaxBackground`
     drawParallaxBackground(ctx, cameraX, cameraY, visibleWidth) {
         const frontLayerHFactor = 0.08;
         const backLayerHFactor = 0.18;
-        const BG_WIDTH = 820*3.35; // Używane do bufora
+        const BG_WIDTH = 820*3.35;
 
         const verticalParallaxFactor = 0;
         const VERTICAL_OFFSET = 22;
 
         const parallaxY = cameraY * (1 - verticalParallaxFactor);
 
-        // --- Rysowanie dalszej warstwy (background2) ---
         ctx.save();
         ctx.translate(cameraX, cameraY);
         const parallaxX2 = cameraX * (1 - backLayerHFactor);
@@ -392,7 +402,6 @@ class BiomeManager {
         this._drawParallaxLayer(ctx, this.background2Image, this.background2Loaded, parallaxX2, visibleWidth + BG_WIDTH);
         ctx.restore();
 
-        // --- Rysowanie bliższej warstwy (background) ---
         ctx.save();
         ctx.translate(cameraX, cameraY);
         const parallaxX1 = cameraX * (1 - frontLayerHFactor);
@@ -401,7 +410,6 @@ class BiomeManager {
         ctx.restore();
     }
 
-    // I FINALNA, POPRAWIONA WERSJA `_drawParallaxLayer` do współpracy z powyższą
     _drawParallaxLayer(ctx, image, isLoaded, parallaxX, coverWidth) {
         if (!isLoaded || !image.complete || image.naturalWidth === 0) return;
 
@@ -486,15 +494,16 @@ class BiomeManager {
         }
     }
 
-    // === ZAKTUALIZOWANA FUNKCJA ŁADOWANIA OBRAZKÓW ===
     loadBiomeImages(onAllLoadedCallback) {
         const biomeNames = Object.keys(this.biomeDefinitions);
-        const imagesToLoadPaths = new Set(); // Użyj Set, aby uniknąć duplikatów
+        const imagesToLoadPaths = new Set();
 
         biomeNames.forEach(name => {
             const def = this.biomeDefinitions[name];
             if (def.imgPath) imagesToLoadPaths.add(def.imgPath);
-            if (def.insectPath) imagesToLoadPaths.add(def.insectPath); // Dodaj ścieżkę do insekta
+            if (def.insectPath) imagesToLoadPaths.add(def.insectPath);
+            if (def.pierPath) imagesToLoadPaths.add(def.pierPath);
+            if (def.pierSpanPath) imagesToLoadPaths.add(def.pierSpanPath); // <-- NOWE
         });
 
         const pathArray = Array.from(imagesToLoadPaths);
@@ -512,14 +521,19 @@ class BiomeManager {
 
             const onLoaded = () => {
                 loadedCount++;
-                // Sprawdź, do którego biomu i jakiego typu należy ten obrazek
                 for (const biomeName of biomeNames) {
                     const def = this.biomeDefinitions[biomeName];
                     if (def.imgPath === src) {
                         this.biomeTiles[biomeName] = img;
                     }
-                    if (def.insectPath === src) { // NOWY WARUNEK
+                    if (def.insectPath === src) {
                         this.biomeInsectImages[biomeName] = img;
+                    }
+                    if (def.pierPath === src) {
+                        this.biomePierImages[biomeName] = img;
+                    }
+                    if (def.pierSpanPath === src) { // <-- NOWE
+                        this.biomePierSpanImages[biomeName] = img;
                     }
                 }
 
@@ -531,7 +545,7 @@ class BiomeManager {
             img.onload = onLoaded;
             img.onerror = () => {
                 console.error(`Image loading error: ${src}`);
-                onLoaded(); // Mimo błędu, kontynuuj, aby nie blokować gry
+                onLoaded();
             };
         });
     }
@@ -582,6 +596,100 @@ class BiomeManager {
             const tileKey = this.firstLayerTilesGrid[x];
             const tileToDrawConfig = biomeDef.tileMap[tileKey] || biomeDef.tileMap.grass;
             ctx.drawImage(biomeImage, tileToDrawConfig.x, tileToDrawConfig.y, tileToDrawConfig.width, tileToDrawConfig.height, x * this.scaledTileSize, worldGroundTopY, this.scaledTileSize, this.scaledTileSize);
+        }
+    }
+    
+    // ====================================================================
+    // === NOWA FUNKCJA DO RYSOWANIA BALI PODTRZYMUJĄCYCH POMOST ===
+    // ====================================================================
+    drawPierSupports(ctx, pierSupportData) {
+        const supportImage = this.biomePierSpanImages[this.currentBiomeName];
+
+        if (!supportImage || !supportImage.complete || !pierSupportData || pierSupportData.length === 0 || this.placedPiers.length === 0) {
+            return;
+        }
+
+        const PILE_GFX_WIDTH = 32;
+        const PILE_GFX_HEIGHT = 128;
+
+        pierSupportData.forEach((pierData, pierIndex) => {
+            if (pierIndex >= this.placedPiers.length) return;
+            const originalPier = this.placedPiers[pierIndex];
+            if (!originalPier) return;
+            
+            const scaledPierGfxHeight = this.scaledTileSize; 
+            const pierPlankTopY = originalPier.y - scaledPierGfxHeight + 116;
+            const PIER_PLANK_THICKNESS = 20; // Przyjęta grubość deski, aby bale zaczynały się pod nią
+            const pileStartY = pierPlankTopY + PIER_PLANK_THICKNESS;
+
+            pierData.sections.forEach((sectionData, sectionIndex) => {
+                const sectionBaseX = originalPier.x + sectionIndex * this.scaledTileSize;
+
+                sectionData.piles.forEach(pile => {
+                    const renderWidth = PILE_GFX_WIDTH * pile.scale;
+                    const renderHeight = PILE_GFX_HEIGHT * pile.scale;
+                    const pileDrawX = sectionBaseX + pile.x;
+
+                    ctx.save();
+                    ctx.translate(pileDrawX + renderWidth / 2, pileStartY);
+                    ctx.rotate(pile.rotation);
+
+                    ctx.drawImage(
+                        supportImage,
+                        0, 0,
+                        PILE_GFX_WIDTH, PILE_GFX_HEIGHT,
+                        -renderWidth / 2, 0,
+                        renderWidth, renderHeight
+                    );
+
+                    ctx.restore();
+                });
+            });
+        });
+    }
+
+
+    drawPiers(ctx) {
+        const pierImage = this.biomePierImages[this.currentBiomeName];
+        if (!pierImage || !pierImage.complete || this.placedPiers.length === 0) {
+            return;
+        }
+
+        const TILE_SOURCE_WIDTH = 32;
+        const TILE_SOURCE_HEIGHT = 64;
+        const scaledWidth = this.scaledTileSize;
+        const scaledHeight = this.scaledTileSize * 2; 
+
+        for (const pier of this.placedPiers) {
+            pier.sections.forEach((section, index) => {
+                const drawX = pier.x + index * scaledWidth;
+                const drawY = pier.y - scaledHeight + 116; 
+
+                const sourceX = section.tileIndex * TILE_SOURCE_WIDTH;
+                const sourceY = 0;
+
+                ctx.save();
+                if (section.mirrored) {
+                    ctx.translate(drawX + scaledWidth, 0);
+                    ctx.scale(-1, 1);
+                    ctx.drawImage(
+                        pierImage,
+                        sourceX, sourceY,
+                        TILE_SOURCE_WIDTH, TILE_SOURCE_HEIGHT,
+                        0, drawY, 
+                        scaledWidth, scaledHeight
+                    );
+                } else {
+                    ctx.drawImage(
+                        pierImage,
+                        sourceX, sourceY,
+                        TILE_SOURCE_WIDTH, TILE_SOURCE_HEIGHT,
+                        drawX, drawY,
+                        scaledWidth, scaledHeight
+                    );
+                }
+                ctx.restore();
+            });
         }
     }
 

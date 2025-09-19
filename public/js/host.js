@@ -13,7 +13,7 @@ const DEDICATED_GAME_HEIGHT = 1080;
 const PLAYER_SIZE = 128;
 const GRAVITY = 1.6;
 const JUMP_STRENGTH = -25;
-const PLAYER_WALK_SPEED = 14;
+const PLAYER_WALK_SPEED = 11;
 const DECELERATION_FACTOR = 0.8;
 const MIN_VELOCITY_FOR_WALK_ANIMATION = 0.5;
 const GAME_TICK_RATE = 1000 / 60;
@@ -32,9 +32,9 @@ const TREE_MIN_HORIZONTAL_GAP = 64;
 const INSECT_DENSITY_FACTOR = 0.0009;
 
 // === ZMIANA START ===
-// Nowe stałe do kontrolowania "zrywania" żyłki.
-const MAX_CAST_DISTANCE = 850; // Maksymalna odległość, na jaką spławik może polecieć od gracza podczas rzutu.
-const MAX_PLAYER_FLOAT_DISTANCE = 950; // Maksymalna odległość między graczem a spławikiem, zanim żyłka się "zerwie".
+const MAX_CAST_DISTANCE = 850;
+const MAX_PLAYER_FLOAT_DISTANCE = 950;
+const MIN_PIER_DISTANCE = 600; // Minimalny odstęp między pomostami
 // === ZMIANA KONIEC ===
 
 
@@ -78,6 +78,7 @@ const AVAILABLE_BIOMES_DETAILS = {
             displayScaleFactor: 4.5,
         },
         treeDefinitionCount: 8
+        // Usunięto 'canHavePiers', ponieważ teraz każdy biom może je mieć
     }
 };
 
@@ -90,7 +91,7 @@ const ARM_OFFSET_Y_IN_PLAYER_SPACE = 0;
 
 
 // ====================================================================================
-// === SEKCJA 2: FUNKCJE POMOCNICZE (bez zmian) ===
+// === SEKCJA 2: FUNKCJE POMOCNICZE (zaktualizowano generatePiers) ===
 // ====================================================================================
 
 function createSeededRandom(seedStr) {
@@ -105,6 +106,80 @@ function createSeededRandom(seedStr) {
         return (seed >>> 0) / MAX_UINT32;
     };
 }
+
+// ================= POCZĄTEK ZMIAN: Zaktualizowana funkcja generowania pomostów =================
+/**
+ * Generuje dane dla losowej liczby pomostów (1-4) w świecie gry, zapewniając, że się nie nakładają.
+ * @param {string} roomId - ID pokoju, używane jako ziarno losowości.
+ * @param {number} groundLevel - Poziom ziemi w świecie gry.
+ * @param {number} worldWidth - Szerokość świata gry.
+ * @returns {Array} - Tablica zawierająca obiekty z danymi pomostów.
+ */
+function generatePiers(roomId, groundLevel, worldWidth) {
+    const seededRandom = createSeededRandom(roomId + '-piers');
+    const piers = [];
+    
+    const numPiersToGenerate = 1 + Math.floor(seededRandom() * 4); // Losowo od 1 do 4 pomostów
+    const PIER_TILE_WIDTH = 32 * 3.75; // Używamy przeskalowanej szerokości do obliczeń
+    
+    for (let i = 0; i < numPiersToGenerate; i++) {
+        let attempts = 0;
+        const maxAttempts = 50; // Zabezpieczenie przed nieskończoną pętlą
+
+        while (attempts < maxAttempts) {
+            // Losowa długość środkowych sekcji (od 2 do 10)
+            const middleSectionsCount = 2 + Math.floor(seededRandom() * 9);
+            const totalSections = 2 + middleSectionsCount;
+            const pierWidth = totalSections * PIER_TILE_WIDTH;
+
+            // Losowa pozycja startowa X, z marginesem
+            const startX = 200 + seededRandom() * (worldWidth - pierWidth - 400);
+            
+            // Sprawdzenie kolizji z już umieszczonymi pomostami
+            let isOverlapping = false;
+            for (const placedPier of piers) {
+                const distance = Math.abs((startX + pierWidth / 2) - (placedPier.x + placedPier.width / 2));
+                if (distance < (pierWidth / 2 + placedPier.width / 2 + MIN_PIER_DISTANCE)) {
+                    isOverlapping = true;
+                    break;
+                }
+            }
+
+            if (!isOverlapping) {
+                const y = DEDICATED_GAME_HEIGHT - groundLevel;
+                const sections = [];
+
+                // 1. Sekcja początkowa
+                sections.push({ tileIndex: 0, mirrored: false });
+
+                // 2. Sekcje środkowe
+                for (let j = 0; j < middleSectionsCount; j++) {
+                    sections.push({
+                        tileIndex: 1 + Math.floor(seededRandom() * 4),
+                        mirrored: seededRandom() < 0.5
+                    });
+                }
+
+                // 3. Sekcja końcowa
+                sections.push({ tileIndex: 0, mirrored: true });
+
+                piers.push({
+                    id: `pier_${i}_${roomId}`,
+                    x: startX,
+                    y: y,
+                    width: pierWidth, // Dodajemy szerokość do obiektu dla łatwiejszych sprawdzeń
+                    sections: sections
+                });
+                break; // Sukces, przejdź do generowania następnego pomostu
+            }
+            attempts++;
+        }
+    }
+    
+    return piers;
+}
+// ================= KONIEC ZMIAN =================
+
 
 function generateGroundPlants(roomId, groundLevel, worldWidth) {
     const plants = [];
@@ -276,9 +351,9 @@ function calculateRodTipWorldPosition(player) {
 
 
 // ====================================================================================
-// === SEKCJA 3: GŁÓWNA KLASA GAMEHOST ===
+// === SEKCJA 3: GŁÓWNA KLASA GAMEHOST (reszta bez zmian) ===
 // ====================================================================================
-
+// ... reszta pliku host.js pozostaje bez zmian ...
 class GameHost {
     constructor() {
         this.room = null;
@@ -327,7 +402,11 @@ class GameHost {
                 worldWidth: randomWorldWidth,
                 villageType: selectedVillageType,
                 villageXPosition: villageXPosition,
-                groundPlants: [], trees: [], insects: [], placedBuildings: []
+                groundPlants: [],
+                trees: [],
+                insects: [],
+                placedBuildings: [],
+                piers: []
             },
             playerInputs: {}
         };
@@ -336,6 +415,7 @@ class GameHost {
         this.room.gameData.groundPlants = generateGroundPlants(roomId, this.room.gameData.groundLevel, this.room.gameData.worldWidth);
         this.room.gameData.trees = generateTrees(roomId, this.room.gameData.groundLevel, this.room.gameData.worldWidth, randomBiome);
         this.room.gameData.insects = generateInsects(roomId, this.room.gameData.groundLevel, this.room.gameData.worldWidth);
+        this.room.gameData.piers = generatePiers(roomId, this.room.gameData.groundLevel, this.room.gameData.worldWidth);
 
         console.log(`[HOST] Gra wystartowała w pokoju ${roomId}`);
         
@@ -413,8 +493,6 @@ class GameHost {
         }
     }
     
-    // === ZMIANA START ===
-    // Funkcja pomocnicza do resetowania stanu wędki
     _resetFishingState(player) {
         player.hasLineCast = false;
         player.floatWorldX = null;
@@ -424,7 +502,6 @@ class GameHost {
         player.lineAnchorWorldX = null;
         player.lineAnchorWorldY = null;
     }
-    // === ZMIANA KONIEC ===
 
 
     handlePlayerAction(peerId, actionData) {
@@ -443,12 +520,9 @@ class GameHost {
                 break;
             }
             case 'updateCustomization': {
-                // === ZMIANA START ===
-                // Jeśli gracz ma zarzuconą wędkę i zmienia przedmiot w dłoni na coś innego, zerwij żyłkę.
                 if (player.hasLineCast && actionData.payload.rightHandItem !== 'rod') {
                     this._resetFishingState(player);
                 }
-                // === ZMIANA KONIEC ===
                 
                 Object.assign(player.customizations, actionData.payload);
                 this.broadcast({ 
@@ -534,50 +608,35 @@ class GameHost {
             player.rodTipWorldY = calculateRodTipWorldPosition(player).y;
 
             if(player.hasLineCast){
-                // === ZMIANA START ===
-                // Sprawdź, czy gracz nie odszedł za daleko od spławika.
                 const distanceFromFloat = Math.hypot(player.x - player.floatWorldX, player.y - player.floatWorldY);
                 if (distanceFromFloat > MAX_PLAYER_FLOAT_DISTANCE) {
                     this._resetFishingState(player);
                 } else {
-                // === ZMIANA KONIEC ===
-                    
-                    // Fizyka spławika (gdy jest w powietrzu)
                     if (player.lineAnchorWorldY === null) {
                         player.floatVelocityY += FLOAT_GRAVITY;
                         player.floatWorldX += player.floatVelocityX;
                         player.floatWorldY += player.floatVelocityY;
                         
-                        // Sprawdź, czy spławik nie wyleciał za daleko podczas rzutu
                         const castDistance = Math.hypot(player.rodTipWorldX - player.floatWorldX, player.rodTipWorldY - player.floatWorldY);
                         if (castDistance > MAX_CAST_DISTANCE) {
                              this._resetFishingState(player);
                         }
-
-                        // Kolizja z wodą
                         else if (player.floatWorldY + FLOAT_HITBOX_RADIUS >= WATER_TOP_Y_WORLD) {
                             player.floatWorldY = WATER_TOP_Y_WORLD - FLOAT_HITBOX_RADIUS;
                             player.floatVelocityY = 0;
                             player.floatVelocityX *= FLOAT_WATER_FRICTION;
-                            // Ustawienie kotwicy w wodzie - zmieniamy na `player.floatWorldY`, bo tam się zatrzymał
                             player.lineAnchorWorldX = player.floatWorldX;
                             player.lineAnchorWorldY = player.floatWorldY; 
                         }
                     } 
-                    // Fizyka spławika (gdy jest już w wodzie)
                     else {
                         player.floatVelocityX *= FLOAT_WATER_FRICTION;
                         if(Math.abs(player.floatVelocityX) < 0.1) player.floatVelocityX = 0;
                         player.floatWorldX += player.floatVelocityX;
-                        // Spławik utrzymuje się na stałej wysokości Y kotwicy
                         player.floatWorldY = player.lineAnchorWorldY;
                     }
-                // === ZMIANA START ===
-                // Zamknięcie klamry od warunku sprawdzającego dystans
                 }
-                // === ZMIANA KONIEC ===
             } 
-            // Jeśli żyłka nie jest zarzucona, upewnij się, że stan jest czysty
             else {
                  this._resetFishingState(player);
             }
