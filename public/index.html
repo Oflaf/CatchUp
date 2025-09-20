@@ -44,10 +44,14 @@
         </ul>
     </div>
 
-    <!-- TEN DIV POWINIEN MIEĆ STYLE="DISPLAY: NONE;" POCZĄTKOWO -->
-    <div id="gameContainer" style="display: none;">
+    <!-- ZMIANA 1: Dodano "position: relative;" do stylu. To sprawia, że ten div jest ramką odniesienia dla nakładki. -->
+    <div id="gameContainer" style="display: none; position: relative;">
         <button id="leaveRoomBtn">Opuść Pokój</button>
         <canvas id="gameCanvas"></canvas> <!-- BEZ atrybutów width/height tutaj -->
+        
+        <!-- ZMIANA 2: Dodano nową warstwę (div) do obsługi efektów kolorystycznych. -->
+        <div id="cycleOverlay"></div>
+
     </div>
 
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script> 
@@ -60,7 +64,7 @@
     <!-- Nowy skrypt do obsługi świata w tle menu -->
     <script src="js/menuworld.js"></script>
 
-    <!-- Główny skrypt klienta (pozostaje na końcu) -->
+    <script src="js/cycle.js"></script>
     <script src="script.js"></script>
 </body>
 </html>
