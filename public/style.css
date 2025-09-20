@@ -25,6 +25,24 @@ body {
     background-color: #3498db; /* Domyślny kolor tła, jeśli JS zawiedzie */
 }
 
+#cycleOverlay {
+    /* Rozciągnij na cały kontener gry */
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+
+    /* WAŻNE: Ignoruj kliknięcia myszą, aby przechodziły do canvasa poniżej */
+    pointer-events: none;
+
+    /* Ustaw domyślny tryb mieszania */
+    mix-blend-mode: soft-light; /* Odpowiednik globalCompositeOperation */
+
+    /* Wygładź przejścia, gdy będziemy zmieniać kolor i filtry */
+    transition: background-color 0.5s linear, backdrop-filter 0.5s linear;
+}
+
 /* 2. Zmodyfikowany ogólny styl dla obu canvasów */
 #gameCanvas, #menuCanvas {
     display: block;
