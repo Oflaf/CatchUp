@@ -4,17 +4,26 @@ class CycleManager {
     constructor() {
         this.image = null;
         this.isLoaded = false;
-        this.rotation = 0; // Kąt w radianach
-        this.ROTATION_SPEED = 0.0071; // Prędkość obrotu (w radianach na sekundę)
-        this.SCALE = 6.4; // Mnożnik powiększenia grafiki
+        
+        this.moonImages = [];
+        this.moonImagePaths = [
+            'img/world/moon.png',
+            'img/world/moon2.png',
+            'img/world/moon3.png',
+            'img/world/moon4.png'
+        ];
+        this.areMoonsLoaded = false;
+        this.currentMoonImage = null;
+
+        this.rotation = 0;
+        this.ROTATION_SPEED = 0.0071;
+        this.SCALE = 6.4;
+        this.MOON_SCALE = 2.4;
     }
 
-    /**
-     * Wczytuje obraz cyklu dnia i nocy.
-     */
     load() {
         this.image = new Image();
-        this.image.src = 'img/world/cycle.png'; 
+        this.image.src = 'img/world/cycle.png';
         this.image.onload = () => {
             this.isLoaded = true;
             console.log("Obraz cyklu dnia i nocy został załadowany przez CycleManager.");
@@ -22,41 +31,55 @@ class CycleManager {
         this.image.onerror = () => {
             console.error("Błąd podczas ładowania obrazu cyklu dnia i nocy: 'img/world/cycle.png'");
         };
+
+        let loadedMoons = 0;
+        this.moonImagePaths.forEach((path, index) => {
+            const img = new Image();
+            img.src = path;
+            img.onload = () => {
+                loadedMoons++;
+                this.moonImages[index] = img;
+                if (loadedMoons === this.moonImagePaths.length) {
+                    this.areMoonsLoaded = true;
+                    this.currentMoonImage = this.moonImages[0];
+                    console.log("Wszystkie obrazy księżyca zostały załadowane przez CycleManager.");
+                }
+            };
+            img.onerror = () => {
+                console.error(`Błąd podczas ładowania obrazu księżyca: '${path}'`);
+            };
+        });
     }
 
-    /**
-     * Aktualizuje kąt obrotu na podstawie czasu, który upłynął od ostatniej klatki.
-     * @param {number} deltaTime - Czas w sekundach od ostatniej klatki.
-     */
     update(deltaTime) {
         if (!this.isLoaded) return;
-        
         this.rotation += this.ROTATION_SPEED * deltaTime;
-        // Utrzymuje wartość obrotu w zakresie 0 - 2*PI, aby uniknąć dużych liczb
-        this.rotation %= (Math.PI * 8);
+        this.rotation %= (Math.PI * 12);
+
+        if (this.areMoonsLoaded) {
+            const dayInCycle = Math.floor(this.rotation / (Math.PI * 2));
+            switch (dayInCycle) {
+                case 0: this.currentMoonImage = this.moonImages[0]; break;
+                case 1: this.currentMoonImage = this.moonImages[1]; break;
+                case 2: this.currentMoonImage = this.moonImages[2]; break;
+                case 3: this.currentMoonImage = this.moonImages[3]; break;
+                case 4: this.currentMoonImage = this.moonImages[2]; break;
+                case 5: this.currentMoonImage = this.moonImages[1]; break;
+                default: this.currentMoonImage = this.moonImages[0]; break;
+            }
+        }
     }
 
+    // ================== POCZĄTEK ZMIAN ==================
+
     /**
-     * Rysuje obrócony i przeskalowany obraz cyklu na podanym kontekście canvas.
-     * Ta funkcja powinna być wywoływana jako pierwsza, zaraz po wyczyszczeniu canvas.
-     * @param {CanvasRenderingContext2D} ctx - Kontekst 2D canvas.
+     * Rysuje TŁO cyklu dnia i nocy (obraz cycle.png).
+     * Zakłada, że transformacje (translate/rotate) zostały już zastosowane.
      */
-    draw(ctx) {
+    drawBackground(ctx) {
         if (!this.isLoaded) return;
-
-        const canvas = ctx.canvas;
-        const centerX = canvas.width / 2;
-        const centerY = canvas.height / 2;
-
         const scaledWidth = this.image.width * this.SCALE;
         const scaledHeight = this.image.height * this.SCALE;
-
-        ctx.save();
-        // Przesuń punkt odniesienia do środka canvas
-        ctx.translate(centerX, centerY+2150);
-        // Obróć kontekst
-        ctx.rotate(this.rotation);
-        // Narysuj obraz, centrując go w nowym punkcie (0,0)
         ctx.drawImage(
             this.image,
             -scaledWidth / 2,
@@ -64,6 +87,25 @@ class CycleManager {
             scaledWidth,
             scaledHeight
         );
-        ctx.restore();
     }
+
+    /**
+     * Rysuje KSIĘŻYC na odpowiedniej pozycji na orbicie.
+     * Zakłada, że transformacje (translate/rotate) zostały już zastosowane.
+     */
+    drawMoon(ctx) {
+        if (!this.isLoaded || !this.areMoonsLoaded || !this.currentMoonImage) return;
+        const scaledHeight = this.image.height * this.SCALE;
+        const moonScaledWidth = this.currentMoonImage.width * this.MOON_SCALE;
+        const moonScaledHeight = this.currentMoonImage.height * this.MOON_SCALE;
+        const orbitRadius = scaledHeight / 2;
+        ctx.drawImage(
+            this.currentMoonImage,
+            -moonScaledWidth / 2,
+            orbitRadius - (moonScaledHeight / 2 + 342),
+            moonScaledWidth,
+            moonScaledHeight
+        );
+    }
+    // =================== KONIEC ZMIAN ===================
 }

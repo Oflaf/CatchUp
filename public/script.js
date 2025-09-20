@@ -63,7 +63,7 @@ const cycleManager = new CycleManager();
 // === SEKCJA GWIAZD: Nowa klasa do zarządzania gwiazdami na nocnym niebie ===
 // ====================================================================
 const starImagePaths = {
-    star1: 'img/world/star1.png',
+    star1: 'img/world/star.png',
     star2: 'img/world/star2.png'
 };
 const starImages = {};
@@ -213,15 +213,29 @@ class NPCManager {
     spawnNPCs(gameData) {
         this.clear();
         if (!gameData || gameData.villageType === 'none' || !gameData.placedBuildings || gameData.placedBuildings.length === 0) return;
+
+        // ================= POCZĄTEK ZMIAN =================
+        const MAX_NPCS = 4;
+        // ================= KONIEC ZMIAN =================
+
         const groundY = DEDICATED_GAME_HEIGHT - gameData.groundLevel - playerSize;
         const buildings = gameData.placedBuildings;
         const xCoords = buildings.map(b => b.x);
         const widths = buildings.map(b => b.width);
         this.villageBounds.minX = Math.min(...xCoords) - 150;
         this.villageBounds.maxX = Math.max(...xCoords.map((x, i) => x + widths[i])) + 150;
-        buildings.forEach(building => {
+        
+        // ================= POCZĄTEK ZMIAN =================
+        // Zmieniono pętlę forEach na pętlę for...of, aby można było ją przerwać
+        for (const building of buildings) {
+            if (this.npcs.length >= MAX_NPCS) {
+                break; // Przerwij pętlę, jeśli osiągnięto maksymalną liczbę NPC
+            }
             const npcCount = 1 + Math.floor(Math.random() * 2);
             for (let i = 0; i < npcCount; i++) {
+                 if (this.npcs.length >= MAX_NPCS) {
+                    break; // Przerwij wewnętrzną pętlę, jeśli osiągnięto limit
+                }
                 const availableHairs = customizationOptions.hair;
                 const randomIndex = Math.floor(Math.random() * 4);
                 const randomHair = availableHairs[randomIndex];
@@ -244,7 +258,8 @@ class NPCManager {
                 };
                 this.npcs.push(npc);
             }
-        });
+        }
+        // ================= KONIEC ZMIAN =================
         console.log(`Spawned ${this.npcs.length} NPCs for the village.`);
     }
 
@@ -388,7 +403,7 @@ const exampleCustomItemPaths = {
     items: {'rod':{path:'img/item/rod.png',width:playerSize*2,height:playerSize,pivotX_in_img:Math.round(20*(playerSize/128)),pivotY_in_round:(20*(playerSize/128))},'lantern':{path:'img/item/lantern.png',width:playerSize,height:playerSize,pivotX_in_img:playerSize/2,pivotY_in_img:playerSize/2},'float':{path:'img/item/float.png',width:32,height:62,pivotX_in_img:FLOAT_SIZE/2,pivotY_in_img:FLOAT_SIZE/2}}
 };
 
-let localPlayer = { id: null, username: 'Player' + Math.floor(Math.random()*1000), color: '#' + Math.floor(Math.random()*16777215).toString(16).padStart(6,'0'), x: 50, y: DEDICATED_GAME_HEIGHT-50-playerSize, isJumping: false, velocityY: 0, isWalking: false, isIdle: false, animationFrame: 0, idleAnimationFrame: 0, direction: 1, velocityX: 0, currentMouseX: undefined, currentMouseY: undefined, customizations: { hat:'none', hair:'none', accessories:'none', beard:'none', clothes:'none', pants:'none', shoes:'none', rightHandItem:ITEM_NONE, hairSaturation:50, hairHue:180, hairBrightness:50, beardSaturation:50, beardHue:180, beardBrightness:50 }, isCasting:false, castingPower:0, fishingBarSliderPosition:0, fishingBarTime:0, castingDirectionAngle:0, hasLineCast:false, floatWorldX:null, floatWorldY:null, rodTipWorldX:null, rodTipWorldY:null, lineAnchorWorldY:null };
+let localPlayer = { id: null, username: 'Player' + Math.floor(Math.random()*1000), danglingBobber: { x: 0, y: 0, oldX: 0, oldY: 0, initialized: false } , color: '#' + Math.floor(Math.random()*16777215).toString(16).padStart(6,'0'), x: 50, y: DEDICATED_GAME_HEIGHT-50-playerSize, isJumping: false, velocityY: 0, isWalking: false, isIdle: false, animationFrame: 0, idleAnimationFrame: 0, direction: 1, velocityX: 0, currentMouseX: undefined, currentMouseY: undefined, customizations: { hat:'none', hair:'none', accessories:'none', beard:'none', clothes:'none', pants:'none', shoes:'none', rightHandItem:ITEM_NONE, hairSaturation:50, hairHue:180, hairBrightness:50, beardSaturation:50, beardHue:180, beardBrightness:50 }, isCasting:false, castingPower:0, fishingBarSliderPosition:0, fishingBarTime:0, castingDirectionAngle:0, hasLineCast:false, floatWorldX:null, floatWorldY:null, rodTipWorldX:null, rodTipWorldY:null, lineAnchorWorldY:null };
 myUsernameSpan.textContent = localPlayer.username; myColorDisplay.style.backgroundColor = localPlayer.color;
 
 let playersInRoom = {};
@@ -415,7 +430,8 @@ let customizationMenuState = 'category';
 let selectedColorPropertyIndex = 0;
 const colorProperties = ['brightness', 'saturation', 'hue'];
 let lastTime = 0;
-
+const inventoryManager = new InventoryManager(); 
+const fishingManager = new FishingManager();
 const pierSpanImages = {};
 let pierSupportData = [];
 
@@ -551,14 +567,16 @@ function applyCycleColorBalance() {
     }
     // Faza 2: 90 do 135 stopni (Południe)
     else if (angle >= 90 && angle < 135) {
-        const progress = (angle - 90) / 45;
+        const progress = (angle - 85) / 45;
         const brightness = lerp(1, 0.65, progress);
+        const contrast = lerp(1, 1.15, progress);
         const saturation = lerp(1, 0.5, progress); // Niskie nasycenie
         const opacity = lerp(0, 0.92, progress);
 
         filters.push(`brightness(${brightness})`);
         filters.push(`saturate(${saturation})`);
-        overlayColor = `rgba(0, 130, 180, ${opacity})`; // Chłodny, głęboki niebiesko-zielony
+        filters.push(`contrast(${contrast})`);     
+        overlayColor = `rgba(0, 80, 180, ${opacity})`; // Chłodny, głęboki niebiesko-zielony
     }
     // Faza 3: 135 do 225 stopni (Zachód słońca)
     else if (angle >= 135 && angle < 225) {
@@ -566,9 +584,12 @@ function applyCycleColorBalance() {
         const brightness = 0.65;
         const saturation = 0.5;// Niskie nasycenie
         const opacity = 0.92;
+        const contrast = 1.15;
         filters.push(`brightness(${brightness})`);
         filters.push(`saturate(${saturation})`);
-        overlayColor = `rgba(0, 130, 180, ${opacity})`; // Chłodny, głęboki niebiesko-zielony
+        filters.push(`contrast(${contrast})`);   
+   
+        overlayColor = `rgba(0, 80, 180, ${opacity})`; // Chłodny, głęboki niebiesko-zielony
     }
     // Faza 4: 225 do 270 stopni (Zmierzch)
     else if (angle >= 225 && angle < 270) {
@@ -579,6 +600,8 @@ function applyCycleColorBalance() {
         const saturation = lerp(0.7, 1, progress); // Niskie nasycenie
         const opacity = lerp(0.65, 0, progress);
         filters.push(`saturate(${saturation})`);
+        const contrast = lerp(1.15, 1, progress);
+        filters.push(`contrast(${contrast})`);  
         overlayColor = `rgba(255, 120, 180, ${opacity})`;
     }
 
@@ -784,6 +807,8 @@ function drawPlayer(p, imageSet = characterImages) {
 }
 
 
+// W pliku script.js
+
 function drawCustomizationMenu() {
     const ROLLER_X_OFFSET_FROM_PLAYER = playerSize * currentZoomLevel * 1.5;
     const ROLLER_Y_OFFSET = -playerSize * currentZoomLevel * 0.5;
@@ -792,6 +817,7 @@ function drawCustomizationMenu() {
     const FONT_SIZES = [16, 20, 24, 20, 16];
     const playerScreenX = (localPlayer.x - cameraX) * currentZoomLevel;
     const playerScreenY = (localPlayer.y - cameraY) * currentZoomLevel;
+
     const menuX = playerScreenX + (playerSize / 2) * currentZoomLevel + ROLLER_X_OFFSET_FROM_PLAYER;
     const menuY = playerScreenY + (playerSize / 2) * currentZoomLevel + ROLLER_Y_OFFSET;
     ctx.save();
@@ -876,6 +902,90 @@ function drawFishingBar(p) {
     ctx.fillRect(barScreenX, barScreenY, powerWidth, FISHING_BAR_HEIGHT);
     ctx.strokeStyle = 'white';
     ctx.strokeRect(barScreenX, barScreenY, FISHING_BAR_WIDTH, FISHING_BAR_HEIGHT);
+    ctx.restore();
+}
+
+function drawDanglingBobber(ctx, p) {
+    // Warunki wyjścia: funkcja działa tylko dla lokalnego gracza,
+    // który ma wędkę, ale jeszcze jej nie zarzucił.
+    if (!p || p.customizations.rightHandItem !== ITEM_ROD || p.hasLineCast || p.rodTipWorldX === null) {
+        if (p.danglingBobber) p.danglingBobber.initialized = false; // Resetuj przy zmianie warunków
+        return;
+    }
+
+    const bobber = p.danglingBobber;
+    const floatImage = characterCustomImages.items.float;
+    if (!floatImage || !floatImage.complete) return;
+
+    // Stałe dla symulacji fizyki
+    const GRAVITY = 0.4;
+    const DAMPING = 0.79; // Tłumienie ruchu (opór powietrza)
+    const ROPE_LENGTH = 8; // Długość "żyłki", na której wisi spławik
+    const ITERATIONS = 1; // Ile razy stabilizować pozycję (dla sztywności linki)
+
+    // Inicjalizacja pozycji spławika przy pierwszym uruchomieniu
+    if (!bobber.initialized) {
+        bobber.x = p.rodTipWorldX;
+        bobber.y = p.rodTipWorldY + ROPE_LENGTH;
+        bobber.oldX = bobber.x;
+        bobber.oldY = bobber.y;
+        bobber.initialized = true;
+    }
+    
+    // ===== SYMULACJA FIZYKI (VERLET INTEGRATION) =====
+
+    // 1. Oblicz pęd na podstawie poprzedniej pozycji
+    let velocityX = (bobber.x - bobber.oldX) * DAMPING;
+    let velocityY = (bobber.y - bobber.oldY) * DAMPING;
+
+    // 2. Zapisz aktualną pozycję jako starą dla następnej klatki
+    bobber.oldX = bobber.x;
+    bobber.oldY = bobber.y;
+
+    // 3. Zastosuj siły (grawitacja) i zaktualizuj pozycję
+    bobber.x += velocityX;
+    bobber.y += velocityY;
+    bobber.y += GRAVITY;
+
+    // 4. Zastosuj ograniczenie (długość linki) - kluczowy element
+    // To utrzymuje spławik "na uwięzi" przy końcu wędki.
+    for (let i = 0; i < ITERATIONS; i++) {
+        const dx = bobber.x - p.rodTipWorldX;
+        const dy = bobber.y - p.rodTipWorldY;
+        const distance = Math.sqrt(dx * dx + dy * dy);
+        const difference = ROPE_LENGTH - distance;
+        const percent = difference / distance / 2; // Dzielone przez 2 dla stabilności
+        
+        const offsetX = dx * percent;
+        const offsetY = dy * percent;
+
+        bobber.x += offsetX;
+        bobber.y += offsetY;
+    }
+
+    // ===== RYSOWANIE =====
+    ctx.save();
+    // Przejdź do koordynatów świata (tak jak inne elementy gry)
+    ctx.scale(currentZoomLevel, currentZoomLevel);
+    ctx.translate(-cameraX, -cameraY);
+
+    // Rysuj krótką linkę od końca wędki do spławika
+    ctx.strokeStyle = '#ffffff7e';
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.moveTo(p.rodTipWorldX, p.rodTipWorldY);
+    ctx.lineTo(bobber.x, bobber.y);
+    ctx.stroke();
+
+    // Narysuj spławik w jego nowej, fizycznie obliczonej pozycji
+    ctx.drawImage(
+        floatImage,
+        bobber.x - FLOAT_SIZE / 2,
+        bobber.y - FLOAT_SIZE / 2, // Przesunięcie, by środek obrazka był w punkcie (x, y)
+        FLOAT_SIZE,
+        FLOAT_SIZE * 2
+    );
+
     ctx.restore();
 }
 
@@ -1204,7 +1314,28 @@ function gameLoop(currentTime) {
     sendPlayerInput();
     updateLocalPlayerMovement();
     reconcilePlayerPosition();
-    updateCamera();
+    updateCamera(); // <- zaraz po tej linii
+    
+    // ==========================================================
+    // WKLEJ TEN BLOK KODU TUTAJ:
+    const playerScreenX = (localPlayer.x - cameraX) * currentZoomLevel;
+    const playerScreenY = (localPlayer.y - cameraY) * currentZoomLevel;
+    const inventoryWidth = 3 * inventoryManager.SLOT_SIZE + 2 * inventoryManager.GRID_GAP;
+    const inventoryHeight = 3 * inventoryManager.SLOT_SIZE + 2 * inventoryManager.GRID_GAP;
+
+    let invX = playerScreenX - inventoryWidth - 40;
+    if (invX < 10) invX = 10;
+
+    let invY = playerScreenY - (inventoryHeight / 2) + 30;
+    if (invY < 10) invY = 10;
+    if (invY + inventoryHeight > canvas.height - 10) invY = canvas.height - inventoryHeight - 10;
+    
+    const inventoryOrigin = { x: invX, y: invY };
+
+    // Wywołaj aktualizację menedżera ekwipunku w każdej klatce
+    inventoryManager.update(deltaTime, inventoryOrigin);
+    // ==========================================================
+
     if (localPlayer.isCasting) {
         localPlayer.fishingBarTime += FISHING_SLIDER_SPEED;
         localPlayer.fishingBarSliderPosition = (Math.sin(localPlayer.fishingBarTime) + 1) / 2;
@@ -1214,13 +1345,35 @@ function gameLoop(currentTime) {
     // ZMIANA: Uproszczona i wydajna pętla renderowania
     
     // Krok 1: Zaktualizuj style naszej nakładki CSS. Przeglądarka zajmie się resztą.
-    applyCycleColorBalance(); 
+     applyCycleColorBalance(); 
 
-    // Krok 2: Wyczyść i narysuj wszystko na canvasie bez żadnych efektów.
+    // Krok 2: Wyczyść i narysuj wszystko na canvasie w odpowiedniej kolejności warstw.
     ctx.clearRect(0, 0, DEDICATED_GAME_WIDTH, DEDICATED_GAME_HEIGHT);
-    cycleManager.draw(ctx);
-    starManager.draw(ctx, cycleManager); // Rysowanie gwiazd
 
+
+const centerX = canvas.width / 2;
+const centerY = canvas.height / 2;
+
+// --- WARSTWA 1: Tło nieba (obracające się) ---
+ctx.save();
+    ctx.translate(centerX, centerY + 2150);
+    ctx.rotate(cycleManager.rotation);
+    cycleManager.drawBackground(ctx);
+    ctx.restore(); // Zakończ transformację dla tła
+
+    // --- WARSTWA 2: Gwiazdy (statyczne, na wierzchu tła) ---
+    // Rysujemy je poza blokiem save/restore, aby nie były obracane.
+    starManager.draw(ctx, cycleManager);
+
+    // --- WARSTWA 3: Księżyc (obracający się, na wierzchu gwiazd) ---
+    ctx.save();
+    ctx.translate(centerX, centerY + 2150);
+    ctx.rotate(cycleManager.rotation); // Musimy ponownie zastosować tę samą transformację
+    cycleManager.drawMoon(ctx);
+    ctx.restore(); // Zakończ transformację dla księżyca
+
+
+    // Dalsza część pętli renderowania...
     ctx.save();
     ctx.scale(currentZoomLevel, currentZoomLevel);
     ctx.translate(-cameraX, -cameraY);
@@ -1256,9 +1409,15 @@ function gameLoop(currentTime) {
 
     // Krok 3: Narysuj UI, które nie będzie pod wpływem efektów.
     for(const id in playersInRoom) drawFishingLine(playersInRoom[id]);
+    
+    // DODAJ PONIŻSZĄ LINIĘ
+    drawDanglingBobber(ctx, localPlayer);
+    
     drawTutorialHelper();
     if(isCustomizationMenuOpen) drawCustomizationMenu();
     if(localPlayer.isCasting) drawFishingBar(localPlayer);
+    
+    inventoryManager.draw(ctx, inventoryOrigin);
 
     requestAnimationFrame(gameLoop);
 }
@@ -1502,11 +1661,23 @@ document.addEventListener('keydown', (event) => {
             sendPlayerAction('updateCustomization', localPlayer.customizations);
         }
         event.preventDefault();
-    } else if (event.code === 'KeyE' || (event.code === 'Escape' && isCustomizationMenuOpen)) {
-        isCustomizationMenuOpen = !isCustomizationMenuOpen;
-        if (isCustomizationMenuOpen) customizationMenuState = 'category';
-        event.preventDefault();
-    } else if (isCustomizationMenuOpen) {
+    } 
+    else if (event.code === 'KeyE') {
+    event.preventDefault();
+    
+    isCustomizationMenuOpen = !isCustomizationMenuOpen;
+    inventoryManager.toggle(); // Użyj nowej metody toggle
+
+    if (isCustomizationMenuOpen) {
+        customizationMenuState = 'category';
+    }
+} else if (event.code === 'Escape' && isCustomizationMenuOpen) {
+    event.preventDefault();
+    
+    isCustomizationMenuOpen = false;
+    inventoryManager.isOpen = false; // Bezpośrednio ustaw stan
+
+}  else if (isCustomizationMenuOpen) {
         event.preventDefault();
         if (customizationMenuState === 'category') {
             if (event.code === 'ArrowUp') selectedCategoryIndex = (selectedCategoryIndex - 1 + customizationCategories.length) % customizationCategories.length;
@@ -1569,11 +1740,17 @@ document.addEventListener('keyup', (event) => {
 
 canvas.addEventListener('mousemove', (event) => {
     if (currentRoom && localPlayer.id) {
-        const rect = canvas.getBoundingClientRect();
-        const mouseX_unzoomed = (event.clientX - rect.left) * (DEDICATED_GAME_WIDTH / rect.width);
-        const mouseY_unzoomed = (event.clientY - rect.top) * (DEDICATED_GAME_HEIGHT / rect.height);
-        localPlayer.currentMouseX = mouseX_unzoomed / currentZoomLevel + cameraX;
-        localPlayer.currentMouseY = mouseY_unzoomed / currentZoomLevel + cameraY;
+        // Użyjemy istniejącej funkcji, aby uzyskać czyste koordynaty na canvasie
+        const pos = getMousePosOnCanvas(canvas, event);
+
+        // Zaktualizuj pozycję myszy dla logiki postaci (celowanie itp.)
+        localPlayer.currentMouseX = pos.x / currentZoomLevel + cameraX;
+        localPlayer.currentMouseY = pos.y / currentZoomLevel + cameraY;
+
+        // ==========================================================
+        // DODAJ TĘ LINIĘ:
+        inventoryManager.updateMousePosition(pos.x, pos.y);
+        // ==========================================================
     }
 });
 
