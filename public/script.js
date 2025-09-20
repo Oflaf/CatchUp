@@ -1,6 +1,88 @@
 'use strict';
 
 // ====================================================================
+// === SEKCJA 0: NOWY SYSTEM POWIADOMIEŃ ===
+// ====================================================================
+
+/**
+ * Konfiguruje kontener na powiadomienia i dodaje niezbędne style CSS.
+ * Ta funkcja jest wywoływana raz, na dole skryptu.
+ */
+function setupNotificationArea() {
+    // Stwórz kontener na powiadomienia
+    const container = document.createElement('div');
+    container.id = 'notification-container';
+    document.body.appendChild(container);
+
+    // Dodaj style CSS do head
+    const style = document.createElement('style');
+    // ======================= POCZĄTEK ZMIAN =======================
+    style.innerHTML = `
+        #notification-container {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 9999;
+            display: flex;
+            flex-direction: column;
+            gap: 8px; /* Zmniejszony odstęp między powiadomieniami */
+        }
+        .notification {
+            padding: 6px 8px; /* Zmniejszony padding */
+            border-radius: 3px; /* Lekko zmniejszone zaokrąglenie */
+            color: #fff;
+            font-family: 'Segoe UI', sans-serif;
+            font-size: 10px; /* Zmniejszony rozmiar czcionki */
+            opacity: 0;
+            transform: translateX(100%);
+            animation: slideIn 0.5s forwards, fadeOut 0.5s 4.5s forwards;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.15); /* Subtelniejszy cień */
+        }
+        .notification.success { background-color: #28a745; }
+        .notification.warning { background-color: #ffc107; color: #333; }
+        .notification.error { background-color: #dc3545; }
+
+        @keyframes slideIn {
+            to {
+                opacity: 1;
+                transform: translateX(0);
+            }
+        }
+        @keyframes fadeOut {
+            to {
+                opacity: 0;
+                transform: translateX(100%);
+            }
+        }
+    `;
+    // ======================== KONIEC ZMIAN =========================
+    document.head.appendChild(style);
+}
+
+/**
+ * Wyświetla powiadomienie w prawym górnym rogu.
+ * @param {string} message - Wiadomość do wyświetlenia.
+ * @param {'success'|'warning'|'error'} type - Typ powiadomienia (success, warning, error).
+ * @param {number} [duration=5000] - Czas wyświetlania w milisekundach.
+ */
+function showNotification(message, type = 'warning', duration = 5000) {
+    const container = document.getElementById('notification-container');
+    if (!container) return;
+
+    const notification = document.createElement('div');
+    notification.className = `notification ${type}`;
+    notification.textContent = message;
+
+    container.appendChild(notification);
+
+    setTimeout(() => {
+        // Pozwól animacji fadeOut się zakończyć przed usunięciem
+        setTimeout(() => notification.remove(), 500);
+    }, duration - 500);
+}
+
+
+// ====================================================================
 // === SEKCJA 1: ZMIENNE SIECIOWE P2P i STANU GRY ===
 // ====================================================================
 
@@ -99,7 +181,7 @@ class StarManager {
             });
         }
         this.stars.forEach(s => s.currentAlpha = s.baseAlpha);
-        console.log(`Zainicjowano ${this.stars.length} gwiazd.`);
+        console.log(`Initialized ${this.stars.length} stars.`);
     }
 
     update(deltaTime) {
@@ -387,9 +469,12 @@ const BOBBER_ANIMATION_SPEED = 0.05;
 
 const characterImagePaths = { leg: 'img/character/leg.png', body: 'img/character/body.png', arm: 'img/character/arm.png', head: 'img/character/head.png', eye: 'img/character/eye.png' };
 const customizationUIPaths = { frame: 'img/ui/frame.png' };
-const sliderUIPaths = { bar: 'img/ui/bar.png', sliderHandle: 'img/ui/slider.png', fishingBar: 'img/ui/fishingbar.png' };
+// ZMIANA 1: Dodanie ścieżek do obrazków UI łowienia
+const fishingUIPaths = { strike: 'img/ui/strike.png', fishframe: 'img/ui/fishframe.png' };
 const characterImages = {};
 const customizationUIImages = {};
+const fishingUIImages = {}; // Obiekt na załadowane obrazki łowienia
+const fishImages = {};
 const characterCustomImages = { hat: {}, hair: {}, accessories: {}, beard: {}, clothes: {}, clothes_arm: {}, pants: {}, shoes: {}, items: {} };
 const exampleCustomItemPaths = {
     hat: { 'red cap': 'img/character/custom/hat/type1.png', 'blue cap': 'img/character/custom/hat/type2.png', 'special': 'img/character/custom/hat/type3.png', 'street cap': 'img/character/custom/hat/type4.png', 'pink cap': 'img/character/custom/hat/type5.png', 'black cap': 'img/character/custom/hat/type6.png', 'oldschool cap': 'img/character/custom/hat/type7.png', 'blue straight cap': 'img/character/custom/hat/type8.png', 'green straight cap': 'img/character/custom/hat/type9.png', 'kiddo cap': 'img/character/custom/hat/type10.png' },
@@ -430,8 +515,10 @@ let customizationMenuState = 'category';
 let selectedColorPropertyIndex = 0;
 const colorProperties = ['brightness', 'saturation', 'hue'];
 let lastTime = 0;
-const inventoryManager = new InventoryManager(); 
+const inventoryManager = new InventoryManager();
+// ZMIANA 2: Inicjalizacja menedżera łowienia i flagi do śledzenia stanu
 const fishingManager = new FishingManager();
+let previousHasLineCast = false;
 const pierSpanImages = {};
 let pierSupportData = [];
 
@@ -440,20 +527,23 @@ let pierSupportData = [];
 // === SEKCJA 2: FUNKCJE RYSOWANIA (z modyfikacjami) ===
 // ====================================================================
 const npcManager = new NPCManager(drawPlayer);
-
-function mapToDisplayRange(internalValue, internalMin, internalMax) {
-    if (internalMax - internalMin === 0) return 0;
-    const percentage = (internalValue - internalMin) / (internalMax - internalMin);
-    return Math.round(percentage * 100);
-}
-
-function mapFromDisplayRange(displayValue, internalMin, internalMax) {
-    const percentage = displayValue / 100;
-    return Math.round(internalMin + percentage * (internalMax - internalMin));
-}
-
 function loadImages(callback) {
-    const allPaths = { ...characterImagePaths, ...customizationUIPaths, ...sliderUIPaths, ...tutorialImagePaths }; // Usunięto starImagePaths, aby załadować je oddzielnie dla porządku
+    const allPaths = { ...characterImagePaths, ...customizationUIPaths, ...tutorialImagePaths, ...fishingUIPaths };
+    
+    // Zbierz unikalne nazwy ryb ze wszystkich biomów, aby załadować ich obrazki
+    const fishNames = new Set();
+    const allFishData = fishingManager.getFishData();
+    for (const biome in allFishData) {
+        for (const fishName in allFishData[biome]) {
+            fishNames.add(fishName);
+        }
+    }
+    
+    // Dodaj ścieżki do obrazków ryb do listy ładowania
+    fishNames.forEach(name => {
+        allPaths[`fish_${name}`] = `img/fish/${name}.png`;
+    });
+
     let a = Object.keys(allPaths).length;
     for (const b in exampleCustomItemPaths.items) a++;
     for (const c in exampleCustomItemPaths) { if (c === "items") continue; for (const d in exampleCustomItemPaths[c]) a++; }
@@ -464,7 +554,6 @@ function loadImages(callback) {
     };
     for (const biome in biomeDefsForPierSpans) a++;
     
-    // Dodajemy obrazki gwiazd do licznika
     a += Object.keys(starImagePaths).length;
 
     if (a === 0) {
@@ -477,7 +566,6 @@ function loadImages(callback) {
     const f = () => {
         e++;
         if (e === a) {
-            // Po załadowaniu wszystkich innych obrazków, inicjalizujemy gwiazdy
             starManager.areAssetsLoaded = true;
             starManager.initialize(DEDICATED_GAME_WIDTH, DEDICATED_GAME_HEIGHT);
             biomeManager.loadBiomeImages(() => {
@@ -486,12 +574,11 @@ function loadImages(callback) {
         }
     };
 
-    // Ładowanie obrazków gwiazd
     for (const key in starImagePaths) {
         const img = new Image();
         img.src = starImagePaths[key];
         img.onload = () => { starImages[key] = img; f(); };
-        img.onerror = () => { console.error(`Błąd ładowania obrazka gwiazdy: ${img.src}`); f(); };
+        img.onerror = () => { console.error(`Star image loading error: ${img.src}`); f(); };
     }
 
     for (const biomeName in biomeDefsForPierSpans) {
@@ -507,8 +594,14 @@ function loadImages(callback) {
         i.src = allPaths[h];
         i.onload = () => {
             if (characterImagePaths[h]) characterImages[h] = i;
-            else if (customizationUIPaths[h] || sliderUIPaths[h]) customizationUIImages[h] = i;
+            else if (customizationUIPaths[h]) customizationUIImages[h] = i;
             else if (tutorialImagePaths[h]) tutorialImages[h] = i;
+            else if (fishingUIPaths[h]) fishingUIImages[h] = i;
+            // Jeśli klucz zaczyna się od "fish_", zapisz obrazek do obiektu ryb
+            else if (h.startsWith('fish_')) {
+                const fishName = h.substring(5);
+                fishImages[fishName] = i;
+            }
             f()
         }, i.onerror = () => { console.error(`Image loading error: ${i.src}`), f() }
     }
@@ -548,56 +641,47 @@ function reconcilePlayerPosition() {
     if (Math.abs(localPlayer.y - serverState.y) < 0.5) localPlayer.y = serverState.y;
 }
 
-// ZMIANA: Całkowicie nowa, wydajna funkcja do obsługi efektów kolorystycznych
-/**
- * Oblicza i stosuje filtry oraz nakładki kolorów poprzez dedykowaną warstwę CSS.
- */
 function applyCycleColorBalance() {
     const rotationDegrees = (cycleManager.rotation * (180 / Math.PI)) % 360;
     const angle = rotationDegrees < 0 ? rotationDegrees + 360 : rotationDegrees;
 
     let filters = [];
-    let overlayColor = 'rgba(0, 0, 0, 0)'; // Domyślnie przezroczysty
+    let overlayColor = 'rgba(0, 0, 0, 0)';
 
-    // Faza 1: 0 do 90 stopni (Wschód słońca)
     if (angle >= 0 && angle < 90) {
         const progress = angle / 90;
         const opacity = lerp(0, 0.45, progress);
         overlayColor = `rgba(255, 120, 180, ${opacity})`;
     }
-    // Faza 2: 90 do 135 stopni (Południe)
     else if (angle >= 90 && angle < 135) {
         const progress = (angle - 85) / 45;
         const brightness = lerp(1, 0.65, progress);
         const contrast = lerp(1, 1.15, progress);
-        const saturation = lerp(1, 0.5, progress); // Niskie nasycenie
+        const saturation = lerp(1, 0.5, progress);
         const opacity = lerp(0, 0.92, progress);
 
         filters.push(`brightness(${brightness})`);
         filters.push(`saturate(${saturation})`);
         filters.push(`contrast(${contrast})`);     
-        overlayColor = `rgba(0, 80, 180, ${opacity})`; // Chłodny, głęboki niebiesko-zielony
+        overlayColor = `rgba(0, 80, 180, ${opacity})`;
     }
-    // Faza 3: 135 do 225 stopni (Zachód słońca)
     else if (angle >= 135 && angle < 225) {
-
         const brightness = 0.65;
-        const saturation = 0.5;// Niskie nasycenie
+        const saturation = 0.5;
         const opacity = 0.92;
         const contrast = 1.15;
         filters.push(`brightness(${brightness})`);
         filters.push(`saturate(${saturation})`);
         filters.push(`contrast(${contrast})`);   
    
-        overlayColor = `rgba(0, 80, 180, ${opacity})`; // Chłodny, głęboki niebiesko-zielony
+        overlayColor = `rgba(0, 80, 180, ${opacity})`;
     }
-    // Faza 4: 225 do 270 stopni (Zmierzch)
     else if (angle >= 225 && angle < 270) {
         const progress = (angle - 225) / 95;
         const brightness = lerp(0.65, 1, progress);
         filters.push(`brightness(${brightness})`);
 
-        const saturation = lerp(0.7, 1, progress); // Niskie nasycenie
+        const saturation = lerp(0.7, 1, progress);
         const opacity = lerp(0.65, 0, progress);
         filters.push(`saturate(${saturation})`);
         const contrast = lerp(1.15, 1, progress);
@@ -605,7 +689,6 @@ function applyCycleColorBalance() {
         overlayColor = `rgba(255, 120, 180, ${opacity})`;
     }
 
-    // Zastosuj obliczone style do naszego elementu DIV
     cycleOverlay.style.backgroundColor = overlayColor;
     cycleOverlay.style.backdropFilter = filters.length > 0 ? filters.join(' ') : 'none';
 }
@@ -802,6 +885,13 @@ function drawPlayer(p, imageSet = characterImages) {
     ctx.restore();
 
     if (p.username) {
+        // ======================= POCZĄTEK POPRAWKI =======================
+        // Zmniejszono wartość X z 1.8 do 0.95, aby czubek wędki był znacznie bliżej postaci.
+        // Nieznacznie zmieniono wartość Y, aby lepiej dopasować pozycję.
+        const ROD_TIP_OFFSET_X = playerSize * 1.07; 
+        const ROD_TIP_OFFSET_Y = -playerSize * 0.32;
+        // ======================== KONIEC POPRAWKI ========================
+
         p.customizations && p.customizations.rightHandItem === ITEM_ROD ? (p.rodTipWorldX = p.x + playerSize / 2 + (frontArmOffsetX + originalArmPivotInImageX - playerSize / 2) * p.direction + (ROD_TIP_OFFSET_X * Math.cos(b) - ROD_TIP_OFFSET_Y * Math.sin(b)) * p.direction, p.rodTipWorldY = p.y + playerSize / 2 + (0 + originalArmPivotInImageY - playerSize / 2) + (ROD_TIP_OFFSET_X * Math.sin(b) + ROD_TIP_OFFSET_Y * Math.cos(b)), p.id === localPlayer.id && (localPlayer.rodTipWorldX = p.rodTipWorldX, localPlayer.rodTipWorldY = p.rodTipWorldY)) : (p.rodTipWorldX = null, p.rodTipWorldY = null, p.id === localPlayer.id && (localPlayer.rodTipWorldX = null, localPlayer.rodTipWorldY = null)), ctx.fillStyle = "white", ctx.font = `${DEFAULT_FONT_SIZE_USERNAME}px ${PIXEL_FONT}`, ctx.textAlign = "center", ctx.fillText(p.username || p.id.substring(0, 5), p.x + playerSize / 2, p.y - 10 + a)
     }
 }
@@ -906,10 +996,8 @@ function drawFishingBar(p) {
 }
 
 function drawDanglingBobber(ctx, p) {
-    // Warunki wyjścia: funkcja działa tylko dla lokalnego gracza,
-    // który ma wędkę, ale jeszcze jej nie zarzucił.
     if (!p || p.customizations.rightHandItem !== ITEM_ROD || p.hasLineCast || p.rodTipWorldX === null) {
-        if (p.danglingBobber) p.danglingBobber.initialized = false; // Resetuj przy zmianie warunków
+        if (p.danglingBobber) p.danglingBobber.initialized = false;
         return;
     }
 
@@ -917,13 +1005,11 @@ function drawDanglingBobber(ctx, p) {
     const floatImage = characterCustomImages.items.float;
     if (!floatImage || !floatImage.complete) return;
 
-    // Stałe dla symulacji fizyki
     const GRAVITY = 0.4;
-    const DAMPING = 0.79; // Tłumienie ruchu (opór powietrza)
-    const ROPE_LENGTH = 8; // Długość "żyłki", na której wisi spławik
-    const ITERATIONS = 1; // Ile razy stabilizować pozycję (dla sztywności linki)
+    const DAMPING = 0.79;
+    const ROPE_LENGTH = 8;
+    const ITERATIONS = 1;
 
-    // Inicjalizacja pozycji spławika przy pierwszym uruchomieniu
     if (!bobber.initialized) {
         bobber.x = p.rodTipWorldX;
         bobber.y = p.rodTipWorldY + ROPE_LENGTH;
@@ -932,29 +1018,22 @@ function drawDanglingBobber(ctx, p) {
         bobber.initialized = true;
     }
     
-    // ===== SYMULACJA FIZYKI (VERLET INTEGRATION) =====
-
-    // 1. Oblicz pęd na podstawie poprzedniej pozycji
     let velocityX = (bobber.x - bobber.oldX) * DAMPING;
     let velocityY = (bobber.y - bobber.oldY) * DAMPING;
 
-    // 2. Zapisz aktualną pozycję jako starą dla następnej klatki
     bobber.oldX = bobber.x;
     bobber.oldY = bobber.y;
 
-    // 3. Zastosuj siły (grawitacja) i zaktualizuj pozycję
     bobber.x += velocityX;
     bobber.y += velocityY;
     bobber.y += GRAVITY;
 
-    // 4. Zastosuj ograniczenie (długość linki) - kluczowy element
-    // To utrzymuje spławik "na uwięzi" przy końcu wędki.
     for (let i = 0; i < ITERATIONS; i++) {
         const dx = bobber.x - p.rodTipWorldX;
         const dy = bobber.y - p.rodTipWorldY;
         const distance = Math.sqrt(dx * dx + dy * dy);
         const difference = ROPE_LENGTH - distance;
-        const percent = difference / distance / 2; // Dzielone przez 2 dla stabilności
+        const percent = difference / distance / 2;
         
         const offsetX = dx * percent;
         const offsetY = dy * percent;
@@ -963,13 +1042,10 @@ function drawDanglingBobber(ctx, p) {
         bobber.y += offsetY;
     }
 
-    // ===== RYSOWANIE =====
     ctx.save();
-    // Przejdź do koordynatów świata (tak jak inne elementy gry)
     ctx.scale(currentZoomLevel, currentZoomLevel);
     ctx.translate(-cameraX, -cameraY);
 
-    // Rysuj krótką linkę od końca wędki do spławika
     ctx.strokeStyle = '#ffffff7e';
     ctx.lineWidth = 4;
     ctx.beginPath();
@@ -977,11 +1053,10 @@ function drawDanglingBobber(ctx, p) {
     ctx.lineTo(bobber.x, bobber.y);
     ctx.stroke();
 
-    // Narysuj spławik w jego nowej, fizycznie obliczonej pozycji
     ctx.drawImage(
         floatImage,
         bobber.x - FLOAT_SIZE / 2,
-        bobber.y - FLOAT_SIZE / 2, // Przesunięcie, by środek obrazka był w punkcie (x, y)
+        bobber.y - FLOAT_SIZE / 2,
         FLOAT_SIZE,
         FLOAT_SIZE * 2
     );
@@ -991,26 +1066,57 @@ function drawDanglingBobber(ctx, p) {
 
 function drawFishingLine(p) {
     if (!p.hasLineCast || p.rodTipWorldX === null || p.floatWorldX === null) return;
+
     ctx.save();
     ctx.scale(currentZoomLevel, currentZoomLevel);
     ctx.translate(-cameraX, -cameraY);
-    ctx.strokeStyle = '#ffffff99';
-    ctx.lineWidth = 4;
-    ctx.beginPath();
-    ctx.moveTo(p.rodTipWorldX, p.rodTipWorldY);
-    ctx.lineTo(p.floatWorldX, p.floatWorldY+24);
-    ctx.stroke();
+
     const floatImage = characterCustomImages.items.float;
+
     if (floatImage && floatImage.complete) {
         bobberAnimationTime += BOBBER_ANIMATION_SPEED;
-        const verticalOffset = Math.sin(bobberAnimationTime) * BOBBER_VERTICAL_OSCILLATION;
-        ctx.drawImage(floatImage, p.floatWorldX - FLOAT_SIZE / 2, p.floatWorldY - FLOAT_SIZE / 2 + verticalOffset, FLOAT_SIZE, FLOAT_SIZE * 2);
+        let verticalOffset = Math.sin(bobberAnimationTime) * BOBBER_VERTICAL_OSCILLATION;
+        let rotation = 0;
+
+        // ======================= POCZĄTEK ZMIAN =======================
+        // AKTUALIZACJA WARUNKU: Spławik walczy zarówno podczas brania (isBiting),
+        // jak i po udanym zacięciu (isFishHooked).
+        if (p.id === localPlayer.id && (fishingManager.isBiting || fishingManager.isFishHooked)) {
+            const biteTime = Date.now();
+            verticalOffset += Math.sin(biteTime / 100) * 8; 
+            rotation = Math.sin(biteTime / 150) * 0.7; 
+        }
+        // ======================== KONIEC ZMIAN =========================
+
+        const bobberAnimatedX = p.floatWorldX;
+        const bobberAnimatedY = p.floatWorldY + verticalOffset;
+
+        ctx.strokeStyle = '#ffffff6b';
+        ctx.lineWidth = 4;
+        ctx.beginPath();
+        ctx.moveTo(p.rodTipWorldX, p.rodTipWorldY);
+        ctx.lineTo(bobberAnimatedX, bobberAnimatedY);
+        ctx.stroke();
+
+        ctx.save();
+        ctx.translate(bobberAnimatedX, bobberAnimatedY);
+        ctx.rotate(rotation);
+        ctx.drawImage(floatImage, -FLOAT_SIZE / 2, -FLOAT_SIZE -8, FLOAT_SIZE, FLOAT_SIZE * 2);
+        ctx.restore();
     } else {
+        ctx.strokeStyle = '#ffffff6b';
+        ctx.lineWidth = 4;
+        ctx.beginPath();
+        ctx.moveTo(p.rodTipWorldX, p.rodTipWorldY);
+        ctx.lineTo(p.floatWorldX, p.floatWorldY + 24);
+        ctx.stroke();
+
         ctx.fillStyle = 'red';
         ctx.beginPath();
         ctx.arc(p.floatWorldX, p.floatWorldY, 10, 0, Math.PI * 2);
         ctx.fill();
     }
+    
     ctx.restore();
 }
 
@@ -1061,23 +1167,28 @@ function drawInsects() {
 }
 
 // ====================================================================
-// === SEKCJA 3: LOGIKA SIECIOWA (bez zmian) ===
+// === SEKCJA 3: LOGIKA SIECIOWA (z modyfikacjami) ===
 // ====================================================================
 
 function initializeSignaling() {
     signalingSocket = io();
-    signalingSocket.on('connect', () => console.log('Connected to the signaling server.', signalingSocket.id));
+    signalingSocket.on('connect', () => {
+        console.log('Connected to the signaling server.', signalingSocket.id);
+        showNotification('Connected to the signaling server.', 'success');
+    });
     signalingSocket.on('roomListUpdate', (hosts) => {
         availableRooms = hosts;
         if (!currentRoom) {
             roomListUl.innerHTML = '';
             if (Object.keys(hosts).length === 0) {
-                roomListUl.innerHTML = '<li>Brak dostępnych pokoi. Stwórz jeden!</li>';
+                // ZMIANA: Tłumaczenie na angielski
+                roomListUl.innerHTML = '<li>No available rooms. Create one!</li>';
             } else {
                 for (let peerId in hosts) {
                     const room = hosts[peerId];
                     const li = document.createElement('li');
-                    li.innerHTML = `<span>${room.name} (Players: ${room.playerCount})</span><button data-peer-id="${peerId}">Dołącz</button>`;
+                    // ZMIANA: Tłumaczenie na angielski
+                    li.innerHTML = `<span>${room.name} (Players: ${room.playerCount})</span><button data-peer-id="${peerId}">Join</button>`;
                     li.querySelector('button').addEventListener('click', () => joinRoom(peerId));
                     roomListUl.appendChild(li);
                 }
@@ -1086,7 +1197,8 @@ function initializeSignaling() {
     });
     signalingSocket.on('roomRemoved', (removedRoomId) => {
         if (hostConnection && hostConnection.peer === removedRoomId) {
-            alert('Pokój, w którym byłeś, został usunięty!');
+            // ZMIANA: Użycie systemu powiadomień
+            showNotification('The room you were in has been removed by the host.', 'warning');
             leaveCurrentRoomUI();
         }
     });
@@ -1104,9 +1216,19 @@ function initializePeer(callback) {
         console.log('My ID in the P2P network (from the PeerJS cloud server): ' + id);
         if (callback) callback(id);
     });
-    peer.on('error', (err) => { console.error("MAIN PEER OBJECT ERROR: ", err); alert("A fatal PeerJS error occurred. Check the console. Error type: " + err.type); });
-    peer.on('disconnected', () => { console.warn(`PEERJS: Disconnected from PeerJS broker server. I'm trying to reconnect...`); });
-    peer.on('close', () => { console.error(`PEERJS: The connection to the broker server has been permanently closed. New connections cannot be made.`); });
+    peer.on('error', (err) => {
+        console.error("MAIN PEER OBJECT ERROR: ", err);
+        // ZMIANA: Użycie systemu powiadomień
+        showNotification(`A fatal PeerJS error occurred: ${err.type}`, 'error');
+    });
+    peer.on('disconnected', () => {
+        console.warn(`PEERJS: Disconnected from PeerJS broker server. I'm trying to reconnect...`);
+        showNotification('Disconnected from PeerJS server. Reconnecting...', 'warning');
+    });
+    peer.on('close', () => {
+        console.error(`PEERJS: The connection to the broker server has been permanently closed. New connections cannot be made.`);
+        showNotification('Connection to PeerJS server closed permanently.', 'error');
+    });
 }
 function onSuccessfulJoin(roomData, hostPeerId = null) {
     if (!roomData || !roomData.name) {
@@ -1126,22 +1248,12 @@ function onSuccessfulJoin(roomData, hostPeerId = null) {
         currentWorldWidth = roomData.gameData.worldWidth;
         biomeManager.worldWidth = currentWorldWidth;
 
-        // ================= ZMIANA START =================
-        // Sprawdzamy, czy host przesłał dane o cyklu dnia.
         if (typeof roomData.gameData.initialCycleRotation === 'number' && typeof roomData.gameData.roomCreationTimestamp === 'number') {
-            // Obliczamy, ile czasu minęło (w sekundach) od momentu stworzenia pokoju przez hosta.
             const timeElapsedSeconds = (Date.now() - roomData.gameData.roomCreationTimestamp) / 1000;
-            
-            // Obliczamy, o jaki kąt cykl powinien się obrócić w tym czasie.
             const rotationToAdd = timeElapsedSeconds * cycleManager.ROTATION_SPEED;
-            
-            // Ustawiamy rotację w naszym lokalnym menedżerze cyklu.
-            // Będzie to suma początkowej rotacji i rotacji, która nastąpiła od stworzenia pokoju.
             cycleManager.rotation = roomData.gameData.initialCycleRotation + rotationToAdd;
-
-            console.log(`Zsynchronizowano porę dnia. Czas od startu hosta: ${timeElapsedSeconds.toFixed(2)}s.`);
+            console.log(`Synchronized day cycle. Time since host start: ${timeElapsedSeconds.toFixed(2)}s.`);
         }
-        // ================= ZMIANA KONIEC =================
         
         npcManager.loadCurrentBiomeAssets(roomData.gameData.biome, () => {
             npcManager.spawnNPCs(roomData.gameData);
@@ -1203,6 +1315,8 @@ function onSuccessfulJoin(roomData, hostPeerId = null) {
     lobbyDiv.style.display = 'none';
     gameContainerDiv.style.display = 'block';
     console.log(`Successfully joined the room: "${currentRoom.name}"`);
+    // ZMIANA: Użycie systemu powiadomień
+    showNotification(`Successfully joined the room: "${currentRoom.name}"`, 'success');
 }
 
 
@@ -1308,16 +1422,14 @@ function gameLoop(currentTime) {
     bobberAnimationTime += BOBBER_ANIMATION_SPEED;
     biomeManager.updateAnimations(deltaTime);
     cycleManager.update(deltaTime);
-    starManager.update(deltaTime); // Aktualizacja gwiazd
+    starManager.update(deltaTime);
     npcManager.update(deltaTime);
     updateTutorialAnimations();
     sendPlayerInput();
     updateLocalPlayerMovement();
     reconcilePlayerPosition();
-    updateCamera(); // <- zaraz po tej linii
+    updateCamera();
     
-    // ==========================================================
-    // WKLEJ TEN BLOK KODU TUTAJ:
     const playerScreenX = (localPlayer.x - cameraX) * currentZoomLevel;
     const playerScreenY = (localPlayer.y - cameraY) * currentZoomLevel;
     const inventoryWidth = 3 * inventoryManager.SLOT_SIZE + 2 * inventoryManager.GRID_GAP;
@@ -1331,10 +1443,7 @@ function gameLoop(currentTime) {
     if (invY + inventoryHeight > canvas.height - 10) invY = canvas.height - inventoryHeight - 10;
     
     const inventoryOrigin = { x: invX, y: invY };
-
-    // Wywołaj aktualizację menedżera ekwipunku w każdej klatce
     inventoryManager.update(deltaTime, inventoryOrigin);
-    // ==========================================================
 
     if (localPlayer.isCasting) {
         localPlayer.fishingBarTime += FISHING_SLIDER_SPEED;
@@ -1342,38 +1451,38 @@ function gameLoop(currentTime) {
         localPlayer.castingPower = localPlayer.fishingBarSliderPosition;
     }
 
-    // ZMIANA: Uproszczona i wydajna pętla renderowania
-    
-    // Krok 1: Zaktualizuj style naszej nakładki CSS. Przeglądarka zajmie się resztą.
-     applyCycleColorBalance(); 
+    // ZMIANA 5: Logika zarządzania stanem łowienia
+    if (localPlayer.hasLineCast && !previousHasLineCast) {
+        fishingManager.startFishing();
+    }
+    if (!localPlayer.hasLineCast && previousHasLineCast) {
+        fishingManager.cancelFishing();
+    }
+    previousHasLineCast = localPlayer.hasLineCast;
+    fishingManager.update(deltaTime);
 
-    // Krok 2: Wyczyść i narysuj wszystko na canvasie w odpowiedniej kolejności warstw.
+    applyCycleColorBalance(); 
     ctx.clearRect(0, 0, DEDICATED_GAME_WIDTH, DEDICATED_GAME_HEIGHT);
 
 
 const centerX = canvas.width / 2;
 const centerY = canvas.height / 2;
 
-// --- WARSTWA 1: Tło nieba (obracające się) ---
 ctx.save();
     ctx.translate(centerX, centerY + 2150);
     ctx.rotate(cycleManager.rotation);
     cycleManager.drawBackground(ctx);
-    ctx.restore(); // Zakończ transformację dla tła
+    ctx.restore();
 
-    // --- WARSTWA 2: Gwiazdy (statyczne, na wierzchu tła) ---
-    // Rysujemy je poza blokiem save/restore, aby nie były obracane.
     starManager.draw(ctx, cycleManager);
 
-    // --- WARSTWA 3: Księżyc (obracający się, na wierzchu gwiazd) ---
     ctx.save();
     ctx.translate(centerX, centerY + 2150);
-    ctx.rotate(cycleManager.rotation); // Musimy ponownie zastosować tę samą transformację
+    ctx.rotate(cycleManager.rotation);
     cycleManager.drawMoon(ctx);
-    ctx.restore(); // Zakończ transformację dla księżyca
+    ctx.restore();
 
 
-    // Dalsza część pętli renderowania...
     ctx.save();
     ctx.scale(currentZoomLevel, currentZoomLevel);
     ctx.translate(-cameraX, -cameraY);
@@ -1407,10 +1516,8 @@ ctx.save();
 
     ctx.restore();
 
-    // Krok 3: Narysuj UI, które nie będzie pod wpływem efektów.
     for(const id in playersInRoom) drawFishingLine(playersInRoom[id]);
     
-    // DODAJ PONIŻSZĄ LINIĘ
     drawDanglingBobber(ctx, localPlayer);
     
     drawTutorialHelper();
@@ -1419,12 +1526,22 @@ ctx.save();
     
     inventoryManager.draw(ctx, inventoryOrigin);
 
+    // ZMIANA 5 (cd.): Rysowanie UI menedżera łowienia
+    let bobberScreenPos = null;
+    if (localPlayer.hasLineCast && localPlayer.floatWorldX !== null) {
+        bobberScreenPos = {
+            x: (localPlayer.floatWorldX - cameraX) * currentZoomLevel,
+            y: (localPlayer.floatWorldY - cameraY) * currentZoomLevel
+        };
+    }
+    fishingManager.draw(ctx, localPlayer, bobberScreenPos, cameraX, currentZoomLevel);
+
     requestAnimationFrame(gameLoop);
 }
 
 
 // ====================================================================
-// === SEKCJA 5: OBSŁUGA UI i P2P (bez zmian) ===
+// === SEKCJA 5: OBSŁUGA UI i P2P (z modyfikacjami) ===
 // ====================================================================
 
 createRoomBtn.addEventListener('click', () => {
@@ -1435,7 +1552,7 @@ createRoomBtn.addEventListener('click', () => {
     initializePeer((peerId) => {
         if (!peerId) {
             console.error("Failed to obtain Peer ID. Unable to create room.");
-            alert("Network error, unable to create room.");
+            showNotification("Network error: unable to create room.", 'error');
             isHost = false;
             createRoomBtn.disabled = false;
             newRoomNameInput.disabled = false;
@@ -1502,11 +1619,13 @@ function joinRoom(hostPeerId) {
                             if (!playersInRoom[data.payload.id]) {
                                 playersInRoom[data.payload.id] = data.payload.playerData;
                                 console.log(`Player ${data.payload.username} has joined.`);
+                                showNotification(`Player ${data.payload.username} has joined.`, 'success');
                             }
                             break;
                         case 'playerLeftRoom':
                             if (playersInRoom[data.payload]) {
                                 console.log(`Player ${playersInRoom[data.payload].username} has left the room.`);
+                                showNotification(`Player ${playersInRoom[data.payload].username} has left.`, 'warning');
                                 delete playersInRoom[data.payload];
                             }
                             break;
@@ -1532,7 +1651,7 @@ function joinRoom(hostPeerId) {
             hostConnection = peer.connect(hostPeerId, { reliable: true });
             if (!hostConnection) {
                 console.error("[GUEST] FATAL ERROR: peer.connect() returned null.");
-                alert("Failed to initialize connection to host.");
+                showNotification("Failed to initialize connection to host.", 'error');
                 return;
             }
             console.log("[GUEST] The connection object has been created. I'm waiting for events...");
@@ -1541,7 +1660,10 @@ function joinRoom(hostPeerId) {
                 signalingSocket.emit('notify-join', hostPeerId);
                 hostConnection.send({ type: 'requestJoin', payload: localPlayer });
             });
-            hostConnection.on('error', (err) => { console.error(`[GUEST] ERROR P2P CONNECTING TO HOST:`, err); alert('An error occurred while trying to connect to the host. Check your console.'); });
+            hostConnection.on('error', (err) => {
+                console.error(`[GUEST] ERROR P2P CONNECTING TO HOST:`, err);
+                showNotification('An error occurred while trying to connect to the host.', 'error');
+            });
             hostConnection.on('data', (data) => {
                 switch(data.type) {
                     case 'roomJoined': onSuccessfulJoin(data.payload, hostPeerId); break;
@@ -1558,15 +1680,29 @@ function joinRoom(hostPeerId) {
                         if (!playersInRoom[data.payload.id]) {
                             playersInRoom[data.payload.id] = data.payload.playerData;
                             console.log(`Player ${data.payload.username} joined.`);
+                            showNotification(`Player ${data.payload.username} joined.`, 'success');
                         }
                         break;
-                    case 'playerLeftRoom': if(playersInRoom[data.payload]) { console.log(`Player ${playersInRoom[data.payload].username} has left.`); delete playersInRoom[data.payload]; } break;
+                    case 'playerLeftRoom':
+                        if(playersInRoom[data.payload]) {
+                            console.log(`Player ${playersInRoom[data.payload].username} has left.`);
+                            showNotification(`Player ${playersInRoom[data.payload].username} has left.`, 'warning');
+                            delete playersInRoom[data.payload];
+                        }
+                        break;
                     case 'playerCustomizationUpdated': if(playersInRoom[data.payload.id]) playersInRoom[data.payload.id].customizations = data.payload.customizations; break;
                     case 'grassSwaying': if (biomeManager) biomeManager.startSwayAnimation(data.payload.grassId, data.payload.direction); break;
                 }
             });
-            hostConnection.on('error', (err) => { console.error(`[GUEST] P2P CONNECTION ERROR:`, err); alert('An error occurred while communicating with the host.'); });
-            hostConnection.on('close', () => { console.warn("[GUEST] The P2P connection to the host has been closed."); alert('The host closed the room or the connection was lost.'); leaveCurrentRoomUI(); });
+            hostConnection.on('error', (err) => {
+                console.error(`[GUEST] P2P CONNECTION ERROR:`, err);
+                showNotification('An error occurred while communicating with the host.', 'error');
+            });
+            hostConnection.on('close', () => {
+                console.warn("[GUEST] The P2P connection to the host has been closed.");
+                showNotification('The host closed the room or the connection was lost.', 'warning');
+                leaveCurrentRoomUI();
+            });
         }
     });
 }
@@ -1594,6 +1730,7 @@ function leaveCurrentRoomUI() {
     currentWorldWidth=DEDICATED_GAME_WIDTH * 2; biomeManager.worldWidth=currentWorldWidth; biomeManager.setBiome('jurassic');
     keys={}; cameraX=0; cameraY=0; isCustomizationMenuOpen=false;
     console.log('You left the room, returned to the lobby.');
+    showNotification('You left the room and returned to the lobby.', 'warning');
 }
 
 
@@ -1638,47 +1775,49 @@ function getMousePosOnCanvas(canvas, evt) {
 document.addEventListener('keydown', (event) => {
     if (!currentRoom) return;
 
-    if (tutorial.state !== 'finished') {
-        switch (tutorial.state) {
-            case 1: if (event.code === 'ArrowLeft' || event.code === 'ArrowRight' || event.code === 'KeyA' || event.code === 'KeyD') advanceTutorialStep(2); break;
-            case 2: if (event.code === 'Space') advanceTutorialStep(3); break;
-            case 3: if (['Digit1', 'Numpad1', 'Digit2', 'Numpad2', 'Digit3', 'Numpad3'].includes(event.code)) advanceTutorialStep(4); break;
-            case 4: if (event.code === 'KeyT') advanceTutorialStep(5); break;
-            case 5: if (event.code === 'KeyE') advanceTutorialStep('finished'); break;
-        }
+    // ======================= POCZĄTEK ZMIAN =======================
+    // Zmieniono całą strukturę, aby poprawnie obsługiwać priorytety
+
+    // --- Klawisze o najwyższym priorytecie (zawsze działają) ---
+
+    // Zamykanie menu klawiszem ESCAPE
+    if (event.code === 'Escape' && isCustomizationMenuOpen) {
+        event.preventDefault();
+        isCustomizationMenuOpen = false;
+        inventoryManager.isOpen = false;
+        return; // Zakończ, nic więcej nie rób
     }
 
+    // Otwieranie/zamykanie menu klawiszem E (nie działa podczas mini-gry w łowienie)
+    if (event.code === 'KeyE' && !fishingManager.isFishHooked) {
+        event.preventDefault();
+        isCustomizationMenuOpen = !isCustomizationMenuOpen;
+        inventoryManager.toggle();
+        if (isCustomizationMenuOpen) {
+            customizationMenuState = 'category';
+        }
+        return; // Zakończ
+    }
+
+    // Zapisz wciśnięty klawisz DLA RUCHU POSTACI dopiero po obsłużeniu UI
     keys[event.code] = true;
 
-    if (event.code.startsWith('Digit') || event.code.startsWith('Numpad')) {
-        let item = localPlayer.customizations.rightHandItem;
-        if(event.code.includes('1')) item=ITEM_NONE;
-        if(event.code.includes('2')) item=ITEM_ROD;
-        if(event.code.includes('3')) item=ITEM_LANTERN;
-        if(localPlayer.customizations.rightHandItem !== item) {
-            localPlayer.customizations.rightHandItem = item;
-            localPlayerCustomizations.rightHandItem = item;
-            sendPlayerAction('updateCustomization', localPlayer.customizations);
+    // --- Akcje zależne od kontekstu gry ---
+
+    // PRIORYTET 1: Mini-gra w łowienie
+    if (fishingManager.isFishHooked) {
+        if (event.code === 'ArrowLeft' || event.code === 'KeyA') {
+            fishingManager.setBarMovementDirection(-1);
+        } else if (event.code === 'ArrowRight' || event.code === 'KeyD') {
+            fishingManager.setBarMovementDirection(1);
         }
-        event.preventDefault();
-    } 
-    else if (event.code === 'KeyE') {
-    event.preventDefault();
-    
-    isCustomizationMenuOpen = !isCustomizationMenuOpen;
-    inventoryManager.toggle(); // Użyj nowej metody toggle
-
-    if (isCustomizationMenuOpen) {
-        customizationMenuState = 'category';
+        event.preventDefault(); // Zablokuj ruch postaci w tle
+        return; // W trybie mini-gry nic innego nie może się dziać
     }
-} else if (event.code === 'Escape' && isCustomizationMenuOpen) {
-    event.preventDefault();
-    
-    isCustomizationMenuOpen = false;
-    inventoryManager.isOpen = false; // Bezpośrednio ustaw stan
 
-}  else if (isCustomizationMenuOpen) {
-        event.preventDefault();
+    // PRIORYTET 2: Nawigacja w otwartym menu personalizacji
+    if (isCustomizationMenuOpen) {
+        event.preventDefault(); // Zablokuj ruch postaci, gdy menu jest otwarte
         if (customizationMenuState === 'category') {
             if (event.code === 'ArrowUp') selectedCategoryIndex = (selectedCategoryIndex - 1 + customizationCategories.length) % customizationCategories.length;
             else if (event.code === 'ArrowDown') selectedCategoryIndex = (selectedCategoryIndex + 1) % customizationCategories.length;
@@ -1729,28 +1868,60 @@ document.addEventListener('keydown', (event) => {
                 }
             }
         }
+        return; // Zakończ po obsłudze menu
+    }
+    
+    // PRIORYTET 3: Samouczek
+    if (tutorial.state !== 'finished') {
+        switch (tutorial.state) {
+            case 1: if (event.code === 'ArrowLeft' || event.code === 'ArrowRight' || event.code === 'KeyA' || event.code === 'KeyD') advanceTutorialStep(2); break;
+            case 2: if (event.code === 'Space') advanceTutorialStep(3); break;
+            case 3: if (['Digit1', 'Numpad1', 'Digit2', 'Numpad2', 'Digit3', 'Numpad3'].includes(event.code)) advanceTutorialStep(4); break;
+            case 4: if (event.code === 'KeyT') advanceTutorialStep(5); break;
+            case 5: if (event.code === 'KeyE') advanceTutorialStep('finished'); break;
+        }
+    }
+
+    // PRIORYTET 4: Domyślne akcje w grze
+    if (event.code.startsWith('Digit') || event.code.startsWith('Numpad')) {
+        let item = localPlayer.customizations.rightHandItem;
+        if (event.code.includes('1')) item = ITEM_NONE;
+        if (event.code.includes('2')) item = ITEM_ROD;
+        if (event.code.includes('3')) item = ITEM_LANTERN;
+        if (localPlayer.customizations.rightHandItem !== item) {
+            localPlayer.customizations.rightHandItem = item;
+            localPlayerCustomizations.rightHandItem = item;
+            sendPlayerAction('updateCustomization', localPlayer.customizations);
+        }
+        event.preventDefault();
     } else if (event.code === 'Space' && !localPlayer.isJumping) {
         sendPlayerAction('playerJump');
     }
+    // ======================== KONIEC ZMIAN =========================
 });
 
 document.addEventListener('keyup', (event) => {
-    if (currentRoom) delete keys[event.code];
+    if (currentRoom) {
+        // Zawsze usuwaj klawisz z tablicy 'keys', aby ruch postaci się zatrzymał.
+        delete keys[event.code];
+
+        // Sprawdź, czy puszczony klawisz to jeden z klawiszy sterujących paskiem.
+        // I czy kierunek ruchu paska odpowiada puszczonemu klawiszowi.
+        if ((event.code === 'ArrowLeft' || event.code === 'KeyA') && fishingManager.minigameBarDirection === -1) {
+            fishingManager.setBarMovementDirection(0); // Zatrzymaj ruch
+        }
+        if ((event.code === 'ArrowRight' || event.code === 'KeyD') && fishingManager.minigameBarDirection === 1) {
+            fishingManager.setBarMovementDirection(0); // Zatrzymaj ruch
+        }
+    }
 });
 
 canvas.addEventListener('mousemove', (event) => {
     if (currentRoom && localPlayer.id) {
-        // Użyjemy istniejącej funkcji, aby uzyskać czyste koordynaty na canvasie
         const pos = getMousePosOnCanvas(canvas, event);
-
-        // Zaktualizuj pozycję myszy dla logiki postaci (celowanie itp.)
         localPlayer.currentMouseX = pos.x / currentZoomLevel + cameraX;
         localPlayer.currentMouseY = pos.y / currentZoomLevel + cameraY;
-
-        // ==========================================================
-        // DODAJ TĘ LINIĘ:
         inventoryManager.updateMousePosition(pos.x, pos.y);
-        // ==========================================================
     }
 });
 
@@ -1763,16 +1934,47 @@ canvas.addEventListener('mousedown', (event) => {
     }
 });
 
+// ZMIANA 6: Dodanie nasłuchu na prawy przycisk myszy dla zacinania ryby
+canvas.addEventListener('contextmenu', (event) => {
+    if (!currentRoom) return;
+    event.preventDefault(); // Zapobiegaj wyświetlaniu menu kontekstowego
+
+    // Zacinaj rybę tylko wtedy, gdy menu NIE jest otwarte ORAZ gdy ryba bierze.
+    if (!isCustomizationMenuOpen && fishingManager.isBiting) {
+        // ======================= POCZĄTEK ZMIAN =======================
+        // Pobierz nazwę aktualnego biomu z danych pokoju.
+        // Użyj "grassland" jako domyślnego na wypadek, gdyby dane jeszcze nie dotarły.
+        const currentBiome = currentRoom?.gameData?.biome || 'grassland';
+        
+        // Przekaż nazwę biomu do menedżera, aby wiedział, z jakiej puli losować rybę.
+        fishingManager.playerRightClicked(currentBiome);
+        // ======================== KONIEC ZMIAN =========================
+    }
+});
+
 canvas.addEventListener('mouseup', (event) => {
+    // Reaguj tylko na lewy przycisk myszy (button === 0), gdy menu jest zamknięte, jesteś w grze i trzymasz wędkę
     if (event.button === 0 && !isCustomizationMenuOpen && currentRoom && localPlayer.customizations.rightHandItem === ITEM_ROD) {
+        
+        // Ta część odpowiada za rzucanie wędką - jest poprawna i pozostaje bez zmian
         if (localPlayer.isCasting) {
             localPlayer.isCasting = false;
             const angle = Math.atan2(localPlayer.currentMouseY - localPlayer.rodTipWorldY, localPlayer.currentMouseX - localPlayer.rodTipWorldX);
             sendPlayerAction('castFishingLine', { power: localPlayer.castingPower, angle: angle, startX: localPlayer.rodTipWorldX, startY: localPlayer.rodTipWorldY });
             event.preventDefault();
-        } else if (localPlayer.hasLineCast) {
-            sendPlayerAction('reelInFishingLine');
-            event.preventDefault();
+        } 
+        // Ta część odpowiada za zwijanie żyłki
+        else if (localPlayer.hasLineCast) {
+            // ======================= POCZĄTEK ZMIAN =======================
+            //
+            // DODANO WARUNEK: Zwijaj żyłkę tylko wtedy, gdy NIE trwa branie.
+            // To zapobiega "zerwaniu" żyłki lewym przyciskiem, gdy na ekranie jest "strike!".
+            // Gracz musi najpierw użyć prawego przycisku, aby przejść do fazy holowania.
+            //
+            if (!fishingManager.isBiting) {
+                sendPlayerAction('reelInFishingLine');
+                event.preventDefault();
+            }
         }
     }
 });
@@ -1789,9 +1991,19 @@ canvas.addEventListener('wheel', (event) => {
 // ====================================================================
 
 console.log("Initializing P2P client...");
+setupNotificationArea();
 initializeSignaling();
 cycleManager.load();
 loadImages(() => {
     console.log("All images loaded, starting render loop.");
+    
+    // ======================= POCZĄTEK ZMIAN =======================
+    // Przekaż załadowane obrazki do menedżera łowienia
+    fishingManager.strikeImage = fishingUIImages.strike;
+    fishingManager.fishFrameImage = fishingUIImages.fishframe;
+    fishingManager.fishImages = fishImages; // Przekaż obiekt z obrazkami ryb
+    fishingManager.onFishingResetCallback = () => sendPlayerAction('reelInFishingLine');
+    // ======================== KONIEC ZMIAN =========================
+
     requestAnimationFrame(gameLoop);
 });
