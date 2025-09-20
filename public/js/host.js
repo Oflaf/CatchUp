@@ -406,10 +406,14 @@ class GameHost {
                 trees: [],
                 insects: [],
                 placedBuildings: [],
-                piers: []
+                piers: [],
+                initialCycleRotation: Math.random() * (Math.PI * 2),
+                roomCreationTimestamp: Date.now(),
             },
             playerInputs: {}
         };
+        
+        this.room.gameData.placedBuildings = _generateBuildingsLayout(roomId, randomBiome, selectedVillageType, villageXPosition, randomWorldWidth);
         
         this.room.gameData.placedBuildings = _generateBuildingsLayout(roomId, randomBiome, selectedVillageType, villageXPosition, randomWorldWidth);
         this.room.gameData.groundPlants = generateGroundPlants(roomId, this.room.gameData.groundLevel, this.room.gameData.worldWidth);

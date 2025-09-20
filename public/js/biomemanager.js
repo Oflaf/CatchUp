@@ -178,6 +178,7 @@ class BiomeManager {
         this._generateFirstLayerTileGrid();
     }
     
+
     getCurrentInsectImage() {
         return this.biomeInsectImages[this.currentBiomeName];
     }
