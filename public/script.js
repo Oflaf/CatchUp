@@ -144,9 +144,17 @@ const cycleManager = new CycleManager();
 // ====================================================================
 // === SEKCJA GWIAZD: Nowa klasa do zarządzania gwiazdami na nocnym niebie ===
 // ====================================================================
+
+
+
 const starImagePaths = {
     star1: 'img/world/star.png',
-    star2: 'img/world/star2.png'
+    star2: 'img/world/star2.png',
+    common_star: 'img/ui/common_star.png',
+    uncommon_star: 'img/ui/uncommon_star.png',
+    rare_star: 'img/ui/rare_star.png',
+    epic_star: 'img/ui/epic_star.png',
+    legendary_star: 'img/ui/legendary_star.png'
 };
 const starImages = {};
 
@@ -160,24 +168,25 @@ class StarManager {
         this.stars = [];
         if (!this.areAssetsLoaded) return;
         const STAR_COUNT = 1350;
-        const skyHeight = height * 0.65; // Gwiazdy pojawiają się w górnych 65% nieba
+        const skyHeight = height * 0.65;
 
         for (let i = 0; i < STAR_COUNT; i++) {
+            // Używamy tylko kluczy 'star1' i 'star2' dla gwiazd na niebie
             const starTypeKey = Math.random() < 0.7 ? 'star1' : 'star2';
             const starImg = starImages[starTypeKey];
-            const pulses = Math.random() < 0.3; // 30% gwiazd będzie pulsować
+            const pulses = Math.random() < 0.3;
 
             this.stars.push({
                 img: starImg,
                 x: Math.random() * width,
                 y: Math.random() * skyHeight,
-                size: Math.random() * 6.5 + 2.5, // Rozmiar od 1.5px do 4px
-                baseAlpha: Math.random() * 0.5 + 0.3, // Bazowa alfa od 0.3 do 0.8
+                size: Math.random() * 6.5 + 2.5,
+                baseAlpha: Math.random() * 0.5 + 0.3,
                 currentAlpha: 0,
                 rotation: Math.random() * Math.PI * 2,
-                rotationSpeed: (Math.random() - 0.7) * 0.01, // Prędkość obrotu
+                rotationSpeed: (Math.random() - 0.7) * 0.01,
                 pulses: pulses,
-                pulseTimer: Math.random() * 2 + 0.4, // Losowe opóźnienie początkowe dla pulsowania
+                pulseTimer: Math.random() * 2 + 0.4,
             });
         }
         this.stars.forEach(s => s.currentAlpha = s.baseAlpha);
@@ -186,24 +195,19 @@ class StarManager {
 
     update(deltaTime) {
         if (!this.areAssetsLoaded) return;
-
         this.stars.forEach(star => {
             star.rotation += star.rotationSpeed;
-
-            // Płynne wygaszanie pulsu, jeśli alfa jest wyższa niż bazowa
             if (star.currentAlpha > star.baseAlpha) {
-                star.currentAlpha -= 0.05; // Szybkość zanikania pulsu
+                star.currentAlpha -= 0.05;
                 if (star.currentAlpha < star.baseAlpha) {
                     star.currentAlpha = star.baseAlpha;
                 }
             }
-
-            // Logika pulsowania
             if (star.pulses) {
                 star.pulseTimer -= deltaTime;
                 if (star.pulseTimer <= 0) {
-                    star.pulseTimer = 0.2 + Math.random() * 2; // Następny puls za 0.2 do 2.2 sekundy
-                    star.currentAlpha = star.baseAlpha + 0.5; // Błysk!
+                    star.pulseTimer = 0.2 + Math.random() * 2;
+                    star.currentAlpha = star.baseAlpha + 0.5;
                 }
             }
         });
@@ -211,16 +215,10 @@ class StarManager {
 
     draw(ctx, cycleManager) {
         if (!this.areAssetsLoaded || this.stars.length === 0) return;
-
         const rotationDegrees = (cycleManager.rotation * (180 / Math.PI)) % 360;
         const angle = rotationDegrees < 0 ? rotationDegrees + 360 : rotationDegrees;
-
         let nightAlpha = 0;
-        const FADE_IN_START = 85;
-        const FADE_IN_END = 135; // Pełna widoczność w trakcie głębokiej nocy
-        const FADE_OUT_START = 240;
-        const FADE_OUT_END = 270;
-
+        const FADE_IN_START = 85, FADE_IN_END = 135, FADE_OUT_START = 240, FADE_OUT_END = 270;
         if (angle > FADE_IN_START && angle < FADE_IN_END) {
             nightAlpha = (angle - FADE_IN_START) / (FADE_IN_END - FADE_IN_START);
         } else if (angle >= FADE_IN_END && angle <= FADE_OUT_START) {
@@ -228,9 +226,7 @@ class StarManager {
         } else if (angle > FADE_OUT_START && angle < FADE_OUT_END) {
             nightAlpha = 1 - ((angle - FADE_OUT_START) / (FADE_OUT_END - FADE_OUT_START));
         }
-
-        if (nightAlpha <= 0.01) return; // Zakończ, jeśli prawie niewidoczne
-
+        if (nightAlpha <= 0.01) return;
         this.stars.forEach(star => {
             if (!star.img || !star.img.complete) return;
             ctx.save();
@@ -243,6 +239,7 @@ class StarManager {
     }
 }
 
+// Inicjalizacja instancji klasy DOPIERO PO jej zdefiniowaniu
 const starManager = new StarManager();
 
 // ====================================================================
@@ -522,6 +519,21 @@ let previousHasLineCast = false;
 const pierSpanImages = {};
 let pierSupportData = [];
 
+// ======================= POCZĄTEK ZMIAN =======================
+const caughtFishAnimations = [];
+const FISH_ANIMATION_DURATION = 1200; // Czas (ms) animacji ruchu ryby
+const FISH_DISPLAY_DURATION = 4000; // Czas (ms) wyświetlania ryby nad głową
+// ======================== KONIEC ZMIAN =========================
+
+const FISH_TIER_CONFIG = {
+    0: { color: 'rgba(221, 221, 221, 1)', font: `16px ${PIXEL_FONT}`, imageKey: null }, // Brak
+    1: { color: 'rgba(43, 143, 59, 1)', font: `16px ${PIXEL_FONT}`, imageKey: 'common_star' }, // Common (zielony)
+    2: { color: 'rgba(125, 184, 255, 1)', font: `16px ${PIXEL_FONT}`, imageKey: 'uncommon_star' },// Uncommon (niebieski)
+    3: { color: 'rgba(255, 184, 94, 1)',  font: `16px ${PIXEL_FONT}`, imageKey: 'rare_star' },   // Rare (pomarańczowy)
+    4: { color: 'rgba(152, 65, 199, 1)', font: `16px ${PIXEL_FONT}`, imageKey: 'epic_star' },    // Epic (fioletowy)
+    5: { color: 'rgba(185, 6, 117, 1)', font: `bold 16px ${PIXEL_FONT}`, imageKey: 'legendary_star' } // Legendary (różowy/fioletowy, pogrubiony)
+};
+
 
 // ====================================================================
 // === SEKCJA 2: FUNKCJE RYSOWANIA (z modyfikacjami) ===
@@ -539,7 +551,6 @@ function loadImages(callback) {
         }
     }
     
-    // Dodaj ścieżki do obrazków ryb do listy ładowania
     fishNames.forEach(name => {
         allPaths[`fish_${name}`] = `img/fish/${name}.png`;
     });
@@ -554,12 +565,11 @@ function loadImages(callback) {
     };
     for (const biome in biomeDefsForPierSpans) a++;
     
+    // ZMIANA: Dodajemy obrazki gwiazdek do licznika
     a += Object.keys(starImagePaths).length;
 
     if (a === 0) {
-        biomeManager.loadBiomeImages(() => {
-            npcManager.loadCurrentBiomeAssets(biomeManager.currentBiomeName, callback);
-        });
+        // ... (bez zmian)
         return;
     }
     let e = 0;
@@ -573,6 +583,13 @@ function loadImages(callback) {
             });
         }
     };
+
+    for (const key in starImagePaths) {
+        const img = new Image();
+        img.src = starImagePaths[key];
+        img.onload = () => { starImages[key] = img; f(); };
+        img.onerror = () => { console.error(`Star image loading error: ${img.src}`); f(); };
+    }
 
     for (const key in starImagePaths) {
         const img = new Image();
@@ -1166,6 +1183,128 @@ function drawInsects() {
     }
 }
 
+// ======================= POCZĄTEK ZMIAN =======================
+/**
+ * Rysuje i aktualizuje wszystkie aktywne animacje złapanych ryb.
+ */
+function updateAndDrawCaughtFishAnimations() {
+    ctx.save();
+    ctx.setTransform(1, 0, 0, 1, 0, 0); // Rysuj w przestrzeni ekranu, nie świata gry
+
+    const now = Date.now();
+
+    for (let i = caughtFishAnimations.length - 1; i >= 0; i--) {
+        const anim = caughtFishAnimations[i];
+        const player = playersInRoom[anim.playerId];
+
+        if (!player) {
+            caughtFishAnimations.splice(i, 1);
+            continue;
+        }
+
+        if (now > anim.startTime + FISH_ANIMATION_DURATION + FISH_DISPLAY_DURATION) {
+            caughtFishAnimations.splice(i, 1);
+            continue;
+        }
+        
+        const startScreenPos = {
+            x: (anim.startPos.x - cameraX) * currentZoomLevel,
+            y: (anim.startPos.y - cameraY) * currentZoomLevel
+        };
+        
+        const targetScreenPos = {
+            x: (player.x + playerSize / 2 - cameraX) * currentZoomLevel,
+            y: (player.y - 60 - cameraY) * currentZoomLevel
+        };
+
+        let currentPos;
+        const elapsed = now - anim.startTime;
+
+        if (elapsed < FISH_ANIMATION_DURATION) {
+            // Faza 1: Animacja ruchu
+            const progress = elapsed / FISH_ANIMATION_DURATION;
+            const easeProgress = 1 - Math.pow(1 - progress, 3);
+            currentPos = {
+                x: lerp(startScreenPos.x, targetScreenPos.x, easeProgress),
+                y: lerp(startScreenPos.y, targetScreenPos.y, easeProgress)
+            };
+            // W fazie ruchu rysujemy tylko rybę
+            const fishImg = fishImages[anim.fishName];
+            if (fishImg && fishImg.complete) {
+                const fishWidth = fishImg.width * 2.1;
+                const fishHeight = fishImg.height * 2.1;
+                ctx.drawImage(fishImg, currentPos.x - fishWidth / 2, currentPos.y - fishHeight / 2, fishWidth, fishHeight);
+            }
+        } else {
+            // Faza 2: Wyświetlanie nad głową
+            currentPos = targetScreenPos;
+            
+            // ======================= POCZĄTEK ZMIAN =======================
+
+            // ZMIANA 1: Zmieniono kolejność. Najpierw rysujemy rybę, która będzie pod spodem.
+            const fishImg = fishImages[anim.fishName];
+            if (fishImg && fishImg.complete) {
+                const fishWidth = fishImg.width * 2.1;
+                const fishHeight = fishImg.height * 2.1;
+                ctx.drawImage(fishImg, currentPos.x - fishWidth / 2, currentPos.y - fishHeight / 2, fishWidth, fishHeight);
+            }
+
+            // Teraz rysujemy interfejs (gwiazdka i tekst) na wierzchu ryby
+            const tier = anim.tier || 0;
+            const tierConfig = FISH_TIER_CONFIG[tier];
+            const text = `${anim.fishName} ${anim.size}cm`;
+            
+            ctx.font = tierConfig.font;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'bottom';
+
+            const displayElapsed = elapsed - FISH_ANIMATION_DURATION;
+            const FADE_TIME = 700;
+            let textAlpha = 1;
+
+            if (displayElapsed < FADE_TIME) {
+                textAlpha = displayElapsed / FADE_TIME;
+            } else if (displayElapsed > FISH_DISPLAY_DURATION - FADE_TIME) {
+                textAlpha = (FISH_DISPLAY_DURATION - displayElapsed) / FADE_TIME;
+            }
+            
+            const starImg = tierConfig.imageKey ? starImages[tierConfig.imageKey] : null;
+            const padding = 4;
+            
+            // ZMIANA 2: Skalowanie gwiazdki i dynamiczne obliczanie rozmiaru
+            const FISH_TIER_STAR_SCALE = 1.3;
+            const starDrawWidth = starImg ? starImg.width * FISH_TIER_STAR_SCALE : 0;
+            const starDrawHeight = starImg ? starImg.height * FISH_TIER_STAR_SCALE : 0;
+            
+            const textWidth = ctx.measureText(text).width;
+            const totalWidth = textWidth + (starImg ? starDrawWidth + padding : 0);
+
+            // Rysuj gwiazdkę
+            if (starImg && starImg.complete) {
+                const starX = currentPos.x + 85- totalWidth / 2;
+                const starY = currentPos.y + 30 - starDrawHeight / 2 - 4; // Wyśrodkuj pionowo z tekstem
+                ctx.globalAlpha = textAlpha;
+                ctx.drawImage(starImg, starX, starY, starDrawWidth, starDrawHeight);
+                ctx.globalAlpha = 1.0;
+            }
+
+            // Oblicz pozycję tekstu
+            const textX = currentPos.x + (starImg ? (starDrawWidth + padding) / 2 : 0);
+            
+            // Rysuj cień
+            ctx.fillStyle = `rgba(0, 0, 0, ${0.7 * textAlpha})`;
+            ctx.fillText(text, textX-2, currentPos.y - 52);
+
+            // Rysuj główny tekst
+            ctx.fillStyle = tierConfig.color.replace(', 1)', `, ${textAlpha})`);
+            ctx.fillText(text, textX, currentPos.y - 50);
+            // ======================== KONIEC ZMIAN =========================
+        }
+    }
+    ctx.restore();
+}
+// ======================== KONIEC ZMIAN =========================
+
 // ====================================================================
 // === SEKCJA 3: LOGIKA SIECIOWA (z modyfikacjami) ===
 // ====================================================================
@@ -1535,6 +1674,11 @@ ctx.save();
         };
     }
     fishingManager.draw(ctx, localPlayer, bobberScreenPos, cameraX, currentZoomLevel);
+    
+    // ======================= POCZĄTEK ZMIAN =======================
+    // Rysuj animacje złapanych ryb na wierzchu wszystkiego innego
+    updateAndDrawCaughtFishAnimations();
+    // ======================== KONIEC ZMIAN =========================
 
     requestAnimationFrame(gameLoop);
 }
@@ -1635,6 +1779,29 @@ function joinRoom(hostPeerId) {
                         case 'grassSwaying':
                             if (biomeManager) biomeManager.startSwayAnimation(data.payload.grassId, data.payload.direction);
                             break;
+                        // ======================= POCZĄTEK ZMIAN =======================
+                        case 'fishCaughtBroadcast': {
+                            // POPRAWKA: Odczytujemy 'tier' z otrzymanych danych
+                            const { playerId, fishName, size, tier } = data.payload;
+                            const catchingPlayer = playersInRoom[playerId];
+                            if (catchingPlayer && fishImages[fishName]) {
+                                const startPos = {
+                                    x: catchingPlayer.floatWorldX,
+                                    y: catchingPlayer.floatWorldY
+                                };
+                                // POPRAWKA: Dodajemy 'tier' do obiektu animacji
+                                caughtFishAnimations.push({
+                                    playerId: playerId,
+                                    fishName: fishName,
+                                    size: size,
+                                    startTime: Date.now(),
+                                    startPos: startPos,
+                                    tier: tier
+                                });
+                            }
+                            break;
+                        }
+                        // ======================== KONIEC ZMIAN =========================
                     }
                 },
                 sendToServer: (data) => {
@@ -1692,6 +1859,29 @@ function joinRoom(hostPeerId) {
                         break;
                     case 'playerCustomizationUpdated': if(playersInRoom[data.payload.id]) playersInRoom[data.payload.id].customizations = data.payload.customizations; break;
                     case 'grassSwaying': if (biomeManager) biomeManager.startSwayAnimation(data.payload.grassId, data.payload.direction); break;
+                    // ======================= POCZĄTEK ZMIAN =======================
+                    case 'fishCaughtBroadcast': {
+                        // POPRAWKA: Odczytujemy 'tier' z otrzymanych danych
+                        const { playerId, fishName, size, tier } = data.payload;
+                        const catchingPlayer = playersInRoom[playerId];
+                        if (catchingPlayer && fishImages[fishName]) {
+                            const startPos = {
+                                x: catchingPlayer.floatWorldX,
+                                y: catchingPlayer.floatWorldY
+                            };
+                            // POPRAWKA: Dodajemy 'tier' do obiektu animacji
+                            caughtFishAnimations.push({
+                                playerId: playerId,
+                                fishName: fishName,
+                                size: size,
+                                startTime: Date.now(),
+                                startPos: startPos,
+                                tier: tier
+                            });
+                        }
+                        break;
+                    }
+                    // ======================== KONIEC ZMIAN =========================
                 }
             });
             hostConnection.on('error', (err) => {
@@ -1775,8 +1965,7 @@ function getMousePosOnCanvas(canvas, evt) {
 document.addEventListener('keydown', (event) => {
     if (!currentRoom) return;
 
-    // ======================= POCZĄTEK ZMIAN =======================
-    // Zmieniono całą strukturę, aby poprawnie obsługiwać priorytety
+    // ======================= POCZĄTEK POPRAWKI =======================
 
     // --- Klawisze o najwyższym priorytecie (zawsze działają) ---
 
@@ -1788,15 +1977,30 @@ document.addEventListener('keydown', (event) => {
         return; // Zakończ, nic więcej nie rób
     }
 
-    // Otwieranie/zamykanie menu klawiszem E (nie działa podczas mini-gry w łowienie)
+    // Otwieranie/zamykanie menu LUB kończenie samouczka klawiszem E
     if (event.code === 'KeyE' && !fishingManager.isFishHooked) {
-        event.preventDefault();
-        isCustomizationMenuOpen = !isCustomizationMenuOpen;
-        inventoryManager.toggle();
-        if (isCustomizationMenuOpen) {
+        event.preventDefault(); // Zawsze blokuj domyślną akcję dla 'E'
+
+        // Specjalna obsługa dla ostatniego kroku samouczka
+        if (tutorial.state === 5) {
+            // Rozpocznij animację znikania info5.png i oznacz samouczek jako zakończony
+            advanceTutorialStep('finished');
+            
+            // Jednocześnie otwórz menu personalizacji i ekwipunek
+            isCustomizationMenuOpen = true;
+            inventoryManager.isOpen = true; // Używamy bezpośredniego ustawienia, aby mieć pewność, że jest otwarte
             customizationMenuState = 'category';
+            
+        } else {
+            // Standardowa logika otwierania/zamykania menu, gdy samouczek jest nieaktywny lub na innym etapie
+            isCustomizationMenuOpen = !isCustomizationMenuOpen;
+            inventoryManager.toggle();
+            if (isCustomizationMenuOpen) {
+                customizationMenuState = 'category';
+            }
         }
-        return; // Zakończ
+        
+        return; // Zakończ, ponieważ akcja dla klawisza 'E' została już w pełni obsłużona
     }
 
     // Zapisz wciśnięty klawisz DLA RUCHU POSTACI dopiero po obsłużeniu UI
@@ -1878,7 +2082,7 @@ document.addEventListener('keydown', (event) => {
             case 2: if (event.code === 'Space') advanceTutorialStep(3); break;
             case 3: if (['Digit1', 'Numpad1', 'Digit2', 'Numpad2', 'Digit3', 'Numpad3'].includes(event.code)) advanceTutorialStep(4); break;
             case 4: if (event.code === 'KeyT') advanceTutorialStep(5); break;
-            case 5: if (event.code === 'KeyE') advanceTutorialStep('finished'); break;
+            // Usunęliśmy case 5, ponieważ obsługa klawisza 'E' została przeniesiona wyżej
         }
     }
 
@@ -1897,7 +2101,7 @@ document.addEventListener('keydown', (event) => {
     } else if (event.code === 'Space' && !localPlayer.isJumping) {
         sendPlayerAction('playerJump');
     }
-    // ======================== KONIEC ZMIAN =========================
+    // ======================== KONIEC POPRAWKI =========================
 });
 
 document.addEventListener('keyup', (event) => {
@@ -1956,8 +2160,33 @@ canvas.addEventListener('mouseup', (event) => {
     // Reaguj tylko na lewy przycisk myszy (button === 0), gdy menu jest zamknięte, jesteś w grze i trzymasz wędkę
     if (event.button === 0 && !isCustomizationMenuOpen && currentRoom && localPlayer.customizations.rightHandItem === ITEM_ROD) {
         
+        // Kliknięcie, gdy minigra jest ukończona (pasek załadowany)
+        if (fishingManager.isCatchComplete) {
+            const fish = fishingManager.currentFish;
+            if (fish) {
+                // Losuj wielkość ryby w zakresie min-max
+                const size = fish.minsize + Math.random() * (fish.maxsize - fish.minsize);
+                const finalSize = Math.round(size); // Zaokrąglij do najbliższej liczby całkowitej
+
+                // ======================= POCZĄTEK ZMIAN =======================
+                // POPRAWKA: Dołączamy 'tier' do obiektu wysyłanego do hosta.
+                // Używamy 'fish.tier || 0' na wypadek, gdyby jakaś ryba w przyszłości
+                // nie miała zdefiniowanego tieru, domyślnie przyjmie 0.
+                sendPlayerAction('fishCaught', { 
+                    fishName: fish.name, 
+                    size: finalSize,
+                    tier: fish.tier || 0 
+                });
+                // ======================== KONIEC ZMIAN =========================
+                
+                // Wyczyść UI minigry (pasek, ryba w pasku etc.) i zresetuj stan łowienia
+                fishingManager.cleanUpAfterCatch();
+            }
+            event.preventDefault(); // Zatrzymaj dalsze domyślne akcje (np. zwijanie żyłki)
+        } 
+        
         // Ta część odpowiada za rzucanie wędką - jest poprawna i pozostaje bez zmian
-        if (localPlayer.isCasting) {
+        else if (localPlayer.isCasting) {
             localPlayer.isCasting = false;
             const angle = Math.atan2(localPlayer.currentMouseY - localPlayer.rodTipWorldY, localPlayer.currentMouseX - localPlayer.rodTipWorldX);
             sendPlayerAction('castFishingLine', { power: localPlayer.castingPower, angle: angle, startX: localPlayer.rodTipWorldX, startY: localPlayer.rodTipWorldY });
@@ -1965,12 +2194,6 @@ canvas.addEventListener('mouseup', (event) => {
         } 
         // Ta część odpowiada za zwijanie żyłki
         else if (localPlayer.hasLineCast) {
-            // ======================= POCZĄTEK ZMIAN =======================
-            //
-            // DODANO WARUNEK: Zwijaj żyłkę tylko wtedy, gdy NIE trwa branie.
-            // To zapobiega "zerwaniu" żyłki lewym przyciskiem, gdy na ekranie jest "strike!".
-            // Gracz musi najpierw użyć prawego przycisku, aby przejść do fazy holowania.
-            //
             if (!fishingManager.isBiting) {
                 sendPlayerAction('reelInFishingLine');
                 event.preventDefault();
