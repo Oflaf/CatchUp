@@ -5,46 +5,42 @@ function lerp(start, end, amt) {
 class InventoryManager {
     constructor() {
         this.isOpen = false;
-        this.frameImage = null; // Tutaj przechowamy załadowany obrazek slotu
+        this.frameImage = null;
         this.assetsLoaded = false;
         this.slots = [];
-        this.mousePos = { x: 0, y: 0 }; // Pozycja myszy na canvasie
+        this.mousePos = { x: 0, y: 0 };
 
-        this.SLOT_SIZE = 92; // Bazowy rozmiar slotu
-        this.GRID_GAP = 12;  // Odstęp między slotami
+        this.SLOT_SIZE = 92;
+        this.GRID_GAP = 12;
+        
+        // --- NOWOŚĆ: Przenoszenie przedmiotów ---
+        this.heldItem = null; // Przedmiot trzymany przez myszkę
+        this.heldItemOriginalSlot = -1; // Z którego slotu podniesiono przedmiot
 
         this._initSlots();
         this.loadAssets();
     }
 
-    /**
-     * Inicjalizuje 9 obiektów slotów z ich unikalnymi właściwościami animacji.
-     * @private
-     */
     _initSlots() {
         for (let i = 0; i < 9; i++) {
             this.slots.push({
                 id: i,
-                // Właściwości animacji
+                item: null, // <-- NOWOŚĆ: Każdy slot może przechowywać przedmiot
                 scale: 1.0,
-                targetScale: 1.0, // Cel, do którego dąży skala
+                targetScale: 1.0,
                 rotation: 0,
-                // Parametry unikalne dla każdego slotu
-                rockingTimer: Math.random() * Math.PI * 2, // Losowy punkt startowy animacji
-                rockingSpeed: 1.8 + Math.random() * 0.5,   // Różna prędkość kołysania
-                rockingAmplitude: (1.5 + Math.random()) * (Math.PI / 180) // Różna amplituda w radianach
+                rockingTimer: Math.random() * Math.PI * 2,
+                rockingSpeed: 1.8 + Math.random() * 0.5,
+                rockingAmplitude: (1.5 + Math.random()) * (Math.PI / 180)
             });
         }
     }
 
-    /**
-     * Asynchronicznie ładuje obrazek 'frame.png'.
-     */
     async loadAssets() {
         try {
             const img = new Image();
             img.src = 'img/ui/frame.png';
-            await img.decode(); // Czekaj na pełne załadowanie i zdekodowanie obrazu
+            await img.decode();
             this.frameImage = img;
             this.assetsLoaded = true;
             console.log('Inventory assets loaded successfully.');
@@ -53,102 +49,202 @@ class InventoryManager {
         }
     }
 
-    /**
-     * Przełącza widoczność ekwipunku.
-     */
     toggle() {
         this.isOpen = !this.isOpen;
+        // Jeśli zamykamy ekwipunek trzymając przedmiot, odłóż go na miejsce
+        if (!this.isOpen && this.heldItem) {
+            this._dropItem(this.heldItemOriginalSlot);
+        }
     }
 
-    /**
-     * Aktualizuje pozycję myszy. Wywoływane z głównego skryptu.
-     * @param {number} x Pozycja X myszy na canvasie.
-     * @param {number} y Pozycja Y myszy na canvasie.
-     */
     updateMousePosition(x, y) {
         this.mousePos = { x, y };
     }
 
     /**
-     * Główna funkcja aktualizująca logikę ekwipunku, wywoływana w każdej klatce.
-     * @param {number} deltaTime Czas od ostatniej klatki.
-     * @param {object} inventoryOrigin Obiekt {x, y} z lewym górnym rogiem ekwipunku na ekranie.
+     * NOWA FUNKCJA: Dodaje przedmiot do pierwszego wolnego slota.
+     * @param {object} itemData - Obiekt z danymi przedmiotu (np. { name, image, tier }).
+     * @returns {boolean} - Zwraca true, jeśli udało się dodać przedmiot, w przeciwnym razie false.
      */
-    update(deltaTime, inventoryOrigin) {
-        if (!this.isOpen || !this.assetsLoaded) {
-            return;
+    addItem(itemData) {
+        const freeSlot = this.slots.find(slot => slot.item === null);
+        if (freeSlot) {
+            freeSlot.item = itemData;
+            console.log(`Dodano ${itemData.name} do slotu ${freeSlot.id}`);
+            return true;
         }
+        console.warn("Ekwipunek jest pełny!");
+        return false;
+    }
 
-        const gridCols = 3;
+    /**
+     * NOWA FUNKCJA: Wywoływana przy kliknięciu myszką.
+     * @param {object} inventoryOrigin - Pozycja lewego górnego rogu ekwipunku.
+     */
+    handleMouseDown(inventoryOrigin) {
+    if (!this.isOpen) return false;
+
+    const hoveredSlot = this._getHoveredSlot(inventoryOrigin);
+
+    if (this.heldItem) {
+        if (hoveredSlot) {
+            // Upuszczamy na inny slot
+            this._dropItem(hoveredSlot.id);
+        } else {
+            // Upuszczamy poza ekwipunkiem -> SYGNAŁ DO WYRZUCENIA
+            const itemToDrop = this.heldItem;
+            this.heldItem = null; // Czyścimy rękę
+            this.heldItemOriginalSlot = -1;
+            return itemToDrop; // Zwróć przedmiot, który ma zostać wyrzucony
+        }
+        return true; // Akcja wewnątrz ekwipunku została wykonana
+    } else if (hoveredSlot && hoveredSlot.item) {
+        this._pickupItem(hoveredSlot.id);
+        return true; // Akcja wewnątrz ekwipunku została wykonana
+    }
+
+    return false; // Nie wykonano żadnej akcji
+}
+
+    /**
+     * NOWA FUNKCJA WEWNĘTRZNA: Podnosi przedmiot ze slota.
+     * @private
+     */
+    _pickupItem(slotId) {
+        this.heldItem = this.slots[slotId].item;
+        this.slots[slotId].item = null;
+        this.heldItemOriginalSlot = slotId;
+    }
+
+    /**
+     * NOWA FUNKCJA WEWNĘTRZNA: Upuszcza trzymany przedmiot.
+     * @private
+     */
+    _dropItem(targetSlotId) {
+        // Jeśli nie trafiliśmy w żaden slot, zwróć przedmiot na oryginalne miejsce
+        if (targetSlotId === -1) {
+            this.slots[this.heldItemOriginalSlot].item = this.heldItem;
+        } else {
+            const targetSlot = this.slots[targetSlotId];
+            // Jeśli slot jest zajęty, zamień przedmioty miejscami
+            if (targetSlot.item) {
+                this.slots[this.heldItemOriginalSlot].item = targetSlot.item;
+            }
+            targetSlot.item = this.heldItem;
+        }
+        // Wyczyść stan trzymania
+        this.heldItem = null;
+        this.heldItemOriginalSlot = -1;
+    }
+
+    /**
+     * NOWA FUNKCJA WEWNĘTRZNA: Znajduje slot, nad którym jest myszka.
+     * @private
+     * @returns {object|null} - Obiekt slota lub null.
+     */
+    _getHoveredSlot() { // Bez argumentu
+    for (const slot of this.slots) {
+        const col = slot.id % 3;
+        const row = Math.floor(slot.id / 3);
+        const slotX = this.origin.x + col * (this.SLOT_SIZE + this.GRID_GAP); // Użyj this.origin
+        const slotY = this.origin.y + row * (this.SLOT_SIZE + this.GRID_GAP);
+        if (this.mousePos.x >= slotX && this.mousePos.x <= slotX + this.SLOT_SIZE &&
+            this.mousePos.y >= slotY && this.mousePos.y <= slotY + this.SLOT_SIZE) {
+            return slot;
+        }
+    }
+    return null;
+}
+
+
+    update(deltaTime, inventoryOrigin) {
+        if (!this.isOpen || !this.assetsLoaded) return;
+
+        const hoveredSlot = this._getHoveredSlot(inventoryOrigin);
         
-        this.slots.forEach((slot, index) => {
-            // Aktualizacja timera animacji kołysania
+        this.slots.forEach(slot => {
             slot.rockingTimer += slot.rockingSpeed * deltaTime;
+            const isHovered = hoveredSlot && hoveredSlot.id === slot.id;
 
-            // Obliczanie pozycji slotu na ekranie
-            const col = index % gridCols;
-            const row = Math.floor(index / gridCols);
-            const slotX = inventoryOrigin.x + col * (this.SLOT_SIZE + this.GRID_GAP);
-            const slotY = inventoryOrigin.y + row * (this.SLOT_SIZE + this.GRID_GAP);
-
-            // Sprawdzanie, czy mysz jest nad slotem (kolizja AABB)
-            const isHovered = this.mousePos.x >= slotX &&
-                              this.mousePos.x <= slotX + this.SLOT_SIZE &&
-                              this.mousePos.y >= slotY &&
-                              this.mousePos.y <= slotY + this.SLOT_SIZE;
-
-            // Ustawianie docelowej skali i parametrów animacji na podstawie najechania
             if (isHovered) {
                 slot.targetScale = 1.15;
-                // Mocniejsze kołysanie
                 slot.rotation = Math.sin(slot.rockingTimer * 2.5) * (6 * Math.PI / 180);
             } else {
                 slot.targetScale = 1.0;
-                // Delikatne kołysanie
                 slot.rotation = Math.sin(slot.rockingTimer) * slot.rockingAmplitude;
             }
-
-            // Płynne przejście do docelowej skali
             slot.scale = lerp(slot.scale, slot.targetScale, 0.2);
         });
     }
 
-    /**
-     * Rysuje ekwipunek na podanym kontekście canvasa.
-     * @param {CanvasRenderingContext2D} ctx Kontekst 2D canvasa.
-     * @param {object} inventoryOrigin Obiekt {x, y} z lewym górnym rogiem ekwipunku na ekranie.
-     */
     draw(ctx, inventoryOrigin) {
-        if (!this.isOpen || !this.assetsLoaded) {
-            return;
+    if (!this.isOpen || !this.assetsLoaded) {
+        return;
+    }
+
+    const gridCols = 3;
+
+    // --- RYSOWANIE SLOTÓW I PRZEDMIOTÓW W NICH ---
+    this.slots.forEach((slot, index) => {
+        const col = index % gridCols;
+        const row = Math.floor(index / gridCols);
+        
+        const centerX = inventoryOrigin.x + col * (this.SLOT_SIZE + this.GRID_GAP) + this.SLOT_SIZE / 2;
+        const centerY = inventoryOrigin.y + row * (this.SLOT_SIZE + this.GRID_GAP) + this.SLOT_SIZE / 2;
+
+        ctx.save();
+        
+        // Przesuń punkt odniesienia do środka slotu
+        ctx.translate(centerX, centerY);
+        
+        // Zastosuj skalowanie i rotację dla całego slota
+        ctx.scale(slot.scale, slot.scale);
+        ctx.rotate(slot.rotation);
+        
+        // Narysuj ramkę slota, centrując ją
+        ctx.drawImage(this.frameImage, -this.SLOT_SIZE / 2, -this.SLOT_SIZE / 2, this.SLOT_SIZE, this.SLOT_SIZE);
+        
+        // --- POPRAWKA ---
+        // Rysuj przedmiot W TYM SAMYM MIEJSCU, przed ctx.restore()
+        // Przekazujemy środek (0, 0), ponieważ jesteśmy już w przesuniętym kontekście.
+        if (slot.item) {
+            this._drawItem(ctx, slot.item, 0, 0); // Zmieniono centerX, centerY na 0, 0
+        }
+        
+        ctx.restore();
+    });
+
+    // Rysowanie przedmiotu trzymanego przez myszkę pozostaje bez zmian
+    if (this.heldItem) {
+        // Ta funkcja jest wywoływana z globalnymi koordynatami myszy, więc działa poprawnie.
+        this._drawItem(ctx, this.heldItem, this.mousePos.x, this.mousePos.y);
+    }
+}
+
+    /**
+     * NOWA FUNKCJA WEWNĘTRZNA: Rysuje pojedynczy przedmiot.
+     * @private
+     */
+    _drawItem(ctx, item, x, y) {
+        const ITEM_IMAGE_SIZE = this.SLOT_SIZE * 0.7; // Przedmiot jest mniejszy niż slot
+        const STAR_SIZE = 24;
+        
+        // Rysowanie obrazka przedmiotu (ryby)
+        if (item.image && item.image.complete) {
+            ctx.drawImage(item.image, x - ITEM_IMAGE_SIZE / 2, y - ITEM_IMAGE_SIZE / 2, ITEM_IMAGE_SIZE, ITEM_IMAGE_SIZE);
         }
 
-        const gridCols = 3;
-
-        // Pamiętaj, że wyłączenie wygładzania (imageSmoothingEnabled = false)
-        // jest już ustawione w `script.js`, więc tutaj będzie respektowane.
-
-        this.slots.forEach((slot, index) => {
-            const col = index % gridCols;
-            const row = Math.floor(index / gridCols);
-            
-            // Obliczanie środka slotu
-            const centerX = inventoryOrigin.x + col * (this.SLOT_SIZE + this.GRID_GAP) + this.SLOT_SIZE / 2;
-            const centerY = inventoryOrigin.y + row * (this.SLOT_SIZE + this.GRID_GAP) + this.SLOT_SIZE / 2;
-
-            ctx.save();
-            
-            // Przesuń punkt odniesienia do środka slotu, aby transformacje działały poprawnie
-            ctx.translate(centerX, centerY);
-            
-            // Zastosuj skalowanie i rotację
-            ctx.scale(slot.scale, slot.scale);
-            ctx.rotate(slot.rotation);
-            
-            // Narysuj obrazek, centrując go w nowym punkcie odniesienia
-            ctx.drawImage(this.frameImage, -this.SLOT_SIZE / 2, -this.SLOT_SIZE / 2, this.SLOT_SIZE, this.SLOT_SIZE);
-            
-            ctx.restore();
-        });
+        // Rysowanie gwiazdki, jeśli przedmiot ją posiada
+        if (item.tier && item.tier > 0) {
+            const tierConfig = FISH_TIER_CONFIG[item.tier];
+            if (tierConfig && tierConfig.imageKey) {
+                const starImg = starImages[tierConfig.imageKey];
+                if (starImg && starImg.complete) {
+                    const starX = x + ITEM_IMAGE_SIZE / 2 - STAR_SIZE; // Prawy dolny róg
+                    const starY = y + ITEM_IMAGE_SIZE / 2 - STAR_SIZE;
+                    ctx.drawImage(starImg, starX, starY, STAR_SIZE, STAR_SIZE);
+                }
+            }
+        }
     }
 }

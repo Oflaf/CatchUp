@@ -321,10 +321,12 @@ class FishingManager {
             'grassland': {
                 'roach': {chance: 50, power: 22, minsize: 15, maxsize: 40, tier: 1},
                 'crucian': {chance: 30, power: 28, minsize: 15, maxsize: 45, tier: 2},
+                'carp': {chance: 30, power: 31, minsize: 30, maxsize: 90, tier: 3},
             },
             'jurassic': {
                 'roach': {chance: 40, power: 18, minsize: 15, maxsize: 40, tier: 0},
                 'crucian': {chance: 30, power: 22, minsize: 15, maxsize: 45, tier: 2},
+                'carp': {chance: 30, power: 31, minsize: 30, maxsize: 90, tier: 3},
             }
         };
     }

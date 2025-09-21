@@ -89,11 +89,18 @@ function showNotification(message, type = 'warning', duration = 5000) {
 let signalingSocket;
 let peer;
 let isHost = false;
-let gameHostInstance;
+// ZASTĄPIONO: usunięto gameHostInstance
+// let gameHostInstance; 
 let hostConnection;
 
+// DODANO: Zmienne do obsługi Web Workera
+let gameHostWorker = null; // Przechowuje referencję do workera
+let hostPeerConnections = {}; // Przechowuje połączenia z klientami, gdy jesteśmy hostem
+
 let availableRooms = {};
+let worldItems = [];
 let hostRoomConfiguration = null;
+let invX = 0, invY = 0;
 // ========================================================================================
 
 // ================= POCZĄTEK ZMIAN: Rozbudowany Helper (Samouczek) =================
@@ -127,6 +134,7 @@ const ctx = canvas.getContext('2d');
 const cycleOverlay = document.getElementById('cycleOverlay'); // ZMIANA: Pobieramy referencję do naszej nowej nakładki
 
 const DEDICATED_GAME_WIDTH = 1920;
+const DEDICATED_GAME_HEIGHT = 1080;
 
 
 let currentWorldWidth = DEDICATED_GAME_WIDTH * 2;
@@ -527,8 +535,8 @@ const FISH_DISPLAY_DURATION = 4000; // Czas (ms) wyświetlania ryby nad głową
 
 const FISH_TIER_CONFIG = {
     0: { color: 'rgba(221, 221, 221, 1)', font: `16px ${PIXEL_FONT}`, imageKey: null }, // Brak
-    1: { color: 'rgba(43, 143, 59, 1)', font: `16px ${PIXEL_FONT}`, imageKey: 'common_star' }, // Common (zielony)
-    2: { color: 'rgba(125, 184, 255, 1)', font: `16px ${PIXEL_FONT}`, imageKey: 'uncommon_star' },// Uncommon (niebieski)
+    1: { color: 'rgba(14, 168, 40, 1)', font: `16px ${PIXEL_FONT}`, imageKey: 'common_star' }, // Common (zielony)
+    2: { color: 'rgba(46, 123, 216, 1)', font: `16px ${PIXEL_FONT}`, imageKey: 'uncommon_star' },// Uncommon (niebieski)
     3: { color: 'rgba(255, 184, 94, 1)',  font: `16px ${PIXEL_FONT}`, imageKey: 'rare_star' },   // Rare (pomarańczowy)
     4: { color: 'rgba(152, 65, 199, 1)', font: `16px ${PIXEL_FONT}`, imageKey: 'epic_star' },    // Epic (fioletowy)
     5: { color: 'rgba(185, 6, 117, 1)', font: `bold 16px ${PIXEL_FONT}`, imageKey: 'legendary_star' } // Legendary (różowy/fioletowy, pogrubiony)
@@ -640,6 +648,24 @@ function loadImages(callback) {
 
 function lerp(start, end, amt) {
     return (1 - amt) * start + amt * end;
+}
+
+function mapToDisplayRange(value, min, max) {
+    if (max - min === 0) return 0; // Unikaj dzielenia przez zero
+    const percentage = (value - min) / (max - min);
+    return Math.round(percentage * 100);
+}
+
+/**
+ * Mapuje wartość z zakresu wyświetlania (0-100) z powrotem na wewnętrzny zakres (min-max).
+ * @param {number} value - Wartość wejściowa (0-100).
+ * @param {number} min - Minimum zakresu docelowego.
+ * @param {number} max - Maksimum zakresu docelowego.
+ * @returns {number} - Wartość przeskalowana do zakresu min-max.
+ */
+function mapFromDisplayRange(value, min, max) {
+    const percentage = value / 100;
+    return Math.round(min + (max - min) * percentage);
 }
 
 const RECONCILIATION_FACTOR = 0.1;
@@ -1323,15 +1349,17 @@ function initializeSignaling() {
                 // ZMIANA: Tłumaczenie na angielski
                 roomListUl.innerHTML = '<li>No available rooms. Create one!</li>';
             } else {
-                for (let peerId in hosts) {
-                    const room = hosts[peerId];
-                    const li = document.createElement('li');
-                    // ZMIANA: Tłumaczenie na angielski
-                    li.innerHTML = `<span>${room.name} (Players: ${room.playerCount})</span><button data-peer-id="${peerId}">Join</button>`;
-                    li.querySelector('button').addEventListener('click', () => joinRoom(peerId));
-                    roomListUl.appendChild(li);
-                }
-            }
+    for (let peerId in hosts) {
+        // POPRAWKA: Nie pokazuj hostowi jego własnego pokoju na liście
+        if (isHost && peerId === peer?.id) continue;
+
+        const room = hosts[peerId];
+        const li = document.createElement('li');
+        li.innerHTML = `<span>${room.name} (Players: ${room.playerCount})</span><button data-peer-id="${peerId}">Join</button>`;
+        li.querySelector('button').addEventListener('click', () => joinRoom(peerId));
+        roomListUl.appendChild(li);
+    }
+}
         }
     });
     signalingSocket.on('roomRemoved', (removedRoomId) => {
@@ -1500,6 +1528,60 @@ function sendPlayerAction(type, payload = {}) {
     if (hostConnection) hostConnection.send({ type: 'playerAction', payload: { type, payload } });
 }
 
+
+function drawWorldItems(ctx) {
+    if (!worldItems || worldItems.length === 0) return;
+
+    const ITEM_IMAGE_SIZE = inventoryManager.SLOT_SIZE * 0.7;
+    const STAR_SIZE = 24;
+    
+    // Parametry animacji kołysania
+    const ROCKING_SPEED = 2.5;
+    const ROCKING_AMPLITUDE_DEGREES = 15;
+    const ROCKING_AMPLITUDE_RADIANS = ROCKING_AMPLITUDE_DEGREES * (Math.PI / 180);
+
+    // Używamy globalnego czasu, aby wszystkie przedmioty kołysały się w synchronizacji
+    const time = Date.now() / 1000;
+
+    worldItems.forEach(item => {
+        // --- NOWA LOGIKA ANIMACJI ---
+        // Oblicz aktualny kąt obrotu na podstawie funkcji sinus
+        const rotation = Math.sin(time * ROCKING_SPEED) * ROCKING_AMPLITUDE_RADIANS;
+
+        ctx.save();
+        
+        // Przesuń punkt odniesienia do środka przedmiotu
+        ctx.translate(item.x, item.y);
+        
+        // Zastosuj rotację
+        ctx.rotate(rotation);
+        
+        // Używamy tych samych obrazków co ekwipunek
+        const itemImage = fishImages[item.data.name];
+
+        if (itemImage && itemImage.complete) {
+            // Rysuj obrazek, centrując go w nowym punkcie odniesienia (0, 0)
+            ctx.drawImage(itemImage, -ITEM_IMAGE_SIZE / 2, -ITEM_IMAGE_SIZE / 2, ITEM_IMAGE_SIZE, ITEM_IMAGE_SIZE);
+            
+            // Rysowanie gwiazdki również musi odbywać się w obróconym kontekście
+            if (item.data.tier && item.data.tier > 0) {
+                const tierConfig = FISH_TIER_CONFIG[item.data.tier];
+                if (tierConfig && tierConfig.imageKey) {
+                    const starImg = starImages[tierConfig.imageKey];
+                    if (starImg && starImg.complete) {
+                        const starX = ITEM_IMAGE_SIZE / 2 - STAR_SIZE; // Prawy dolny róg względem środka
+                        const starY = ITEM_IMAGE_SIZE / 2 - STAR_SIZE;
+                        ctx.drawImage(starImg, starX, starY, STAR_SIZE, STAR_SIZE);
+                    }
+                }
+            }
+        }
+        
+        ctx.restore();
+    });
+}
+
+
 function gameLoop(currentTime) {
     function updateLocalPlayerMovement() {
         const PLAYER_WALK_SPEED = 5;
@@ -1581,7 +1663,10 @@ function gameLoop(currentTime) {
     if (invY < 10) invY = 10;
     if (invY + inventoryHeight > canvas.height - 10) invY = canvas.height - inventoryHeight - 10;
     
-    const inventoryOrigin = { x: invX, y: invY };
+
+const inventoryOrigin = { x: invX, y: invY };
+inventoryManager.origin = inventoryOrigin; // Ustaw pozycję
+inventoryManager.update(deltaTime); // Już nie potrzebuje argumentu
     inventoryManager.update(deltaTime, inventoryOrigin);
 
     if (localPlayer.isCasting) {
@@ -1641,6 +1726,7 @@ ctx.save();
         if (p.username) drawPlayer(p);
         else npcManager.drawPlayer(p, npcManager.npcAssets);
     });
+    drawWorldItems(ctx);
 
     if(currentRoom?.gameData?.biome){
         const {biome:b,groundLevel:g} = currentRoom.gameData;
@@ -1688,223 +1774,215 @@ ctx.save();
 // === SEKCJA 5: OBSŁUGA UI i P2P (z modyfikacjami) ===
 // ====================================================================
 
+
+// Plik: script.js
+
+
 createRoomBtn.addEventListener('click', () => {
     if (isHost) return;
     isHost = true;
     createRoomBtn.disabled = true;
     newRoomNameInput.disabled = true;
+
     initializePeer((peerId) => {
         if (!peerId) {
-            console.error("Failed to obtain Peer ID. Unable to create room.");
             showNotification("Network error: unable to create room.", 'error');
-            isHost = false;
-            createRoomBtn.disabled = false;
-            newRoomNameInput.disabled = false;
+            isHost = false; createRoomBtn.disabled = false; newRoomNameInput.disabled = false;
             return;
         }
-        console.log(`Peer ID obtained: ${peerId}. Initializing the game host...`);
+
+        console.log(`[HOST-UI] Peer ID: ${peerId}. Uruchamianie workera...`);
         localPlayer.id = peerId;
-        gameHostInstance = new GameHost();
-        const roomConfig = gameHostInstance.start({ id: peerId, username: localPlayer.username, color: localPlayer.color, customizations: localPlayer.customizations });
-        hostRoomConfiguration = roomConfig;
-        signalingSocket.emit('register-host', {
-            peerId,
-            name: newRoomNameInput.value.trim() || roomConfig.name,
-            biome: roomConfig.gameData.biome,
-            worldWidth: roomConfig.gameData.worldWidth,
-            villageType: roomConfig.gameData.villageType
-        });
+        gameHostWorker = new Worker('js/host-worker.js'); // Poprawiona ścieżka, jeśli worker jest w folderze js/
+        
+        // Odbieraj wiadomości Z workera i przekazuj je dalej
+        gameHostWorker.onmessage = (event) => {
+            const { type, peerId: targetPeerId, message } = event.data;
+            
+            // Wiadomość jest dla wszystkich (broadcast) LUB jest dla nas (sendTo)
+            if (type === 'broadcast' || (type === 'sendTo' && targetPeerId === localPlayer.id)) {
+                handleDataFromServer(message);
+            }
+            
+            // Wyślij wiadomość przez sieć do odpowiednich zdalnych klientów
+            if (type === 'broadcast') {
+                Object.values(hostPeerConnections).forEach(conn => conn.send(message));
+            } else if (type === 'sendTo' && targetPeerId !== localPlayer.id) {
+                const conn = hostPeerConnections[targetPeerId];
+                if (conn) conn.send(message);
+            }
+        };
+
+        // Wyślij komendę startu do workera
+        const roomName = newRoomNameInput.value.trim() || `Pokój ${localPlayer.username}`;
+        gameHostWorker.postMessage({ type: 'start', payload: { id: peerId, username: localPlayer.username, color: localPlayer.color, customizations: localPlayer.customizations } });
+
+        // Zarejestruj pokój i nasłuchuj na połączenia od innych graczy
+        signalingSocket.emit('register-host', { peerId, name: roomName });
         peer.on('connection', (conn) => {
+            console.log(`[HOST-UI] Nowe połączenie od klienta: ${conn.peer}`);
+            hostPeerConnections[conn.peer] = conn;
             conn.on('open', () => {
                 conn.on('data', (data) => {
                     if (data.type === 'requestJoin') {
-                        gameHostInstance.addPlayer(conn, data.payload);
-                        if (hostRoomConfiguration) {
-                            const roomDataToSend = { name: hostRoomConfiguration.name, playersInRoom: playersInRoom, gameData: hostRoomConfiguration.gameData };
-                            conn.send({ type: 'roomJoined', payload: roomDataToSend });
-                        } else {
-                            console.error("Host: Unable to send roomJoined - hostRoomConfiguration missing!");
-                        }
-                        signalingSocket.emit('notify-join', peerId);
+                        gameHostWorker.postMessage({ type: 'addPlayer', payload: { peerId: conn.peer, initialPlayerData: data.payload } });
+                    } else {
+                        gameHostWorker.postMessage({ type: data.type, payload: { ...data.payload, peerId: conn.peer } });
                     }
-                    else if (data.type === 'playerInput') gameHostInstance.handlePlayerInput(conn.peer, data.payload);
-                    else if (data.type === 'playerAction') gameHostInstance.handlePlayerAction(conn.peer, data.payload);
                 });
             });
-            conn.on('close', () => { gameHostInstance.removePlayer(conn.peer); signalingSocket.emit('notify-leave', peerId); });
+            conn.on('close', () => {
+                delete hostPeerConnections[conn.peer];
+                gameHostWorker.postMessage({ type: 'removePlayer', payload: { peerId: conn.peer } });
+                signalingSocket.emit('notify-leave', peerId);
+            });
         });
-        console.log(`[HOST] Background server running. Room "${roomConfig.name}" is now visible in the lobby.`);
+        
+        // Stwórz obiekt `hostConnection` do wysyłania akcji hosta DO workera
+        hostConnection = {
+            send: (data) => gameHostWorker.postMessage({ type: data.type, payload: { ...data.payload, peerId: localPlayer.id } })
+        };
+        
+        // NAJPROSTSZE ROZWIĄZANIE: Po prostu dodaj hosta po krótkim opóźnieniu.
+        // To daje workerowi wystarczająco dużo czasu na zainicjowanie się.
+        setTimeout(() => {
+            console.log('[HOST-UI] Dodawanie hosta jako gracza...');
+            gameHostWorker.postMessage({ type: 'addPlayer', payload: { peerId: localPlayer.id, initialPlayerData: localPlayer } });
+        }, 100); // 100ms powinno w zupełności wystarczyć
     });
 });
 
 function joinRoom(hostPeerId) {
     initializePeer((myPeerId) => {
         localPlayer.id = myPeerId;
-        if (isHost && myPeerId === hostPeerId) {
-            console.log('[HOST] Joining to own room detected. Using a simulated connection.');
-            const simulatedConnection = {
-                peer: myPeerId,
-                open: true,
-                send: (data) => {
-                    switch (data.type) {
-                        case 'roomJoined': onSuccessfulJoin(data.payload); break;
-                        case 'gameStateUpdate':
-                            const map = {};
-                            for (const p of data.payload) {
-                                if(playersInRoom[p.id]) {
-                                    p.animationFrame = playersInRoom[p.id].animationFrame;
-                                    p.idleAnimationFrame = playersInRoom[p.id].idleAnimationFrame;
-                                }
-                                map[p.id] = p;
-                            }
-                            playersInRoom = map;
-                            break;
-                        case 'playerJoinedRoom':
-                            if (!playersInRoom[data.payload.id]) {
-                                playersInRoom[data.payload.id] = data.payload.playerData;
-                                console.log(`Player ${data.payload.username} has joined.`);
-                                showNotification(`Player ${data.payload.username} has joined.`, 'success');
-                            }
-                            break;
-                        case 'playerLeftRoom':
-                            if (playersInRoom[data.payload]) {
-                                console.log(`Player ${playersInRoom[data.payload].username} has left the room.`);
-                                showNotification(`Player ${playersInRoom[data.payload].username} has left.`, 'warning');
-                                delete playersInRoom[data.payload];
-                            }
-                            break;
-                        case 'playerCustomizationUpdated':
-                            if (playersInRoom[data.payload.id]) playersInRoom[data.payload.id].customizations = data.payload.customizations;
-                            break;
-                        case 'grassSwaying':
-                            if (biomeManager) biomeManager.startSwayAnimation(data.payload.grassId, data.payload.direction);
-                            break;
-                        // ======================= POCZĄTEK ZMIAN =======================
-                        case 'fishCaughtBroadcast': {
-                            // POPRAWKA: Odczytujemy 'tier' z otrzymanych danych
-                            const { playerId, fishName, size, tier } = data.payload;
-                            const catchingPlayer = playersInRoom[playerId];
-                            if (catchingPlayer && fishImages[fishName]) {
-                                const startPos = {
-                                    x: catchingPlayer.floatWorldX,
-                                    y: catchingPlayer.floatWorldY
-                                };
-                                // POPRAWKA: Dodajemy 'tier' do obiektu animacji
-                                caughtFishAnimations.push({
-                                    playerId: playerId,
-                                    fishName: fishName,
-                                    size: size,
-                                    startTime: Date.now(),
-                                    startPos: startPos,
-                                    tier: tier
-                                });
-                            }
-                            break;
-                        }
-                        // ======================== KONIEC ZMIAN =========================
-                    }
-                },
-                sendToServer: (data) => {
-                     if (data.type === 'playerInput') gameHostInstance.handlePlayerInput(myPeerId, data.payload);
-                     else if (data.type === 'playerAction') gameHostInstance.handlePlayerAction(myPeerId, data.payload);
-                }
-            };
-            hostConnection = { send: (data) => simulatedConnection.sendToServer(data) };
-            gameHostInstance.addPlayer(simulatedConnection, localPlayer);
+        isHost = false; // Jesteśmy gościem
+
+        console.log(`[GUEST] Próba połączenia z hostem: ${hostPeerId}`);
+        hostConnection = peer.connect(hostPeerId, { reliable: true });
+
+        if (!hostConnection) {
+            showNotification("Failed to initialize connection to host.", 'error');
+            return;
         }
-        else {
-            isHost = false;
-            console.log(`[GUEST] I'm trying to establish a P2P connection with host ID: ${hostPeerId}`);
-            hostConnection = peer.connect(hostPeerId, { reliable: true });
-            if (!hostConnection) {
-                console.error("[GUEST] FATAL ERROR: peer.connect() returned null.");
-                showNotification("Failed to initialize connection to host.", 'error');
-                return;
-            }
-            console.log("[GUEST] The connection object has been created. I'm waiting for events...");
-            hostConnection.on('open', () => {
-                console.log(`[GUEST] SUCCESS! A P2P connection to the host (${hostPeerId}) has been opened.`);
-                signalingSocket.emit('notify-join', hostPeerId);
-                hostConnection.send({ type: 'requestJoin', payload: localPlayer });
-            });
-            hostConnection.on('error', (err) => {
-                console.error(`[GUEST] ERROR P2P CONNECTING TO HOST:`, err);
-                showNotification('An error occurred while trying to connect to the host.', 'error');
-            });
-            hostConnection.on('data', (data) => {
-                switch(data.type) {
-                    case 'roomJoined': onSuccessfulJoin(data.payload, hostPeerId); break;
-                    case 'gameStateUpdate':
-                        const map = {};
-                        for (const p of data.payload) {
-                            if(playersInRoom[p.id]) { p.animationFrame = playersInRoom[p.id].animationFrame; p.idleAnimationFrame = playersInRoom[p.id].idleAnimationFrame; }
-                            map[p.id] = p;
-                        }
-                        playersInRoom = map;
-                        if (playersInRoom[localPlayer.id]) Object.assign(localPlayer, playersInRoom[localPlayer.id]);
-                        break;
-                    case 'playerJoinedRoom':
-                        if (!playersInRoom[data.payload.id]) {
-                            playersInRoom[data.payload.id] = data.payload.playerData;
-                            console.log(`Player ${data.payload.username} joined.`);
-                            showNotification(`Player ${data.payload.username} joined.`, 'success');
-                        }
-                        break;
-                    case 'playerLeftRoom':
-                        if(playersInRoom[data.payload]) {
-                            console.log(`Player ${playersInRoom[data.payload].username} has left.`);
-                            showNotification(`Player ${playersInRoom[data.payload].username} has left.`, 'warning');
-                            delete playersInRoom[data.payload];
-                        }
-                        break;
-                    case 'playerCustomizationUpdated': if(playersInRoom[data.payload.id]) playersInRoom[data.payload.id].customizations = data.payload.customizations; break;
-                    case 'grassSwaying': if (biomeManager) biomeManager.startSwayAnimation(data.payload.grassId, data.payload.direction); break;
-                    // ======================= POCZĄTEK ZMIAN =======================
-                    case 'fishCaughtBroadcast': {
-                        // POPRAWKA: Odczytujemy 'tier' z otrzymanych danych
-                        const { playerId, fishName, size, tier } = data.payload;
-                        const catchingPlayer = playersInRoom[playerId];
-                        if (catchingPlayer && fishImages[fishName]) {
-                            const startPos = {
-                                x: catchingPlayer.floatWorldX,
-                                y: catchingPlayer.floatWorldY
-                            };
-                            // POPRAWKA: Dodajemy 'tier' do obiektu animacji
-                            caughtFishAnimations.push({
-                                playerId: playerId,
-                                fishName: fishName,
-                                size: size,
-                                startTime: Date.now(),
-                                startPos: startPos,
-                                tier: tier
-                            });
-                        }
-                        break;
-                    }
-                    // ======================== KONIEC ZMIAN =========================
-                }
-            });
-            hostConnection.on('error', (err) => {
-                console.error(`[GUEST] P2P CONNECTION ERROR:`, err);
-                showNotification('An error occurred while communicating with the host.', 'error');
-            });
-            hostConnection.on('close', () => {
-                console.warn("[GUEST] The P2P connection to the host has been closed.");
-                showNotification('The host closed the room or the connection was lost.', 'warning');
-                leaveCurrentRoomUI();
-            });
-        }
+
+        hostConnection.on('open', () => {
+            console.log(`[GUEST] Połączenie P2P z hostem otwarte.`);
+            signalingSocket.emit('notify-join', hostPeerId);
+            hostConnection.send({ type: 'requestJoin', payload: localPlayer });
+        });
+
+        hostConnection.on('data', (data) => handleDataFromServer(data));
+        hostConnection.on('error', (err) => showNotification('Connection error.', 'error'));
+        hostConnection.on('close', () => {
+            showNotification('The host closed the room or the connection was lost.', 'warning');
+            leaveCurrentRoomUI();
+        });
     });
+}
+
+
+function handleDataFromServer(data) {
+    switch (data.type) {
+        case 'itemPickedUp':
+    const itemData = data.payload;
+    
+    // Odtwarzamy pełny obiekt przedmiotu, dodając obrazek z lokalnej kolekcji
+    const fullItemObject = {
+        name: itemData.name,
+        tier: itemData.tier,
+        image: fishImages[itemData.name] // Znajdź obrazek po nazwie
+    };
+
+    const itemAdded = inventoryManager.addItem(fullItemObject);
+    if (itemAdded) {
+        showNotification(`Podniesiono: ${itemData.name}`, 'success');
+    } else {
+        showNotification('Ekwipunek pełny!', 'warning');
+    }
+    break;
+        case 'roomJoined':
+            onSuccessfulJoin(data.payload, hostConnection?.peer);
+            break;
+        case 'gameStateUpdate':
+    // Zmień sposób odczytu danych, aby obsługiwał nowy format
+    const playersData = data.payload.players;
+    const worldItemsData = data.payload.worldItems;
+
+    const map = {};
+    for (const p of playersData) {
+        if (playersInRoom[p.id]) {
+            p.animationFrame = playersInRoom[p.id].animationFrame;
+            p.idleAnimationFrame = playersInRoom[p.id].idleAnimationFrame;
+        }
+        map[p.id] = p;
+    }
+    playersInRoom = map;
+    worldItems = worldItemsData; // Zaktualizuj globalną listę przedmiotów
+            if (playersInRoom[localPlayer.id]) {
+                // Zachowaj lokalne stany, których serwer nie śledzi
+                const castingState = { isCasting: localPlayer.isCasting, castingPower: localPlayer.castingPower };
+                Object.assign(localPlayer, playersInRoom[localPlayer.id]);
+                Object.assign(localPlayer, castingState);
+            }
+            break;
+        case 'playerJoinedRoom':
+            if (!playersInRoom[data.payload.id]) {
+                playersInRoom[data.payload.id] = data.payload.playerData;
+                showNotification(`Player ${data.payload.username} joined.`, 'success');
+            }
+            break;
+        case 'playerLeftRoom':
+            if (playersInRoom[data.payload]) {
+                showNotification(`Player ${playersInRoom[data.payload].username} has left.`, 'warning');
+                delete playersInRoom[data.payload];
+            }
+            break;
+        case 'playerCustomizationUpdated':
+            if (playersInRoom[data.payload.id]) playersInRoom[data.payload.id].customizations = data.payload.customizations;
+            break;
+        case 'grassSwaying':
+            if (biomeManager) biomeManager.startSwayAnimation(data.payload.grassId, data.payload.direction);
+            break;
+        case 'fishCaughtBroadcast': {
+            const { playerId, fishName, size, tier } = data.payload;
+            const catchingPlayer = playersInRoom[playerId];
+            if (catchingPlayer && fishImages[fishName]) {
+                const startPos = { x: catchingPlayer.floatWorldX, y: catchingPlayer.floatWorldY };
+                caughtFishAnimations.push({
+                    playerId, fishName, size, tier,
+                    startTime: Date.now(),
+                    startPos: startPos
+                });
+            }
+            break;
+        }
+    }
 }
 
 leaveRoomBtn.addEventListener('click', () => {
     const hostPeerId = hostConnection?.peer || (isHost ? peer?.id : null);
-    if(isHost) {
-        if(gameHostInstance) gameHostInstance.stop();
-        setTimeout(() => { if(peer && !peer.destroyed) peer.destroy(); }, 500);
+    
+    if (isHost) {
+        // Jeśli jesteśmy hostem, zakończ działanie workera
+        if (gameHostWorker) {
+            gameHostWorker.terminate();
+            gameHostWorker = null;
+        }
+        // Zamknij wszystkie połączenia P2P
+        for(const peerId in hostPeerConnections) {
+            if (hostPeerConnections[peerId].close) {
+                 hostPeerConnections[peerId].close();
+            }
+        }
+        hostPeerConnections = {};
+        
+        // Zniszcz obiekt PeerJS
+        setTimeout(() => { if(peer && !peer.destroyed) peer.destroy(); peer = null; }, 500);
     }
+
     if (!isHost && hostConnection) hostConnection.close();
     if (hostPeerId) signalingSocket.emit('notify-leave', hostPeerId);
+    
     leaveCurrentRoomUI();
 });
 
@@ -1914,7 +1992,15 @@ function leaveCurrentRoomUI() {
     currentRoom=null; playersInRoom={}; insectsInRoom=[];
     pierSupportData = [];
     npcManager.clear();
-    isHost=false; hostConnection=null; gameHostInstance=null;
+    isHost=false; hostConnection=null; 
+    
+    // Czyszczenie zmiennych workera
+    if (gameHostWorker) {
+        gameHostWorker.terminate();
+        gameHostWorker = null;
+    }
+    hostPeerConnections = {};
+
     createRoomBtn.disabled = false;
     newRoomNameInput.disabled = false;
     currentWorldWidth=DEDICATED_GAME_WIDTH * 2; biomeManager.worldWidth=currentWorldWidth; biomeManager.setBiome('jurassic');
@@ -2130,7 +2216,32 @@ canvas.addEventListener('mousemove', (event) => {
 });
 
 canvas.addEventListener('mousedown', (event) => {
-    if(event.button !== 0 || !currentRoom) return;
+    if (event.button !== 0 || !currentRoom) return;
+
+    // Najpierw obsługujemy ekwipunek
+    const inventoryActionResult = inventoryManager.handleMouseDown({ x: invX, y: invY });
+
+    // Jeśli funkcja zwróciła obiekt (przedmiot do wyrzucenia)
+    if (typeof inventoryActionResult === 'object' && inventoryActionResult !== null) {
+        // Zamiast wysyłać cały obiekt, wyślij tylko niezbędne dane
+        sendPlayerAction('dropItem', {
+            name: inventoryActionResult.name,
+            tier: inventoryActionResult.tier
+            // NIE WYSYŁAJ 'image'
+        });
+        event.preventDefault();
+        return;
+    }
+
+
+    // Jeśli funkcja zwróciła `true` (wykonano akcję wewnątrz ekwipunku)
+    if (inventoryActionResult === true) {
+        event.preventDefault();
+        return;
+    }
+
+    // Jeśli żadna akcja w ekwipunku nie została wykonana (funkcja zwróciła `false`),
+    // kontynuuj z logiką rzucania wędki.
     if (!isCustomizationMenuOpen && localPlayer.customizations.rightHandItem === ITEM_ROD && !localPlayer.hasLineCast) {
         localPlayer.isCasting = true;
         localPlayer.fishingBarTime = 0;
@@ -2173,10 +2284,18 @@ canvas.addEventListener('mouseup', (event) => {
                 // Używamy 'fish.tier || 0' na wypadek, gdyby jakaś ryba w przyszłości
                 // nie miała zdefiniowanego tieru, domyślnie przyjmie 0.
                 sendPlayerAction('fishCaught', { 
-                    fishName: fish.name, 
-                    size: finalSize,
-                    tier: fish.tier || 0 
-                });
+                fishName: fish.name, 
+                size: finalSize,
+                tier: fish.tier || 0 
+            });
+            
+            // --- DODAJ TEN BLOK KODU ---
+            // Dodaj rybę do ekwipunku lokalnego gracza
+            inventoryManager.addItem({
+                name: fish.name,
+                image: fishImages[fish.name], // Obrazek ryby
+                tier: fish.tier || 0 // Tier (gwiazdka)
+            });
                 // ======================== KONIEC ZMIAN =========================
                 
                 // Wyczyść UI minigry (pasek, ryba w pasku etc.) i zresetuj stan łowienia
