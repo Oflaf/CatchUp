@@ -10,7 +10,7 @@ class FishingManager {
         // Stan procesu łowienia
         this.isWaitingForBite = false;
         this.isBiting = false;
-        this.isFishHooked = false; 
+        this.isFishHooked = false;
         this.showFishFrame = false;
 
         // ID timeoutów
@@ -40,6 +40,12 @@ class FishingManager {
         this.fishVelocity = 0;
         this.fishTargetVelocity = 0;
         this.fishMoveTimer = 0;
+
+        // Zmienne dla paska postępu łapania ryby
+        this.catchProgressBarWidth = 0; 
+        this.isCatchComplete = false;
+        this.CATCH_PROGRESS_INCREASE_RATE = 50; 
+        this.CATCH_PROGRESS_DECREASE_RATE = 150; 
     }
 
     startFishing() {
@@ -78,7 +84,30 @@ class FishingManager {
         this.fishVelocity = 0;
         this.fishTargetVelocity = 0;
         this.fishMoveTimer = 0;
+
+        this.catchProgressBarWidth = 0;
+        this.isCatchComplete = false;
     }
+
+    // ======================= POCZĄTEK ZMIAN =======================
+    /**
+     * Czyści UI minigry i resetuje stan po udanym złapaniu,
+     * przygotowując do animacji złapanej ryby.
+     */
+    cleanUpAfterCatch() {
+        this.showFishFrame = false;
+        this.isFishHooked = false;
+        this.isBiting = false; // Na wszelki wypadek
+        this.catchProgressBarWidth = 0;
+        this.isCatchComplete = false;
+        
+        // Wywołaj callback, aby schować wędkę
+        if (this.onFishingResetCallback) {
+            this.onFishingResetCallback();
+        }
+        // Celowo nie czyścimy this.currentFish, bo serwer może go potrzebować do weryfikacji
+    }
+    // ======================== KONIEC ZMIAN =========================
 
     setBarMovementDirection(direction) {
         if (this.isFishHooked) {
@@ -88,6 +117,8 @@ class FishingManager {
 
     failFishing() {
         this.isBiting = false;
+        this.catchProgressBarWidth = 0;
+        this.isCatchComplete = false;
         if (this.onFishingResetCallback) this.onFishingResetCallback();
     }
 
@@ -104,6 +135,8 @@ class FishingManager {
         this.minigameBarVelocity = 0;
         this.minigameBarDirection = 0;
         this.currentFish = null;
+        this.catchProgressBarWidth = 0;
+        this.isCatchComplete = false;
     }
 
     update(deltaTime) {
@@ -155,14 +188,28 @@ class FishingManager {
                     this.fishVelocity *= -1;
                     this.fishTargetVelocity *= -1;
                 }
+                
+                const barLeftEdge = this.minigameBarPosition - (barWidth / 2);
+                const barRightEdge = this.minigameBarPosition + (barWidth / 2);
+                const fishLeftEdge = this.fishPosition - (fishWidth / 2);
+                const fishRightEdge = this.fishPosition + (fishWidth / 2);
+
+                const isOverlapping = barLeftEdge < fishRightEdge && barRightEdge > fishLeftEdge;
+                
+                if (isOverlapping) {
+                    this.catchProgressBarWidth += this.CATCH_PROGRESS_INCREASE_RATE * deltaTime;
+                } else {
+                    this.catchProgressBarWidth -= this.CATCH_PROGRESS_DECREASE_RATE * deltaTime;
+                }
+
+                this.catchProgressBarWidth = Math.max(0, Math.min(this.catchProgressBarWidth, frameWidth));
+                this.isCatchComplete = this.catchProgressBarWidth >= frameWidth;
             }
         }
     }
 
 
     draw(ctx, player, bobberPosition, cameraX, currentZoom) {
-
-        // Rysowanie ikony "strike.png"
         if (this.isBiting && this.strikeImage && this.strikeImage.complete && bobberPosition) {
             const PULSE_SPEED = 25; 
             const PULSE_AMPLITUDE = 0.4;
@@ -184,8 +231,7 @@ class FishingManager {
             ctx.restore();
         }
 
-        // Rysowanie ramki "fishframe.png" i zielonego paska
-                if (this.showFishFrame && this.fishFrameImage && this.fishFrameImage.complete && bobberPosition) {
+        if (this.showFishFrame && this.fishFrameImage && this.fishFrameImage.complete && bobberPosition) {
             const FRAME_ROCKING_SPEED = 2;
             const FRAME_ROCKING_ANGLE_DEG = 5;
             const frameWidth = this.fishFrameImage.width * this.fishFrameScale;
@@ -208,63 +254,83 @@ class FishingManager {
 
             ctx.drawImage(this.fishFrameImage, -frameWidth / 2, -frameHeight / 2, frameWidth, frameHeight);
             
+            const progressBarHeight = 20; 
+            const progressBarY = (frameHeight / 2) + 8; 
+            const gradient = ctx.createLinearGradient(-frameWidth / 2, 0, frameWidth / 2, 0);
+            gradient.addColorStop(0, 'red');
+            gradient.addColorStop(0.5, 'yellow');
+            gradient.addColorStop(1, 'lime');
+            ctx.fillStyle = gradient;
+            ctx.fillRect(-frameWidth / 2, progressBarY, this.catchProgressBarWidth, progressBarHeight);
+
             if (this.currentFish) {
                 const fishImg = this.fishImages[this.currentFish.name];
                 if (fishImg && fishImg.complete) {
-                    // ======================= POCZĄTEK ZMIAN =======================
-                    // 1. Oblicz granice paska i ryby
                     const fishHeight = fishImg.height * 3;
                     const fishWidth = fishImg.width * 3;
                     const fishX = this.fishPosition;
                     const fishY = 0;
-
                     const barLeftEdge = this.minigameBarPosition - (barWidth / 2);
                     const barRightEdge = this.minigameBarPosition + (barWidth / 2);
                     const fishLeftEdge = this.fishPosition - (fishWidth / 2);
                     const fishRightEdge = this.fishPosition + (fishWidth / 2);
-
-                    // 2. Sprawdź, czy występuje kolizja (overlap)
                     const isOverlapping = barLeftEdge < fishRightEdge && barRightEdge > fishLeftEdge;
-
-                    // 3. Ustaw przezroczystość na podstawie kolizji
-                    const targetAlpha = isOverlapping ? 1.0 : 0.3; // Pełna widoczność lub prawie niewidoczna
-                    ctx.globalAlpha = lerp(ctx.globalAlpha, targetAlpha, 0.7); // Płynne przejście alpha
-                    
-                    // 4. Narysuj rybę z obliczoną przezroczystością i obrotem
+                    const targetAlpha = isOverlapping ? 1.0 : 0.3;
+                    ctx.globalAlpha = lerp(ctx.globalAlpha, targetAlpha, 0.7);
                     const FISH_ROCKING_SPEED = 8;
                     const FISH_ROCKING_ANGLE_DEG = 14;
                     const fishRotation = Math.sin(Date.now() / 1000 * FISH_ROCKING_SPEED) * (FISH_ROCKING_ANGLE_DEG * Math.PI / 180);
-
                     ctx.save();
                     ctx.translate(fishX, fishY);
                     ctx.rotate(fishRotation);
                     ctx.drawImage(fishImg, -fishWidth / 2, -fishHeight / 2, fishWidth, fishHeight);
                     ctx.restore();
-                    // ======================== KONIEC ZMIAN =========================
+                    ctx.globalAlpha = 1.0; 
                 }
             }
             
+            if (this.isCatchComplete && this.strikeImage && this.strikeImage.complete) {
+                const PULSE_SPEED = 25; 
+                const PULSE_AMPLITUDE = 0.4;
+                const BASE_SCALE = 1.0; 
+                const ROCKING_SPEED = 10;
+                const MAX_ROCKING_ANGLE_DEG = 25;
+                const scale = BASE_SCALE + Math.sin(this.strikeAnimationTime * PULSE_SPEED) * PULSE_AMPLITUDE;
+                const maxRotationRad = MAX_ROCKING_ANGLE_DEG * (Math.PI / 180);
+                const rotation = Math.sin(this.strikeAnimationTime * ROCKING_SPEED) * maxRotationRad;
+                const strikeBaseWidth = this.strikeImage.width * 1.5;
+                const strikeBaseHeight = this.strikeImage.height * 1.5;
+                const imgWidth = strikeBaseWidth * scale;
+                const imgHeight = strikeBaseHeight * scale;
+                const xPos = (frameWidth / 2) - (strikeBaseWidth / 2) - 5; 
+                const yPos = (-frameHeight / 2) + (strikeBaseHeight / 2) + 5;
+                ctx.save();
+                ctx.translate(xPos, yPos);
+                ctx.rotate(rotation);
+                ctx.drawImage(this.strikeImage, -imgWidth / 2, -imgHeight / 2, imgWidth, imgHeight);
+                ctx.restore();
+            }
+
             ctx.restore();
         }
     }
 
+    // ======================= POCZĄTEK ZMIAN =======================
     _initializeFishData() {
         this.fishData = {
             'grassland': {
-                'roach': {chance: 50, power: 20 },
-                'crucian': {chance: 30, power: 8 },
+                'roach': {chance: 50, power: 22, minsize: 15, maxsize: 40, tier: 1},
+                'crucian': {chance: 30, power: 28, minsize: 15, maxsize: 45, tier: 2},
             },
             'jurassic': {
-                'roach': {chance: 50, power: 8 },
-                'crucian': {chance: 30, power: 16 },
+                'roach': {chance: 40, power: 18, minsize: 15, maxsize: 40, tier: 0},
+                'crucian': {chance: 30, power: 22, minsize: 15, maxsize: 45, tier: 2},
             }
         };
     }
+    // ======================== KONIEC ZMIAN =========================
     
-    // Zwraca całą strukturę danych, przydatne do ładowania obrazków
-    getFishData() {
-        return this.fishData;
-    }
+    getFishData() { return this.fishData; }
 
     getRandomCatch(biomeName) {
         const biomeFish = this.fishData[biomeName];
@@ -272,6 +338,7 @@ class FishingManager {
             console.warn(`[FishingManager] Nie znaleziono danych dla biomu: ${biomeName}`);
             return null;
         }
+        // ZMIANA: Object.entries zwraca [klucz, wartość], więc musimy zmapować to poprawnie
         const availableFish = Object.entries(biomeFish).map(([name, data]) => ({ name, ...data }));
         if (availableFish.length === 0) return null;
 
@@ -280,8 +347,11 @@ class FishingManager {
 
         for (const fish of availableFish) {
             if (randomPick < fish.chance) {
-                // Usuwamy size, bo nie jest już potrzebny w tej wersji
-                return { name: fish.name, power: fish.power };
+                // ======================= POCZĄTEK ZMIAN =======================
+                // POPRAWKA: Zamiast tworzyć nowy, wybiorczy obiekt, zwracamy
+                // cały znaleziony obiekt 'fish', który zawiera już pole 'tier'.
+                return fish; 
+                // ======================== KONIEC ZMIAN =========================
             }
             randomPick -= fish.chance;
         }

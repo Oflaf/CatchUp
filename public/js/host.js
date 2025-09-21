@@ -554,6 +554,25 @@ class GameHost {
                 }
                 break;
             }
+            // ======================= POCZĄTEK ZMIAN =======================
+            case 'fishCaught': {
+                // Odbierz wszystkie dane od klienta, w tym nowy 'tier'
+                const { fishName, size, tier } = actionData.payload;
+                console.log(`[HOST] Gracz ${player.username} złapał ${fishName} (Tier: ${tier}) o wielkości ${size}cm.`);
+
+                // Rozgłoś wydarzenie do WSZYSTKICH graczy, dołączając 'tier' do wiadomości
+                this.broadcast({
+                    type: 'fishCaughtBroadcast',
+                    payload: {
+                        playerId: peerId,
+                        fishName: fishName,
+                        size: size,
+                        tier: tier // Przekaż tier dalej
+                    }
+                });
+                break;
+            }
+            // ======================== KONIEC ZMIAN =========================
         }
     }
 
