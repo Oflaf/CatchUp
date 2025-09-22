@@ -8,7 +8,7 @@ console.log('[DEBUG] Plik host-worker.js został załadowany i uruchomiony.');
 
 
 // ====================================================================================
-// === SEKCJA 1: STAŁE GRY (bez zmian) ===
+// === SEKCJA 1: STAŁE GRY ===
 // ====================================================================================
 
 const AVAILABLE_BIOMES = ['jurassic', 'grassland'];
@@ -38,6 +38,9 @@ const INSECT_DENSITY_FACTOR = 0.0009;
 const MAX_CAST_DISTANCE = 850;
 const MAX_PLAYER_FLOAT_DISTANCE = 950;
 const MIN_PIER_DISTANCE = 600;
+
+const DIGGING_COOLDOWN_MS = 2000; // 2 sekundy przerwy między kopaniem
+
 
 const VILLAGE_TYPE = {
     NONE: 'none',
@@ -91,7 +94,7 @@ const ARM_OFFSET_Y_IN_PLAYER_SPACE = 0;
 
 
 // ====================================================================================
-// === SEKCJA 2: FUNKCJE POMOCNICZE (bez zmian) ===
+// === SEKCJA 2: FUNKCJE POMOCNICZE ===
 // ====================================================================================
 
 function createSeededRandom(seedStr) {
@@ -106,6 +109,27 @@ function createSeededRandom(seedStr) {
         return (seed >>> 0) / MAX_UINT32;
     };
 }
+
+function getRandomBait() {
+    const baitData = {
+        'worm': { chance: 65, name: 'worm' },
+        'bloodworm': { chance: 25, name: 'bloodworm' },
+    };
+    const availableBaits = Object.values(baitData);
+    if (availableBaits.length === 0) return null;
+
+    const totalChanceWeight = availableBaits.reduce((sum, bait) => sum + bait.chance, 0);
+    let randomPick = Math.random() * totalChanceWeight;
+
+    for (const bait of availableBaits) {
+        if (randomPick < bait.chance) {
+            return bait; 
+        }
+        randomPick -= bait.chance;
+    }
+    return null;
+}
+
 
 function generatePiers(roomId, groundLevel, worldWidth) {
     const seededRandom = createSeededRandom(roomId + '-piers');
@@ -330,19 +354,16 @@ function calculateRodTipWorldPosition(player) {
 
 
 // ====================================================================================
-// === SEKCJA 3: GŁÓWNA KLASA GAMEHOST (zmodyfikowana dla Workera) ===
+// === SEKCJA 3: GŁÓWNA KLASA GAMEHOST ===
 // ====================================================================================
 
 class GameHost {
     constructor() {
         this.room = null;
         this.gameLoopInterval = null;
-        // Usunięto this.connections - worker nie zarządza bezpośrednio połączeniami
+        this.digCooldowns = {};
     }
 
-    /**
-     * ZMODYFIKOWANA: Wysyła wiadomość do głównego wątku, aby ten rozgłosił ją do wszystkich graczy.
-     */
     broadcast(message) {
         postMessage({
             type: 'broadcast',
@@ -350,9 +371,6 @@ class GameHost {
         });
     }
     
-    /**
-     * ZMODYFIKOWANA: Wysyła wiadomość do głównego wątku, aby ten wysłał ją do konkretnego gracza.
-     */
     sendTo(peerId, message) {
         postMessage({
             type: 'sendTo',
@@ -410,7 +428,6 @@ class GameHost {
         
         this.gameLoopInterval = setInterval(() => this.updateGame(), GAME_TICK_RATE);
         
-        // Zwracanie wartości nie ma sensu w workerze, ale zostawiamy dla spójności
         return {
             name: this.room.name,
             gameData: this.room.gameData
@@ -426,9 +443,6 @@ class GameHost {
         console.log("[HOST-WORKER] Gra zatrzymana i zresetowana.");
     }
 
-    /**
-     * ZMODYFIKOWANA: Przyjmuje peerId i dane gracza, zamiast obiektu połączenia.
-     */
     addPlayer(peerId, initialPlayerData) {
         console.log(`[HOST-WORKER] Gracz ${initialPlayerData.username} (${peerId}) dołącza.`);
 
@@ -443,12 +457,9 @@ class GameHost {
         };
         this.room.playerInputs[peerId] = { keys: {} };
         
-        // Wyślij dane o pokoju tylko do nowego gracza
-        console.log(`[DEBUG] Worker: Wysyłam 'roomJoined' do ${peerId}`); // <-- DODAJ TEN LOG
-    // Wyślij dane o pokoju tylko do nowego gracza
-    this.sendTo(peerId, {
-        type: 'roomJoined',
-        payload: {
+        this.sendTo(peerId, {
+            type: 'roomJoined',
+            payload: {
                 roomId: this.room.id,
                 roomName: this.room.name,
                 playersInRoom: this.room.players,
@@ -456,7 +467,21 @@ class GameHost {
             }
         });
         
-        // Z opóźnieniem poinformuj wszystkich (w tym nowego gracza) o nowym graczu
+        // ======================= POCZĄTEK ZMIAN =======================
+        // Wyślij nowemu graczowi informację o starowym haczyku.
+        // Robimy to w małym opóźnieniu, aby klient na pewno zdążył przetworzyć `roomJoined`.
+        setTimeout(() => {
+            this.sendTo(peerId, {
+                type: 'awardStarterItem',
+                payload: {
+                    itemName: 'weedless',
+                    itemTier: 0, // Domyślny tier
+                    targetSlot: 'hook'
+                }
+            });
+        }, 150);
+        // ======================== KONIEC ZMIAN =========================
+        
         setTimeout(() => {
              this.broadcast({
                 type: 'playerJoinedRoom',
@@ -474,6 +499,7 @@ class GameHost {
              console.log(`[HOST-WORKER] Gracz ${this.room.players[peerId].username} (${peerId}) opuścił grę.`);
              delete this.room.players[peerId];
              delete this.room.playerInputs[peerId];
+             delete this.digCooldowns[peerId];
              
              this.broadcast({ type: 'playerLeftRoom', payload: peerId });
         }
@@ -496,35 +522,27 @@ class GameHost {
     }
 
     handlePlayerAction(peerId, actionData) {
-        
         if(!this.room) return;
         const player = this.room.players[peerId];
         if(!player) return;
 
         switch(actionData.type) {
             case 'dropItem': {
-    console.log(`[HOST-WORKER] Gracz ${player.username} wyrzucił ${actionData.payload.name}`);
-    
-    // Kierunek, w którym patrzy gracz (1 dla prawo, -1 dla lewo)
-    const direction = player.direction || 1; 
+                console.log(`[HOST-WORKER] Gracz ${player.username} wyrzucił ${actionData.payload.name}`);
+                
+                const direction = player.direction || 1; 
 
-    const newItem = {
-        id: `item_${Date.now()}_${Math.random()}`,
-        data: actionData.payload,
-        
-        // --- ZMIANY TUTAJ ---
-        // Pozycja startowa: nieco z przodu gracza
-        x: player.x + (PLAYER_SIZE / 2) + (direction * PLAYER_SIZE * 0.6),
-        // Pozycja startowa: na wysokości głowy gracza
-        y: player.y - (PLAYER_SIZE * 0.2), 
-        
-        // Nadaj lekki pęd początkowy
-        velocityY: -8, // Mocniejsze podrzucenie
-        velocityX: direction * 4 // Lekki odrzut w kierunku patrzenia
-    };
-    this.room.worldItems.push(newItem);
-    break;
-}
+                const newItem = {
+                    id: `item_${Date.now()}_${Math.random()}`,
+                    data: actionData.payload,
+                    x: player.x + (PLAYER_SIZE / 2) + (direction * PLAYER_SIZE * 0.6),
+                    y: player.y - (PLAYER_SIZE * 0.2), 
+                    velocityY: -8,
+                    velocityX: direction * 4
+                };
+                this.room.worldItems.push(newItem);
+                break;
+            }
             case 'playerJump': {
                 const groundY = DEDICATED_GAME_HEIGHT - this.room.gameData.groundLevel - PLAYER_SIZE;
                 const isOnGround = (player.y >= groundY - 1 && player.y <= groundY + 1);
@@ -558,7 +576,7 @@ class GameHost {
                 }
                 break;
             }
-             case 'reelInFishingLine': {
+            case 'reelInFishingLine': {
                 if (player.hasLineCast) {
                     this._resetFishingState(player);
                 }
@@ -579,34 +597,64 @@ class GameHost {
                 });
                 break;
             }
+            case 'digForBait': {
+                const now = Date.now();
+                const lastDigTime = this.digCooldowns[peerId] || 0;
+
+                if (now - lastDigTime < DIGGING_COOLDOWN_MS) {
+                    return;
+                }
+
+                this.digCooldowns[peerId] = now;
+
+                const dugBait = getRandomBait();
+                if (dugBait) {
+                    console.log(`[HOST-WORKER] Gracz ${player.username} wykopał: ${dugBait.name}`);
+                    
+                    this.broadcast({
+                        type: 'baitDugBroadcast',
+                        payload: {
+                            playerId: peerId,
+                            bait: dugBait,
+                            startPos: actionData.payload
+                        }
+                    });
+
+                    this.sendTo(peerId, {
+                        type: 'dugBaitAwarded',
+                        payload: {
+                            baitData: dugBait
+                        }
+                    });
+                }
+                break;
+            }
         }
     }
 
     updateGame() {
-    if (!this.room) return;
-    const room = this.room;
-    const groundLevel = room.gameData.groundLevel;
-    const worldWidth = room.gameData.worldWidth;
-    const groundY_for_items = DEDICATED_GAME_HEIGHT - groundLevel - (92 * 0.7 / 2); // 92 to SLOT_SIZE
+        if (!this.room) return;
+        const room = this.room;
+        const groundLevel = room.gameData.groundLevel;
+        const worldWidth = room.gameData.worldWidth;
+        const groundY_for_items = DEDICATED_GAME_HEIGHT - groundLevel - (92 * 0.7 / 2);
 
-    // --- FIZYKA DLA PRZEDMIOTÓW (JUŻ TO MASZ) ---
-    room.worldItems.forEach(item => {
-    if (item.y < groundY_for_items) {
-        item.velocityY += GRAVITY * 0.5;
-        item.y += item.velocityY;
-        item.x += item.velocityX;
-    } else { // Gdy przedmiot jest na ziemi lub pod nią
-        item.y = groundY_for_items;
-        item.velocityY = 0;
-        
-        // Zastosuj tarcie, aby przedmiot się zatrzymał
-        item.velocityX *= 0.85; 
-        if (Math.abs(item.velocityX) < 0.1) {
-            item.velocityX = 0;
-        }
-        item.x += item.velocityX;
-    }
-});
+        room.worldItems.forEach(item => {
+            if (item.y < groundY_for_items) {
+                item.velocityY += GRAVITY * 0.5;
+                item.y += item.velocityY;
+                item.x += item.velocityX;
+            } else {
+                item.y = groundY_for_items;
+                item.velocityY = 0;
+                item.velocityX *= 0.85; 
+                if (Math.abs(item.velocityX) < 0.1) {
+                    item.velocityX = 0;
+                }
+                item.x += item.velocityX;
+            }
+        });
+
         const groundY_target_for_player_top = DEDICATED_GAME_HEIGHT - groundLevel - PLAYER_SIZE;
 
         for (const playerId in room.players) {
@@ -689,38 +737,34 @@ class GameHost {
             else {
                  this._resetFishingState(player);
             }
-for (let i = room.worldItems.length - 1; i >= 0; i--) {
-            const item = room.worldItems[i];
-            // Sprawdzaj kolizję tylko, gdy przedmiot leży na ziemi
-             if (item.velocityY === 0) {
-                const playerCenterX = player.x + PLAYER_SIZE / 2;
-                const playerCenterY = player.y + PLAYER_SIZE / 2;
-                
-                const distance = Math.hypot(playerCenterX - item.x, playerCenterY - item.y);
-                const pickupRadius = PLAYER_SIZE / 2; // Gracz musi być wystarczająco blisko
+            for (let i = room.worldItems.length - 1; i >= 0; i--) {
+                const item = room.worldItems[i];
+                if (item.velocityY === 0) {
+                    const playerCenterX = player.x + PLAYER_SIZE / 2;
+                    const playerCenterY = player.y + PLAYER_SIZE / 2;
+                    
+                    const distance = Math.hypot(playerCenterX - item.x, playerCenterY - item.y);
+                    const pickupRadius = PLAYER_SIZE / 2;
 
-                if (distance < pickupRadius) {
-                    console.log(`[HOST-WORKER] Gracz ${player.username} podniósł ${item.data.name}`);
-                    
-                    // Wyślij wiadomość tylko do gracza, który podniósł przedmiot
-                    this.sendTo(playerId, { type: 'itemPickedUp', payload: item.data });
-                    
-                    // Usuń przedmiot ze świata gry
-                    room.worldItems.splice(i, 1);
+                    if (distance < pickupRadius) {
+                        console.log(`[HOST-WORKER] Gracz ${player.username} podniósł ${item.data.name}`);
+                        
+                        this.sendTo(playerId, { type: 'itemPickedUp', payload: item.data });
+                        
+                        room.worldItems.splice(i, 1);
+                    }
                 }
             }
         }
-    }
 
-    // Na końcu funkcji, zaktualizuj wiadomość gameStateUpdate
         this.broadcast({
-        type: 'gameStateUpdate',
-        payload: {
-            players: Object.values(room.players),
-            worldItems: room.worldItems // Ta linia jest kluczowa!
-        }
-    });
-}
+            type: 'gameStateUpdate',
+            payload: {
+                players: Object.values(room.players),
+                worldItems: room.worldItems
+            }
+        });
+    }
 }
 
 
@@ -730,12 +774,8 @@ for (let i = room.worldItems.length - 1; i >= 0; i--) {
 
 let gameHostInstance = null;
 
-// 'self' to globalny zasięg wewnątrz Web Workera (odpowiednik 'window')
 self.onmessage = function(event) {
     const { type, payload } = event.data;
-
-    // Nie ma potrzeby logowania każdej wiadomości, chyba że do debugowania
-    // console.log('[DEBUG] Worker: Otrzymałem wiadomość ->', type, payload);
 
     switch (type) {
         case 'start':
@@ -759,7 +799,6 @@ self.onmessage = function(event) {
 
         case 'playerInput':
             if (gameHostInstance) {
-                // POPRAWKA: Poprawne wyciąganie danych z payload
                 const { peerId, keys, currentMouseX, currentMouseY } = payload;
                 gameHostInstance.handlePlayerInput(peerId, { keys, currentMouseX, currentMouseY });
             }
@@ -767,7 +806,6 @@ self.onmessage = function(event) {
             
         case 'playerAction':
             if (gameHostInstance) {
-                // POPRAWKA: Poprawne wyciąganie danych z payload
                 const { peerId, type: actionType, payload: actionPayload } = payload;
                 gameHostInstance.handlePlayerAction(peerId, { type: actionType, payload: actionPayload });
             }

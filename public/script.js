@@ -16,7 +16,6 @@ function setupNotificationArea() {
 
     // Dodaj style CSS do head
     const style = document.createElement('style');
-    // ======================= POCZĄTEK ZMIAN =======================
     style.innerHTML = `
         #notification-container {
             position: fixed;
@@ -55,7 +54,6 @@ function setupNotificationArea() {
             }
         }
     `;
-    // ======================== KONIEC ZMIAN =========================
     document.head.appendChild(style);
 }
 
@@ -89,35 +87,30 @@ function showNotification(message, type = 'warning', duration = 5000) {
 let signalingSocket;
 let peer;
 let isHost = false;
-// ZASTĄPIONO: usunięto gameHostInstance
-// let gameHostInstance; 
 let hostConnection;
 
-// DODANO: Zmienne do obsługi Web Workera
-let gameHostWorker = null; // Przechowuje referencję do workera
-let hostPeerConnections = {}; // Przechowuje połączenia z klientami, gdy jesteśmy hostem
+let gameHostWorker = null; 
+let hostPeerConnections = {};
 
 let availableRooms = {};
 let worldItems = [];
 let hostRoomConfiguration = null;
 let invX = 0, invY = 0;
-// ========================================================================================
+let splashCreatedForPlayers = new Set();
 
-// ================= POCZĄTEK ZMIAN: Rozbudowany Helper (Samouczek) =================
-// Ten obiekt i cała logika z nim związana istnieje TYLKO w przeglądarce lokalnego gracza.
-// Serwer ani inni gracze nie mają do niego dostępu.
+
 const tutorial = {
-    state: 1, // Aktualny krok samouczka (1-5) lub 'finished'
+    state: 1, 
     activeImage: { key: 'info1', alpha: 1, yOffset: 0, startTime: Date.now() },
-    fadingOutImage: null, // Obiekt dla obrazka, który znika
+    fadingOutImage: null,
 };
 
 const TUTORIAL_IMAGE_SCALE = 2.4;
 const TUTORIAL_Y_OFFSET = -28;
 const TUTORIAL_ROCKING_ANGLE_DEGREES = 10;
 const TUTORIAL_ROCKING_SPEED = 4;
-const TUTORIAL_FADE_DURATION_MS = 600; // Czas trwania animacji fade in/out w milisekundach
-const TUTORIAL_FADE_UP_DISTANCE = 250; // Jak wysoko obrazek uniesie się podczas znikania
+const TUTORIAL_FADE_DURATION_MS = 600; 
+const TUTORIAL_FADE_UP_DISTANCE = 250;
 
 const tutorialImagePaths = {
     info1: 'img/ui/info1.png',
@@ -127,11 +120,10 @@ const tutorialImagePaths = {
     info5: 'img/ui/info5.png'
 };
 const tutorialImages = {};
-// ================= KONIEC ZMIAN =================
 
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
-const cycleOverlay = document.getElementById('cycleOverlay'); // ZMIANA: Pobieramy referencję do naszej nowej nakładki
+const cycleOverlay = document.getElementById('cycleOverlay');
 
 const DEDICATED_GAME_WIDTH = 1920;
 const DEDICATED_GAME_HEIGHT = 1080;
@@ -152,8 +144,6 @@ const cycleManager = new CycleManager();
 // ====================================================================
 // === SEKCJA GWIAZD: Nowa klasa do zarządzania gwiazdami na nocnym niebie ===
 // ====================================================================
-
-
 
 const starImagePaths = {
     star1: 'img/world/star.png',
@@ -179,7 +169,6 @@ class StarManager {
         const skyHeight = height * 0.65;
 
         for (let i = 0; i < STAR_COUNT; i++) {
-            // Używamy tylko kluczy 'star1' i 'star2' dla gwiazd na niebie
             const starTypeKey = Math.random() < 0.7 ? 'star1' : 'star2';
             const starImg = starImages[starTypeKey];
             const pulses = Math.random() < 0.3;
@@ -247,7 +236,6 @@ class StarManager {
     }
 }
 
-// Inicjalizacja instancji klasy DOPIERO PO jej zdefiniowaniu
 const starManager = new StarManager();
 
 // ====================================================================
@@ -300,11 +288,8 @@ class NPCManager {
     spawnNPCs(gameData) {
         this.clear();
         if (!gameData || gameData.villageType === 'none' || !gameData.placedBuildings || gameData.placedBuildings.length === 0) return;
-
-        // ================= POCZĄTEK ZMIAN =================
+        
         const MAX_NPCS = 4;
-        // ================= KONIEC ZMIAN =================
-
         const groundY = DEDICATED_GAME_HEIGHT - gameData.groundLevel - playerSize;
         const buildings = gameData.placedBuildings;
         const xCoords = buildings.map(b => b.x);
@@ -312,16 +297,14 @@ class NPCManager {
         this.villageBounds.minX = Math.min(...xCoords) - 150;
         this.villageBounds.maxX = Math.max(...xCoords.map((x, i) => x + widths[i])) + 150;
         
-        // ================= POCZĄTEK ZMIAN =================
-        // Zmieniono pętlę forEach na pętlę for...of, aby można było ją przerwać
         for (const building of buildings) {
             if (this.npcs.length >= MAX_NPCS) {
-                break; // Przerwij pętlę, jeśli osiągnięto maksymalną liczbę NPC
+                break;
             }
             const npcCount = 1 + Math.floor(Math.random() * 2);
             for (let i = 0; i < npcCount; i++) {
                  if (this.npcs.length >= MAX_NPCS) {
-                    break; // Przerwij wewnętrzną pętlę, jeśli osiągnięto limit
+                    break;
                 }
                 const availableHairs = customizationOptions.hair;
                 const randomIndex = Math.floor(Math.random() * 4);
@@ -346,7 +329,6 @@ class NPCManager {
                 this.npcs.push(npc);
             }
         }
-        // ================= KONIEC ZMIAN =================
         console.log(`Spawned ${this.npcs.length} NPCs for the village.`);
     }
 
@@ -463,7 +445,7 @@ const MAX_ZOOM = 1.8;
 const ZOOM_SENSITIVITY = 0.1;
 const ITEM_NONE = 'none';
 const ITEM_ROD = 'rod';
-const ITEM_LANTERN = 'lantern';
+const ITEM_SHOVEL = 'shovel';
 const FISHING_BAR_WIDTH = 192;
 const FISHING_BAR_HEIGHT = 30;
 const FISHING_SLIDER_SPEED = 0.05;
@@ -472,14 +454,32 @@ const BOBBER_VERTICAL_OSCILLATION = 4;
 const BOBBER_ROTATION_OSCILLATION = 10 * (Math.PI / 180);
 const BOBBER_ANIMATION_SPEED = 0.05;
 
+// === POCZĄTEK NOWYCH STAŁYCH ===
+const BOBBER_MAX_SINK_DEPTH = 70; // Maksymalna głębokość tonięcia w pikselach przy pełnej mocy
+const BOBBER_SINK_SPEED = 5.0;      // Prędkość z jaką spławik tonie
+const BOBBER_RISE_SPEED = 2.5;      // Prędkość z jaką spławik jest wypychany na powierzchnię (wolniejsza dla efektu)
+const BOBBER_MAX_SPLASHDOWN_ROTATION = 0.6; // Maksymalna rotacja w radianach (~35 stopni)
+const BOBBER_ROTATION_DAMPING = 4.0; // Jak szybko rotacja wraca do zera
+
 const characterImagePaths = { leg: 'img/character/leg.png', body: 'img/character/body.png', arm: 'img/character/arm.png', head: 'img/character/head.png', eye: 'img/character/eye.png' };
 const customizationUIPaths = { frame: 'img/ui/frame.png' };
-// ZMIANA 1: Dodanie ścieżek do obrazków UI łowienia
 const fishingUIPaths = { strike: 'img/ui/strike.png', fishframe: 'img/ui/fishframe.png' };
+const baitImagePaths = {
+    'worm': 'img/bait/worm.png',
+    'bloodworm': 'img/bait/bloodworm.png',
+};
+// ======================= POCZĄTEK ZMIAN =======================
+const hookImagePaths = {
+    'weedless': 'img/hook/weedless.png',
+    'sharp': 'img/hook/sharp.png',
+};
+// ======================== KONIEC ZMIAN =========================
+
 const characterImages = {};
 const customizationUIImages = {};
-const fishingUIImages = {}; // Obiekt na załadowane obrazki łowienia
-const fishImages = {};
+const fishingUIImages = {};
+const allItemImages = {}; 
+const baitImages = {};
 const characterCustomImages = { hat: {}, hair: {}, accessories: {}, beard: {}, clothes: {}, clothes_arm: {}, pants: {}, shoes: {}, items: {} };
 const exampleCustomItemPaths = {
     hat: { 'red cap': 'img/character/custom/hat/type1.png', 'blue cap': 'img/character/custom/hat/type2.png', 'special': 'img/character/custom/hat/type3.png', 'street cap': 'img/character/custom/hat/type4.png', 'pink cap': 'img/character/custom/hat/type5.png', 'black cap': 'img/character/custom/hat/type6.png', 'oldschool cap': 'img/character/custom/hat/type7.png', 'blue straight cap': 'img/character/custom/hat/type8.png', 'green straight cap': 'img/character/custom/hat/type9.png', 'kiddo cap': 'img/character/custom/hat/type10.png' },
@@ -490,7 +490,7 @@ const exampleCustomItemPaths = {
     clothes_arm: { 'white shirt': 'img/character/custom/clothes/arm/type1.png', 'black shirt': 'img/character/custom/clothes/arm/type2.png', 'hawaii shirt': 'img/character/custom/clothes/arm/type3.png' },
     pants: { 'pants1': 'img/character/custom/pants/type1.png' },
     shoes: { 'shoes1': 'img/character/custom/shoes/type1.png' },
-    items: {'rod':{path:'img/item/rod.png',width:playerSize*2,height:playerSize,pivotX_in_img:Math.round(20*(playerSize/128)),pivotY_in_round:(20*(playerSize/128))},'lantern':{path:'img/item/lantern.png',width:playerSize,height:playerSize,pivotX_in_img:playerSize/2,pivotY_in_img:playerSize/2},'float':{path:'img/item/float.png',width:32,height:62,pivotX_in_img:FLOAT_SIZE/2,pivotY_in_img:FLOAT_SIZE/2}}
+    items: {'rod':{path:'img/item/rod.png',width:playerSize*2,height:playerSize,pivotX_in_img:Math.round(20*(playerSize/128)),pivotY_in_round:(20*(playerSize/128))},'shovel':{path:'img/item/shovel.png',width:playerSize,height:playerSize,pivotX_in_img:playerSize/2,pivotY_in_img:playerSize/2},'float':{path:'img/item/float.png',width:32,height:62,pivotX_in_img:FLOAT_SIZE/2,pivotY_in_img:FLOAT_SIZE/2}}
 };
 
 let localPlayer = { id: null, username: 'Player' + Math.floor(Math.random()*1000), danglingBobber: { x: 0, y: 0, oldX: 0, oldY: 0, initialized: false } , color: '#' + Math.floor(Math.random()*16777215).toString(16).padStart(6,'0'), x: 50, y: DEDICATED_GAME_HEIGHT-50-playerSize, isJumping: false, velocityY: 0, isWalking: false, isIdle: false, animationFrame: 0, idleAnimationFrame: 0, direction: 1, velocityX: 0, currentMouseX: undefined, currentMouseY: undefined, customizations: { hat:'none', hair:'none', accessories:'none', beard:'none', clothes:'none', pants:'none', shoes:'none', rightHandItem:ITEM_NONE, hairSaturation:50, hairHue:180, hairBrightness:50, beardSaturation:50, beardHue:180, beardBrightness:50 }, isCasting:false, castingPower:0, fishingBarSliderPosition:0, fishingBarTime:0, castingDirectionAngle:0, hasLineCast:false, floatWorldX:null, floatWorldY:null, rodTipWorldX:null, rodTipWorldY:null, lineAnchorWorldY:null };
@@ -521,25 +521,22 @@ let selectedColorPropertyIndex = 0;
 const colorProperties = ['brightness', 'saturation', 'hue'];
 let lastTime = 0;
 const inventoryManager = new InventoryManager();
-// ZMIANA 2: Inicjalizacja menedżera łowienia i flagi do śledzenia stanu
 const fishingManager = new FishingManager();
 let previousHasLineCast = false;
 const pierSpanImages = {};
 let pierSupportData = [];
 
-// ======================= POCZĄTEK ZMIAN =======================
 const caughtFishAnimations = [];
-const FISH_ANIMATION_DURATION = 1200; // Czas (ms) animacji ruchu ryby
-const FISH_DISPLAY_DURATION = 4000; // Czas (ms) wyświetlania ryby nad głową
-// ======================== KONIEC ZMIAN =========================
+const FISH_ANIMATION_DURATION = 1200;
+const FISH_DISPLAY_DURATION = 4000;
 
 const FISH_TIER_CONFIG = {
-    0: { color: 'rgba(221, 221, 221, 1)', font: `16px ${PIXEL_FONT}`, imageKey: null }, // Brak
-    1: { color: 'rgba(14, 168, 40, 1)', font: `16px ${PIXEL_FONT}`, imageKey: 'common_star' }, // Common (zielony)
-    2: { color: 'rgba(46, 123, 216, 1)', font: `16px ${PIXEL_FONT}`, imageKey: 'uncommon_star' },// Uncommon (niebieski)
-    3: { color: 'rgba(255, 184, 94, 1)',  font: `16px ${PIXEL_FONT}`, imageKey: 'rare_star' },   // Rare (pomarańczowy)
-    4: { color: 'rgba(152, 65, 199, 1)', font: `16px ${PIXEL_FONT}`, imageKey: 'epic_star' },    // Epic (fioletowy)
-    5: { color: 'rgba(185, 6, 117, 1)', font: `bold 16px ${PIXEL_FONT}`, imageKey: 'legendary_star' } // Legendary (różowy/fioletowy, pogrubiony)
+    0: { color: 'rgba(221, 221, 221, 1)', font: `16px ${PIXEL_FONT}`, imageKey: null },
+    1: { color: 'rgba(14, 168, 40, 1)', font: `16px ${PIXEL_FONT}`, imageKey: 'common_star' },
+    2: { color: 'rgba(46, 123, 216, 1)', font: `16px ${PIXEL_FONT}`, imageKey: 'uncommon_star' },
+    3: { color: 'rgba(255, 184, 94, 1)',  font: `16px ${PIXEL_FONT}`, imageKey: 'rare_star' },
+    4: { color: 'rgba(152, 65, 199, 1)', font: `16px ${PIXEL_FONT}`, imageKey: 'epic_star' },
+    5: { color: 'rgba(185, 6, 117, 1)', font: `bold 16px ${PIXEL_FONT}`, imageKey: 'legendary_star' }
 };
 
 
@@ -547,10 +544,12 @@ const FISH_TIER_CONFIG = {
 // === SEKCJA 2: FUNKCJE RYSOWANIA (z modyfikacjami) ===
 // ====================================================================
 const npcManager = new NPCManager(drawPlayer);
+
 function loadImages(callback) {
-    const allPaths = { ...characterImagePaths, ...customizationUIPaths, ...tutorialImagePaths, ...fishingUIPaths };
+    // ======================= POCZĄTEK ZMIAN =======================
+    const allPaths = { ...characterImagePaths, ...customizationUIPaths, ...tutorialImagePaths, ...fishingUIPaths, ...baitImagePaths, ...hookImagePaths };
+    // ======================== KONIEC ZMIAN =========================
     
-    // Zbierz unikalne nazwy ryb ze wszystkich biomów, aby załadować ich obrazki
     const fishNames = new Set();
     const allFishData = fishingManager.getFishData();
     for (const biome in allFishData) {
@@ -573,11 +572,10 @@ function loadImages(callback) {
     };
     for (const biome in biomeDefsForPierSpans) a++;
     
-    // ZMIANA: Dodajemy obrazki gwiazdek do licznika
     a += Object.keys(starImagePaths).length;
 
     if (a === 0) {
-        // ... (bez zmian)
+        if (callback) callback();
         return;
     }
     let e = 0;
@@ -591,13 +589,6 @@ function loadImages(callback) {
             });
         }
     };
-
-    for (const key in starImagePaths) {
-        const img = new Image();
-        img.src = starImagePaths[key];
-        img.onload = () => { starImages[key] = img; f(); };
-        img.onerror = () => { console.error(`Star image loading error: ${img.src}`); f(); };
-    }
 
     for (const key in starImagePaths) {
         const img = new Image();
@@ -622,11 +613,18 @@ function loadImages(callback) {
             else if (customizationUIPaths[h]) customizationUIImages[h] = i;
             else if (tutorialImagePaths[h]) tutorialImages[h] = i;
             else if (fishingUIPaths[h]) fishingUIImages[h] = i;
-            // Jeśli klucz zaczyna się od "fish_", zapisz obrazek do obiektu ryb
             else if (h.startsWith('fish_')) {
                 const fishName = h.substring(5);
-                fishImages[fishName] = i;
+                allItemImages[fishName] = i;
             }
+            else if (baitImagePaths[h]) {
+                 allItemImages[h] = i;
+            }
+            // ======================= POCZĄTEK ZMIAN =======================
+            else if (hookImagePaths[h]) {
+                 allItemImages[h] = i;
+            }
+            // ======================== KONIEC ZMIAN =========================
             f()
         }, i.onerror = () => { console.error(`Image loading error: ${i.src}`), f() }
     }
@@ -651,18 +649,11 @@ function lerp(start, end, amt) {
 }
 
 function mapToDisplayRange(value, min, max) {
-    if (max - min === 0) return 0; // Unikaj dzielenia przez zero
+    if (max - min === 0) return 0;
     const percentage = (value - min) / (max - min);
     return Math.round(percentage * 100);
 }
 
-/**
- * Mapuje wartość z zakresu wyświetlania (0-100) z powrotem na wewnętrzny zakres (min-max).
- * @param {number} value - Wartość wejściowa (0-100).
- * @param {number} min - Minimum zakresu docelowego.
- * @param {number} max - Maksimum zakresu docelowego.
- * @returns {number} - Wartość przeskalowana do zakresu min-max.
- */
 function mapFromDisplayRange(value, min, max) {
     const percentage = value / 100;
     return Math.round(min + (max - min) * percentage);
@@ -698,8 +689,8 @@ function applyCycleColorBalance() {
     }
     else if (angle >= 90 && angle < 135) {
         const progress = (angle - 85) / 45;
-        const brightness = lerp(1, 0.65, progress);
-        const contrast = lerp(1, 1.15, progress);
+        const brightness = lerp(1, 0.85, progress);
+        const contrast = lerp(1, 1.25, progress);
         const saturation = lerp(1, 0.5, progress);
         const opacity = lerp(0, 0.92, progress);
 
@@ -709,10 +700,10 @@ function applyCycleColorBalance() {
         overlayColor = `rgba(0, 80, 180, ${opacity})`;
     }
     else if (angle >= 135 && angle < 225) {
-        const brightness = 0.65;
+        const brightness = 0.85;
         const saturation = 0.5;
         const opacity = 0.92;
-        const contrast = 1.15;
+        const contrast = 1.25;
         filters.push(`brightness(${brightness})`);
         filters.push(`saturate(${saturation})`);
         filters.push(`contrast(${contrast})`);   
@@ -721,13 +712,13 @@ function applyCycleColorBalance() {
     }
     else if (angle >= 225 && angle < 270) {
         const progress = (angle - 225) / 95;
-        const brightness = lerp(0.65, 1, progress);
+        const brightness = lerp(0.85, 1, progress);
         filters.push(`brightness(${brightness})`);
 
         const saturation = lerp(0.7, 1, progress);
         const opacity = lerp(0.65, 0, progress);
         filters.push(`saturate(${saturation})`);
-        const contrast = lerp(1.15, 1, progress);
+        const contrast = lerp(1.25, 1, progress);
         filters.push(`contrast(${contrast})`);  
         overlayColor = `rgba(255, 120, 180, ${opacity})`;
     }
@@ -770,6 +761,7 @@ function updateCamera() {
         biomeManager.drawBuildings(ctx, groundLevel, cameraX, DEDICATED_GAME_WIDTH / currentZoomLevel);
     }
 }
+
 function drawFilteredCharacterPart(a,b,c,d,e,f,g=100,h=0,i=100){if(!b||!b.complete)return;const j=document.createElement("canvas");j.width=e,j.height=f;const k=j.getContext("2d");k.imageSmoothingEnabled=!1,k.drawImage(b,0,0,e,f);const l=[];100!==g&&l.push(`saturate(${g}%)`),0!==h&&l.push(`hue-rotate(${h}deg)`),100!==i&&l.push(`brightness(${i}%)`),l.length>0?(a.save(),a.filter=l.join(" "),a.drawImage(j,c,d,e,f),a.restore()):a.drawImage(j,c,d,e,f)}
 
 function drawPierSupports(ctx) {
@@ -928,19 +920,12 @@ function drawPlayer(p, imageSet = characterImages) {
     ctx.restore();
 
     if (p.username) {
-        // ======================= POCZĄTEK POPRAWKI =======================
-        // Zmniejszono wartość X z 1.8 do 0.95, aby czubek wędki był znacznie bliżej postaci.
-        // Nieznacznie zmieniono wartość Y, aby lepiej dopasować pozycję.
         const ROD_TIP_OFFSET_X = playerSize * 1.07; 
         const ROD_TIP_OFFSET_Y = -playerSize * 0.32;
-        // ======================== KONIEC POPRAWKI ========================
 
         p.customizations && p.customizations.rightHandItem === ITEM_ROD ? (p.rodTipWorldX = p.x + playerSize / 2 + (frontArmOffsetX + originalArmPivotInImageX - playerSize / 2) * p.direction + (ROD_TIP_OFFSET_X * Math.cos(b) - ROD_TIP_OFFSET_Y * Math.sin(b)) * p.direction, p.rodTipWorldY = p.y + playerSize / 2 + (0 + originalArmPivotInImageY - playerSize / 2) + (ROD_TIP_OFFSET_X * Math.sin(b) + ROD_TIP_OFFSET_Y * Math.cos(b)), p.id === localPlayer.id && (localPlayer.rodTipWorldX = p.rodTipWorldX, localPlayer.rodTipWorldY = p.rodTipWorldY)) : (p.rodTipWorldX = null, p.rodTipWorldY = null, p.id === localPlayer.id && (localPlayer.rodTipWorldX = null, localPlayer.rodTipWorldY = null)), ctx.fillStyle = "white", ctx.font = `${DEFAULT_FONT_SIZE_USERNAME}px ${PIXEL_FONT}`, ctx.textAlign = "center", ctx.fillText(p.username || p.id.substring(0, 5), p.x + playerSize / 2, p.y - 10 + a)
     }
 }
-
-
-// W pliku script.js
 
 function drawCustomizationMenu() {
     const ROLLER_X_OFFSET_FROM_PLAYER = playerSize * currentZoomLevel * 1.5;
@@ -1121,15 +1106,11 @@ function drawFishingLine(p) {
         let verticalOffset = Math.sin(bobberAnimationTime) * BOBBER_VERTICAL_OSCILLATION;
         let rotation = 0;
 
-        // ======================= POCZĄTEK ZMIAN =======================
-        // AKTUALIZACJA WARUNKU: Spławik walczy zarówno podczas brania (isBiting),
-        // jak i po udanym zacięciu (isFishHooked).
         if (p.id === localPlayer.id && (fishingManager.isBiting || fishingManager.isFishHooked)) {
             const biteTime = Date.now();
             verticalOffset += Math.sin(biteTime / 100) * 8; 
             rotation = Math.sin(biteTime / 150) * 0.7; 
         }
-        // ======================== KONIEC ZMIAN =========================
 
         const bobberAnimatedX = p.floatWorldX;
         const bobberAnimatedY = p.floatWorldY + verticalOffset;
@@ -1144,7 +1125,7 @@ function drawFishingLine(p) {
         ctx.save();
         ctx.translate(bobberAnimatedX, bobberAnimatedY);
         ctx.rotate(rotation);
-        ctx.drawImage(floatImage, -FLOAT_SIZE / 2, -FLOAT_SIZE -8, FLOAT_SIZE, FLOAT_SIZE * 2);
+        ctx.drawImage(floatImage, -FLOAT_SIZE / 2, -FLOAT_SIZE - 8, FLOAT_SIZE, FLOAT_SIZE * 2);
         ctx.restore();
     } else {
         ctx.strokeStyle = '#ffffff6b';
@@ -1209,13 +1190,11 @@ function drawInsects() {
     }
 }
 
-// ======================= POCZĄTEK ZMIAN =======================
-/**
- * Rysuje i aktualizuje wszystkie aktywne animacje złapanych ryb.
- */
+// W pliku script.js
+
 function updateAndDrawCaughtFishAnimations() {
     ctx.save();
-    ctx.setTransform(1, 0, 0, 1, 0, 0); // Rysuj w przestrzeni ekranu, nie świata gry
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
 
     const now = Date.now();
 
@@ -1247,35 +1226,31 @@ function updateAndDrawCaughtFishAnimations() {
         const elapsed = now - anim.startTime;
 
         if (elapsed < FISH_ANIMATION_DURATION) {
-            // Faza 1: Animacja ruchu
             const progress = elapsed / FISH_ANIMATION_DURATION;
             const easeProgress = 1 - Math.pow(1 - progress, 3);
             currentPos = {
                 x: lerp(startScreenPos.x, targetScreenPos.x, easeProgress),
                 y: lerp(startScreenPos.y, targetScreenPos.y, easeProgress)
             };
-            // W fazie ruchu rysujemy tylko rybę
-            const fishImg = fishImages[anim.fishName];
+            
+            const fishImg = allItemImages[anim.fishName];
+
             if (fishImg && fishImg.complete) {
                 const fishWidth = fishImg.width * 2.1;
                 const fishHeight = fishImg.height * 2.1;
                 ctx.drawImage(fishImg, currentPos.x - fishWidth / 2, currentPos.y - fishHeight / 2, fishWidth, fishHeight);
             }
         } else {
-            // Faza 2: Wyświetlanie nad głową
             currentPos = targetScreenPos;
             
-            // ======================= POCZĄTEK ZMIAN =======================
+            const fishImg = allItemImages[anim.fishName];
 
-            // ZMIANA 1: Zmieniono kolejność. Najpierw rysujemy rybę, która będzie pod spodem.
-            const fishImg = fishImages[anim.fishName];
             if (fishImg && fishImg.complete) {
                 const fishWidth = fishImg.width * 2.1;
                 const fishHeight = fishImg.height * 2.1;
                 ctx.drawImage(fishImg, currentPos.x - fishWidth / 2, currentPos.y - fishHeight / 2, fishWidth, fishHeight);
             }
 
-            // Teraz rysujemy interfejs (gwiazdka i tekst) na wierzchu ryby
             const tier = anim.tier || 0;
             const tierConfig = FISH_TIER_CONFIG[tier];
             const text = `${anim.fishName} ${anim.size}cm`;
@@ -1297,7 +1272,6 @@ function updateAndDrawCaughtFishAnimations() {
             const starImg = tierConfig.imageKey ? starImages[tierConfig.imageKey] : null;
             const padding = 4;
             
-            // ZMIANA 2: Skalowanie gwiazdki i dynamiczne obliczanie rozmiaru
             const FISH_TIER_STAR_SCALE = 1.3;
             const starDrawWidth = starImg ? starImg.width * FISH_TIER_STAR_SCALE : 0;
             const starDrawHeight = starImg ? starImg.height * FISH_TIER_STAR_SCALE : 0;
@@ -1305,31 +1279,25 @@ function updateAndDrawCaughtFishAnimations() {
             const textWidth = ctx.measureText(text).width;
             const totalWidth = textWidth + (starImg ? starDrawWidth + padding : 0);
 
-            // Rysuj gwiazdkę
             if (starImg && starImg.complete) {
                 const starX = currentPos.x + 85- totalWidth / 2;
-                const starY = currentPos.y + 30 - starDrawHeight / 2 - 4; // Wyśrodkuj pionowo z tekstem
+                const starY = currentPos.y + 30 - starDrawHeight / 2 - 4;
                 ctx.globalAlpha = textAlpha;
                 ctx.drawImage(starImg, starX, starY, starDrawWidth, starDrawHeight);
                 ctx.globalAlpha = 1.0;
             }
 
-            // Oblicz pozycję tekstu
             const textX = currentPos.x + (starImg ? (starDrawWidth + padding) / 2 : 0);
             
-            // Rysuj cień
             ctx.fillStyle = `rgba(0, 0, 0, ${0.7 * textAlpha})`;
             ctx.fillText(text, textX-2, currentPos.y - 52);
 
-            // Rysuj główny tekst
             ctx.fillStyle = tierConfig.color.replace(', 1)', `, ${textAlpha})`);
             ctx.fillText(text, textX, currentPos.y - 50);
-            // ======================== KONIEC ZMIAN =========================
         }
     }
     ctx.restore();
 }
-// ======================== KONIEC ZMIAN =========================
 
 // ====================================================================
 // === SEKCJA 3: LOGIKA SIECIOWA (z modyfikacjami) ===
@@ -1346,25 +1314,22 @@ function initializeSignaling() {
         if (!currentRoom) {
             roomListUl.innerHTML = '';
             if (Object.keys(hosts).length === 0) {
-                // ZMIANA: Tłumaczenie na angielski
                 roomListUl.innerHTML = '<li>No available rooms. Create one!</li>';
             } else {
-    for (let peerId in hosts) {
-        // POPRAWKA: Nie pokazuj hostowi jego własnego pokoju na liście
-        if (isHost && peerId === peer?.id) continue;
+                for (let peerId in hosts) {
+                    if (isHost && peerId === peer?.id) continue;
 
-        const room = hosts[peerId];
-        const li = document.createElement('li');
-        li.innerHTML = `<span>${room.name} (Players: ${room.playerCount})</span><button data-peer-id="${peerId}">Join</button>`;
-        li.querySelector('button').addEventListener('click', () => joinRoom(peerId));
-        roomListUl.appendChild(li);
-    }
-}
+                    const room = hosts[peerId];
+                    const li = document.createElement('li');
+                    li.innerHTML = `<span>${room.name} (Players: ${room.playerCount})</span><button data-peer-id="${peerId}">Join</button>`;
+                    li.querySelector('button').addEventListener('click', () => joinRoom(peerId));
+                    roomListUl.appendChild(li);
+                }
+            }
         }
     });
     signalingSocket.on('roomRemoved', (removedRoomId) => {
         if (hostConnection && hostConnection.peer === removedRoomId) {
-            // ZMIANA: Użycie systemu powiadomień
             showNotification('The room you were in has been removed by the host.', 'warning');
             leaveCurrentRoomUI();
         }
@@ -1385,7 +1350,6 @@ function initializePeer(callback) {
     });
     peer.on('error', (err) => {
         console.error("MAIN PEER OBJECT ERROR: ", err);
-        // ZMIANA: Użycie systemu powiadomień
         showNotification(`A fatal PeerJS error occurred: ${err.type}`, 'error');
     });
     peer.on('disconnected', () => {
@@ -1397,6 +1361,7 @@ function initializePeer(callback) {
         showNotification('Connection to PeerJS server closed permanently.', 'error');
     });
 }
+
 function onSuccessfulJoin(roomData, hostPeerId = null) {
     if (!roomData || !roomData.name) {
         if (hostPeerId && availableRooms[hostPeerId] && availableRooms[hostPeerId].name) {
@@ -1482,7 +1447,6 @@ function onSuccessfulJoin(roomData, hostPeerId = null) {
     lobbyDiv.style.display = 'none';
     gameContainerDiv.style.display = 'block';
     console.log(`Successfully joined the room: "${currentRoom.name}"`);
-    // ZMIANA: Użycie systemu powiadomień
     showNotification(`Successfully joined the room: "${currentRoom.name}"`, 'success');
 }
 
@@ -1534,53 +1498,38 @@ function drawWorldItems(ctx) {
 
     const ITEM_IMAGE_SIZE = inventoryManager.SLOT_SIZE * 0.7;
     const STAR_SIZE = 24;
-    
-    // Parametry animacji kołysania
     const ROCKING_SPEED = 2.5;
     const ROCKING_AMPLITUDE_DEGREES = 15;
     const ROCKING_AMPLITUDE_RADIANS = ROCKING_AMPLITUDE_DEGREES * (Math.PI / 180);
-
-    // Używamy globalnego czasu, aby wszystkie przedmioty kołysały się w synchronizacji
     const time = Date.now() / 1000;
 
     worldItems.forEach(item => {
-        // --- NOWA LOGIKA ANIMACJI ---
-        // Oblicz aktualny kąt obrotu na podstawie funkcji sinus
         const rotation = Math.sin(time * ROCKING_SPEED) * ROCKING_AMPLITUDE_RADIANS;
-
         ctx.save();
-        
-        // Przesuń punkt odniesienia do środka przedmiotu
         ctx.translate(item.x, item.y);
-        
-        // Zastosuj rotację
         ctx.rotate(rotation);
         
-        // Używamy tych samych obrazków co ekwipunek
-        const itemImage = fishImages[item.data.name];
+        const itemImage = allItemImages[item.data.name];
 
         if (itemImage && itemImage.complete) {
-            // Rysuj obrazek, centrując go w nowym punkcie odniesienia (0, 0)
             ctx.drawImage(itemImage, -ITEM_IMAGE_SIZE / 2, -ITEM_IMAGE_SIZE / 2, ITEM_IMAGE_SIZE, ITEM_IMAGE_SIZE);
-            
-            // Rysowanie gwiazdki również musi odbywać się w obróconym kontekście
             if (item.data.tier && item.data.tier > 0) {
                 const tierConfig = FISH_TIER_CONFIG[item.data.tier];
                 if (tierConfig && tierConfig.imageKey) {
                     const starImg = starImages[tierConfig.imageKey];
                     if (starImg && starImg.complete) {
-                        const starX = ITEM_IMAGE_SIZE / 2 - STAR_SIZE; // Prawy dolny róg względem środka
+                        const starX = ITEM_IMAGE_SIZE / 2 - STAR_SIZE;
                         const starY = ITEM_IMAGE_SIZE / 2 - STAR_SIZE;
                         ctx.drawImage(starImg, starX, starY, STAR_SIZE, STAR_SIZE);
                     }
                 }
             }
         }
-        
         ctx.restore();
     });
 }
 
+const MAX_DELTA_TIME = 1 / 1; 
 
 function gameLoop(currentTime) {
     function updateLocalPlayerMovement() {
@@ -1597,7 +1546,10 @@ function gameLoop(currentTime) {
     }
 
     if (!lastTime) lastTime = currentTime;
-    const deltaTime = (currentTime - lastTime) / 1000;
+    
+    let deltaTime = (currentTime - lastTime) / 1000;
+    deltaTime = Math.min(deltaTime, MAX_DELTA_TIME);
+    
     lastTime = currentTime;
     if (currentRoom === null) {
         requestAnimationFrame(gameLoop);
@@ -1645,6 +1597,7 @@ function gameLoop(currentTime) {
     cycleManager.update(deltaTime);
     starManager.update(deltaTime);
     npcManager.update(deltaTime);
+    // Usunęliśmy particleManager.update(deltaTime); - teraz robi to fishingManager
     updateTutorialAnimations();
     sendPlayerInput();
     updateLocalPlayerMovement();
@@ -1656,43 +1609,42 @@ function gameLoop(currentTime) {
     const inventoryWidth = 3 * inventoryManager.SLOT_SIZE + 2 * inventoryManager.GRID_GAP;
     const inventoryHeight = 3 * inventoryManager.SLOT_SIZE + 2 * inventoryManager.GRID_GAP;
 
-    let invX = playerScreenX - inventoryWidth - 40;
+    invX = playerScreenX - inventoryWidth - 40;
     if (invX < 10) invX = 10;
-
-    let invY = playerScreenY - (inventoryHeight / 2) + 30;
+    invY = playerScreenY - (inventoryHeight / 2) + 30;
     if (invY < 10) invY = 10;
     if (invY + inventoryHeight > canvas.height - 10) invY = canvas.height - inventoryHeight - 10;
     
-
-const inventoryOrigin = { x: invX, y: invY };
-inventoryManager.origin = inventoryOrigin; // Ustaw pozycję
-inventoryManager.update(deltaTime); // Już nie potrzebuje argumentu
-    inventoryManager.update(deltaTime, inventoryOrigin);
-
+    const inventoryOrigin = { x: invX, y: invY };
+    inventoryManager.origin = inventoryOrigin;
+    inventoryManager.update(deltaTime);
+    
     if (localPlayer.isCasting) {
         localPlayer.fishingBarTime += FISHING_SLIDER_SPEED;
         localPlayer.fishingBarSliderPosition = (Math.sin(localPlayer.fishingBarTime) + 1) / 2;
         localPlayer.castingPower = localPlayer.fishingBarSliderPosition;
     }
-
-    // ZMIANA 5: Logika zarządzania stanem łowienia
+    
     if (localPlayer.hasLineCast && !previousHasLineCast) {
-        fishingManager.startFishing();
+        fishingManager.startFishing(
+            inventoryManager.getBaitItem(),
+            inventoryManager.getHookItem()
+        );
     }
+    
     if (!localPlayer.hasLineCast && previousHasLineCast) {
         fishingManager.cancelFishing();
     }
     previousHasLineCast = localPlayer.hasLineCast;
-    fishingManager.update(deltaTime);
+    
 
     applyCycleColorBalance(); 
     ctx.clearRect(0, 0, DEDICATED_GAME_WIDTH, DEDICATED_GAME_HEIGHT);
 
+    const centerX = canvas.width / 2;
+    const centerY = canvas.height / 2;
 
-const centerX = canvas.width / 2;
-const centerY = canvas.height / 2;
-
-ctx.save();
+    ctx.save();
     ctx.translate(centerX, centerY + 2150);
     ctx.rotate(cycleManager.rotation);
     cycleManager.drawBackground(ctx);
@@ -1706,7 +1658,6 @@ ctx.save();
     cycleManager.drawMoon(ctx);
     ctx.restore();
 
-
     ctx.save();
     ctx.scale(currentZoomLevel, currentZoomLevel);
     ctx.translate(-cameraX, -cameraY);
@@ -1715,12 +1666,13 @@ ctx.save();
 
     if (currentRoom?.gameData?.biome) {
         const { biome: b, groundLevel: g } = currentRoom.gameData;
-        biomeManager.drawBackgroundBiomeGround(ctx,b,g);
-        biomeManager.drawBackgroundTrees(ctx);
-        biomeManager.drawBackgroundPlants(ctx);
         biomeManager.drawBuildings(ctx,g,cameraX,DEDICATED_GAME_WIDTH/currentZoomLevel);
+        biomeManager.drawBackgroundBiomeGround(ctx,b,g);
+        biomeManager.drawCampsite(ctx);
+        biomeManager.drawBackgroundPlants(ctx);
+        biomeManager.drawBackgroundTrees(ctx);
     }
-
+    
     const allCharacters = [...Object.values(playersInRoom), ...npcManager.npcs];
     allCharacters.sort((a,b)=>(a.y+playerSize)-(b.y+playerSize)).forEach(p => {
         if (p.username) drawPlayer(p);
@@ -1730,13 +1682,19 @@ ctx.save();
 
     if(currentRoom?.gameData?.biome){
         const {biome:b,groundLevel:g} = currentRoom.gameData;
-        biomeManager.drawForegroundPlants(ctx);
+
         biomeManager.drawForegroundTrees(ctx);
+        biomeManager.drawFireplaceParticles(ctx);
+        biomeManager.drawFireplace(ctx);
+        biomeManager.drawLightEffect(ctx);
+        biomeManager.drawForegroundPlants(ctx);
+
         drawInsects();
         biomeManager.drawForegroundBiomeGround(ctx,b,g);
         drawPierSupports(ctx);
         if (biomeManager.drawPiers) biomeManager.drawPiers(ctx);
         biomeManager.drawWater(ctx,b,cameraX);
+        // Usunęliśmy particleManager.draw(ctx); - teraz robi to fishingManager
     }
 
     ctx.restore();
@@ -1751,32 +1709,31 @@ ctx.save();
     
     inventoryManager.draw(ctx, inventoryOrigin);
 
-    // ZMIANA 5 (cd.): Rysowanie UI menedżera łowienia
     let bobberScreenPos = null;
-    if (localPlayer.hasLineCast && localPlayer.floatWorldX !== null) {
-        bobberScreenPos = {
-            x: (localPlayer.floatWorldX - cameraX) * currentZoomLevel,
-            y: (localPlayer.floatWorldY - cameraY) * currentZoomLevel
-        };
-    }
-    fishingManager.draw(ctx, localPlayer, bobberScreenPos, cameraX, currentZoomLevel);
-    
-    // ======================= POCZĄTEK ZMIAN =======================
-    // Rysuj animacje złapanych ryb na wierzchu wszystkiego innego
+if (localPlayer.hasLineCast && localPlayer.floatWorldX !== null) {
+    bobberScreenPos = {
+        x: (localPlayer.floatWorldX - cameraX) * currentZoomLevel,
+        y: (localPlayer.floatWorldY - cameraY) * currentZoomLevel
+    };
+}
+
+// Zaktualizowane wywołanie z dodatkowym parametrem bobberScreenPos
+fishingManager.update(deltaTime, localPlayer, bobberScreenPos);
+
+fishingManager.draw(ctx, localPlayer, bobberScreenPos, cameraX, currentZoomLevel);
+
     updateAndDrawCaughtFishAnimations();
-    // ======================== KONIEC ZMIAN =========================
+
+    fishingManager.updateAndDrawDugBaitAnimations(ctx, playersInRoom, cameraX, cameraY, currentZoomLevel);
 
     requestAnimationFrame(gameLoop);
+
 }
 
 
 // ====================================================================
 // === SEKCJA 5: OBSŁUGA UI i P2P (z modyfikacjami) ===
 // ====================================================================
-
-
-// Plik: script.js
-
 
 createRoomBtn.addEventListener('click', () => {
     if (isHost) return;
@@ -1793,18 +1750,15 @@ createRoomBtn.addEventListener('click', () => {
 
         console.log(`[HOST-UI] Peer ID: ${peerId}. Uruchamianie workera...`);
         localPlayer.id = peerId;
-        gameHostWorker = new Worker('js/host-worker.js'); // Poprawiona ścieżka, jeśli worker jest w folderze js/
+        gameHostWorker = new Worker('js/host-worker.js');
         
-        // Odbieraj wiadomości Z workera i przekazuj je dalej
         gameHostWorker.onmessage = (event) => {
             const { type, peerId: targetPeerId, message } = event.data;
             
-            // Wiadomość jest dla wszystkich (broadcast) LUB jest dla nas (sendTo)
             if (type === 'broadcast' || (type === 'sendTo' && targetPeerId === localPlayer.id)) {
                 handleDataFromServer(message);
             }
             
-            // Wyślij wiadomość przez sieć do odpowiednich zdalnych klientów
             if (type === 'broadcast') {
                 Object.values(hostPeerConnections).forEach(conn => conn.send(message));
             } else if (type === 'sendTo' && targetPeerId !== localPlayer.id) {
@@ -1813,11 +1767,9 @@ createRoomBtn.addEventListener('click', () => {
             }
         };
 
-        // Wyślij komendę startu do workera
         const roomName = newRoomNameInput.value.trim() || `Pokój ${localPlayer.username}`;
         gameHostWorker.postMessage({ type: 'start', payload: { id: peerId, username: localPlayer.username, color: localPlayer.color, customizations: localPlayer.customizations } });
 
-        // Zarejestruj pokój i nasłuchuj na połączenia od innych graczy
         signalingSocket.emit('register-host', { peerId, name: roomName });
         peer.on('connection', (conn) => {
             console.log(`[HOST-UI] Nowe połączenie od klienta: ${conn.peer}`);
@@ -1838,24 +1790,21 @@ createRoomBtn.addEventListener('click', () => {
             });
         });
         
-        // Stwórz obiekt `hostConnection` do wysyłania akcji hosta DO workera
         hostConnection = {
             send: (data) => gameHostWorker.postMessage({ type: data.type, payload: { ...data.payload, peerId: localPlayer.id } })
         };
         
-        // NAJPROSTSZE ROZWIĄZANIE: Po prostu dodaj hosta po krótkim opóźnieniu.
-        // To daje workerowi wystarczająco dużo czasu na zainicjowanie się.
         setTimeout(() => {
             console.log('[HOST-UI] Dodawanie hosta jako gracza...');
             gameHostWorker.postMessage({ type: 'addPlayer', payload: { peerId: localPlayer.id, initialPlayerData: localPlayer } });
-        }, 100); // 100ms powinno w zupełności wystarczyć
+        }, 100);
     });
 });
 
 function joinRoom(hostPeerId) {
     initializePeer((myPeerId) => {
         localPlayer.id = myPeerId;
-        isHost = false; // Jesteśmy gościem
+        isHost = false;
 
         console.log(`[GUEST] Próba połączenia z hostem: ${hostPeerId}`);
         hostConnection = peer.connect(hostPeerId, { reliable: true });
@@ -1880,46 +1829,86 @@ function joinRoom(hostPeerId) {
     });
 }
 
-
+// === POCZĄTEK OSTATECZNEJ POPRAWKI ===
 function handleDataFromServer(data) {
     switch (data.type) {
-        case 'itemPickedUp':
-    const itemData = data.payload;
-    
-    // Odtwarzamy pełny obiekt przedmiotu, dodając obrazek z lokalnej kolekcji
-    const fullItemObject = {
-        name: itemData.name,
-        tier: itemData.tier,
-        image: fishImages[itemData.name] // Znajdź obrazek po nazwie
-    };
-
-    const itemAdded = inventoryManager.addItem(fullItemObject);
-    if (itemAdded) {
-        showNotification(`Podniesiono: ${itemData.name}`, 'success');
-    } else {
-        showNotification('Ekwipunek pełny!', 'warning');
-    }
-    break;
+        case 'awardStarterItem': {
+            const { itemName, itemTier, targetSlot } = data.payload;
+            const fullItemObject = { name: itemName, tier: itemTier, image: allItemImages[itemName] };
+            inventoryManager.placeItemInSlot(fullItemObject, targetSlot);
+            break;
+        }
+        case 'itemPickedUp': {
+            const itemData = data.payload;
+            const fullItemObject = { name: itemData.name, tier: itemData.tier, image: allItemImages[itemData.name] };
+            if (!inventoryManager.addItem(fullItemObject)) {
+                showNotification('Ekwipunek pełny!', 'warning');
+            } else {
+                showNotification(`Podniesiono: ${itemData.name}`, 'success');
+            }
+            break;
+        }
+        case 'fishCaughtBroadcast': {
+            const catchingPlayer = playersInRoom[data.payload.playerId];
+            if (catchingPlayer && allItemImages[data.payload.fishName]) {
+                caughtFishAnimations.push({ ...data.payload, startTime: Date.now(), startPos: { x: catchingPlayer.floatWorldX, y: catchingPlayer.floatWorldY } });
+            }
+            break;
+        }
+        case 'baitDugBroadcast': {
+            if (playersInRoom[data.payload.playerId] && allItemImages[data.payload.bait.name]) {
+                fishingManager.startDiggingAnimation(data.payload.playerId, data.payload.bait, data.payload.startPos);
+            }
+            break;
+        }
+        case 'dugBaitAwarded': {
+            const { baitData } = data.payload;
+            const wasAdded = inventoryManager.addItem({ name: baitData.name, image: allItemImages[baitData.name], tier: 0 });
+            showNotification(wasAdded ? `found: ${baitData.name}` : 'inventory full', wasAdded ? 'success' : 'warning');
+            break;
+        }
         case 'roomJoined':
             onSuccessfulJoin(data.payload, hostConnection?.peer);
             break;
         case 'gameStateUpdate':
-    // Zmień sposób odczytu danych, aby obsługiwał nowy format
-    const playersData = data.payload.players;
-    const worldItemsData = data.payload.worldItems;
+            const playersData = data.payload.players;
+            const worldItemsData = data.payload.worldItems;
 
-    const map = {};
-    for (const p of playersData) {
-        if (playersInRoom[p.id]) {
-            p.animationFrame = playersInRoom[p.id].animationFrame;
-            p.idleAnimationFrame = playersInRoom[p.id].idleAnimationFrame;
-        }
-        map[p.id] = p;
-    }
-    playersInRoom = map;
-    worldItems = worldItemsData; // Zaktualizuj globalną listę przedmiotów
+            playersData.forEach(serverPlayer => {
+                const clientPlayer = playersInRoom[serverPlayer.id]; // Pobranie stanu gracza z poprzedniej klatki
+
+                // Sprawdzamy, czy spławik się porusza i jest na wodzie
+                if (serverPlayer.hasLineCast && clientPlayer) {
+                    
+                    // Warunek sprawdzający, czy pozycja spławika się zmienia (z małą tolerancją)
+                    const isBobberMoving =
+                        Math.abs(serverPlayer.floatWorldX - clientPlayer.floatWorldX) > 0.1 ||
+                        Math.abs(serverPlayer.floatWorldY - clientPlayer.floatWorldY) > 0.1;
+
+                    // Warunek sprawdzający, czy spławik jest na wodzie
+                    const isBobberOnWater = serverPlayer.floatWorldY >= (biomeManager.WATER_TOP_Y_WORLD - 15);
+
+                    // Jeśli spławik się porusza I jest na wodzie, tworzymy mały rozprysk
+                    if (isBobberMoving && isBobberOnWater) {
+                        // Wywołujemy funkcję z mniejszą liczbą cząsteczek (np. 5) i mniejszą prędkością (np. 0.5x),
+                        // aby stworzyć efekt ślizgania się po wodzie, a nie dużego plusku.
+                        fishingManager.createWaterSplash(serverPlayer.floatWorldX, serverPlayer.floatWorldY, 5, 0.5);
+                    }
+                }
+            });
+
+
+            const map = {};
+            for (const p of playersData) {
+                if (playersInRoom[p.id]) {
+                    p.animationFrame = playersInRoom[p.id].animationFrame;
+                    p.idleAnimationFrame = playersInRoom[p.id].idleAnimationFrame;
+                }
+                map[p.id] = p;
+            }
+            playersInRoom = map;
+            worldItems = worldItemsData;
             if (playersInRoom[localPlayer.id]) {
-                // Zachowaj lokalne stany, których serwer nie śledzi
                 const castingState = { isCasting: localPlayer.isCasting, castingPower: localPlayer.castingPower };
                 Object.assign(localPlayer, playersInRoom[localPlayer.id]);
                 Object.assign(localPlayer, castingState);
@@ -1943,19 +1932,6 @@ function handleDataFromServer(data) {
         case 'grassSwaying':
             if (biomeManager) biomeManager.startSwayAnimation(data.payload.grassId, data.payload.direction);
             break;
-        case 'fishCaughtBroadcast': {
-            const { playerId, fishName, size, tier } = data.payload;
-            const catchingPlayer = playersInRoom[playerId];
-            if (catchingPlayer && fishImages[fishName]) {
-                const startPos = { x: catchingPlayer.floatWorldX, y: catchingPlayer.floatWorldY };
-                caughtFishAnimations.push({
-                    playerId, fishName, size, tier,
-                    startTime: Date.now(),
-                    startPos: startPos
-                });
-            }
-            break;
-        }
     }
 }
 
@@ -1963,20 +1939,16 @@ leaveRoomBtn.addEventListener('click', () => {
     const hostPeerId = hostConnection?.peer || (isHost ? peer?.id : null);
     
     if (isHost) {
-        // Jeśli jesteśmy hostem, zakończ działanie workera
         if (gameHostWorker) {
             gameHostWorker.terminate();
             gameHostWorker = null;
         }
-        // Zamknij wszystkie połączenia P2P
         for(const peerId in hostPeerConnections) {
             if (hostPeerConnections[peerId].close) {
                  hostPeerConnections[peerId].close();
             }
         }
         hostPeerConnections = {};
-        
-        // Zniszcz obiekt PeerJS
         setTimeout(() => { if(peer && !peer.destroyed) peer.destroy(); peer = null; }, 500);
     }
 
@@ -1994,7 +1966,6 @@ function leaveCurrentRoomUI() {
     npcManager.clear();
     isHost=false; hostConnection=null; 
     
-    // Czyszczenie zmiennych workera
     if (gameHostWorker) {
         gameHostWorker.terminate();
         gameHostWorker = null;
@@ -2051,63 +2022,45 @@ function getMousePosOnCanvas(canvas, evt) {
 document.addEventListener('keydown', (event) => {
     if (!currentRoom) return;
 
-    // ======================= POCZĄTEK POPRAWKI =======================
-
-    // --- Klawisze o najwyższym priorytecie (zawsze działają) ---
-
-    // Zamykanie menu klawiszem ESCAPE
     if (event.code === 'Escape' && isCustomizationMenuOpen) {
         event.preventDefault();
         isCustomizationMenuOpen = false;
         inventoryManager.isOpen = false;
-        return; // Zakończ, nic więcej nie rób
+        return;
     }
 
-    // Otwieranie/zamykanie menu LUB kończenie samouczka klawiszem E
     if (event.code === 'KeyE' && !fishingManager.isFishHooked) {
-        event.preventDefault(); // Zawsze blokuj domyślną akcję dla 'E'
+        event.preventDefault();
 
-        // Specjalna obsługa dla ostatniego kroku samouczka
         if (tutorial.state === 5) {
-            // Rozpocznij animację znikania info5.png i oznacz samouczek jako zakończony
             advanceTutorialStep('finished');
-            
-            // Jednocześnie otwórz menu personalizacji i ekwipunek
             isCustomizationMenuOpen = true;
-            inventoryManager.isOpen = true; // Używamy bezpośredniego ustawienia, aby mieć pewność, że jest otwarte
+            inventoryManager.isOpen = true;
             customizationMenuState = 'category';
-            
         } else {
-            // Standardowa logika otwierania/zamykania menu, gdy samouczek jest nieaktywny lub na innym etapie
             isCustomizationMenuOpen = !isCustomizationMenuOpen;
             inventoryManager.toggle();
             if (isCustomizationMenuOpen) {
                 customizationMenuState = 'category';
             }
         }
-        
-        return; // Zakończ, ponieważ akcja dla klawisza 'E' została już w pełni obsłużona
+        return;
     }
 
-    // Zapisz wciśnięty klawisz DLA RUCHU POSTACI dopiero po obsłużeniu UI
     keys[event.code] = true;
 
-    // --- Akcje zależne od kontekstu gry ---
-
-    // PRIORYTET 1: Mini-gra w łowienie
     if (fishingManager.isFishHooked) {
         if (event.code === 'ArrowLeft' || event.code === 'KeyA') {
             fishingManager.setBarMovementDirection(-1);
         } else if (event.code === 'ArrowRight' || event.code === 'KeyD') {
             fishingManager.setBarMovementDirection(1);
         }
-        event.preventDefault(); // Zablokuj ruch postaci w tle
-        return; // W trybie mini-gry nic innego nie może się dziać
+        event.preventDefault();
+        return;
     }
 
-    // PRIORYTET 2: Nawigacja w otwartym menu personalizacji
     if (isCustomizationMenuOpen) {
-        event.preventDefault(); // Zablokuj ruch postaci, gdy menu jest otwarte
+        event.preventDefault();
         if (customizationMenuState === 'category') {
             if (event.code === 'ArrowUp') selectedCategoryIndex = (selectedCategoryIndex - 1 + customizationCategories.length) % customizationCategories.length;
             else if (event.code === 'ArrowDown') selectedCategoryIndex = (selectedCategoryIndex + 1) % customizationCategories.length;
@@ -2158,26 +2111,23 @@ document.addEventListener('keydown', (event) => {
                 }
             }
         }
-        return; // Zakończ po obsłudze menu
+        return;
     }
     
-    // PRIORYTET 3: Samouczek
     if (tutorial.state !== 'finished') {
         switch (tutorial.state) {
             case 1: if (event.code === 'ArrowLeft' || event.code === 'ArrowRight' || event.code === 'KeyA' || event.code === 'KeyD') advanceTutorialStep(2); break;
             case 2: if (event.code === 'Space') advanceTutorialStep(3); break;
             case 3: if (['Digit1', 'Numpad1', 'Digit2', 'Numpad2', 'Digit3', 'Numpad3'].includes(event.code)) advanceTutorialStep(4); break;
             case 4: if (event.code === 'KeyT') advanceTutorialStep(5); break;
-            // Usunęliśmy case 5, ponieważ obsługa klawisza 'E' została przeniesiona wyżej
         }
     }
 
-    // PRIORYTET 4: Domyślne akcje w grze
     if (event.code.startsWith('Digit') || event.code.startsWith('Numpad')) {
         let item = localPlayer.customizations.rightHandItem;
         if (event.code.includes('1')) item = ITEM_NONE;
         if (event.code.includes('2')) item = ITEM_ROD;
-        if (event.code.includes('3')) item = ITEM_LANTERN;
+        if (event.code.includes('3')) item = ITEM_SHOVEL;
         if (localPlayer.customizations.rightHandItem !== item) {
             localPlayer.customizations.rightHandItem = item;
             localPlayerCustomizations.rightHandItem = item;
@@ -2187,21 +2137,17 @@ document.addEventListener('keydown', (event) => {
     } else if (event.code === 'Space' && !localPlayer.isJumping) {
         sendPlayerAction('playerJump');
     }
-    // ======================== KONIEC POPRAWKI =========================
 });
 
 document.addEventListener('keyup', (event) => {
     if (currentRoom) {
-        // Zawsze usuwaj klawisz z tablicy 'keys', aby ruch postaci się zatrzymał.
         delete keys[event.code];
 
-        // Sprawdź, czy puszczony klawisz to jeden z klawiszy sterujących paskiem.
-        // I czy kierunek ruchu paska odpowiada puszczonemu klawiszowi.
         if ((event.code === 'ArrowLeft' || event.code === 'KeyA') && fishingManager.minigameBarDirection === -1) {
-            fishingManager.setBarMovementDirection(0); // Zatrzymaj ruch
+            fishingManager.setBarMovementDirection(0);
         }
         if ((event.code === 'ArrowRight' || event.code === 'KeyD') && fishingManager.minigameBarDirection === 1) {
-            fishingManager.setBarMovementDirection(0); // Zatrzymaj ruch
+            fishingManager.setBarMovementDirection(0);
         }
     }
 });
@@ -2218,30 +2164,35 @@ canvas.addEventListener('mousemove', (event) => {
 canvas.addEventListener('mousedown', (event) => {
     if (event.button !== 0 || !currentRoom) return;
 
-    // Najpierw obsługujemy ekwipunek
     const inventoryActionResult = inventoryManager.handleMouseDown({ x: invX, y: invY });
 
-    // Jeśli funkcja zwróciła obiekt (przedmiot do wyrzucenia)
     if (typeof inventoryActionResult === 'object' && inventoryActionResult !== null) {
-        // Zamiast wysyłać cały obiekt, wyślij tylko niezbędne dane
         sendPlayerAction('dropItem', {
             name: inventoryActionResult.name,
             tier: inventoryActionResult.tier
-            // NIE WYSYŁAJ 'image'
         });
         event.preventDefault();
         return;
     }
 
-
-    // Jeśli funkcja zwróciła `true` (wykonano akcję wewnątrz ekwipunku)
     if (inventoryActionResult === true) {
         event.preventDefault();
         return;
     }
 
-    // Jeśli żadna akcja w ekwipunku nie została wykonana (funkcja zwróciła `false`),
-    // kontynuuj z logiką rzucania wędki.
+    if (!isCustomizationMenuOpen && localPlayer.customizations.rightHandItem === ITEM_SHOVEL) {
+        const groundLevelY = DEDICATED_GAME_HEIGHT - (currentRoom.gameData?.groundLevel || 100);
+
+        if (localPlayer.currentMouseY >= groundLevelY) {
+            sendPlayerAction('digForBait', { 
+                clickX: localPlayer.currentMouseX,
+                clickY: localPlayer.currentMouseY
+            });
+            event.preventDefault();
+            return;
+        }
+    }
+
     if (!isCustomizationMenuOpen && localPlayer.customizations.rightHandItem === ITEM_ROD && !localPlayer.hasLineCast) {
         localPlayer.isCasting = true;
         localPlayer.fishingBarTime = 0;
@@ -2249,69 +2200,48 @@ canvas.addEventListener('mousedown', (event) => {
     }
 });
 
-// ZMIANA 6: Dodanie nasłuchu na prawy przycisk myszy dla zacinania ryby
 canvas.addEventListener('contextmenu', (event) => {
     if (!currentRoom) return;
-    event.preventDefault(); // Zapobiegaj wyświetlaniu menu kontekstowego
+    event.preventDefault();
 
-    // Zacinaj rybę tylko wtedy, gdy menu NIE jest otwarte ORAZ gdy ryba bierze.
     if (!isCustomizationMenuOpen && fishingManager.isBiting) {
-        // ======================= POCZĄTEK ZMIAN =======================
-        // Pobierz nazwę aktualnego biomu z danych pokoju.
-        // Użyj "grassland" jako domyślnego na wypadek, gdyby dane jeszcze nie dotarły.
         const currentBiome = currentRoom?.gameData?.biome || 'grassland';
-        
-        // Przekaż nazwę biomu do menedżera, aby wiedział, z jakiej puli losować rybę.
         fishingManager.playerRightClicked(currentBiome);
-        // ======================== KONIEC ZMIAN =========================
     }
 });
 
 canvas.addEventListener('mouseup', (event) => {
-    // Reaguj tylko na lewy przycisk myszy (button === 0), gdy menu jest zamknięte, jesteś w grze i trzymasz wędkę
     if (event.button === 0 && !isCustomizationMenuOpen && currentRoom && localPlayer.customizations.rightHandItem === ITEM_ROD) {
         
-        // Kliknięcie, gdy minigra jest ukończona (pasek załadowany)
         if (fishingManager.isCatchComplete) {
             const fish = fishingManager.currentFish;
             if (fish) {
-                // Losuj wielkość ryby w zakresie min-max
                 const size = fish.minsize + Math.random() * (fish.maxsize - fish.minsize);
-                const finalSize = Math.round(size); // Zaokrąglij do najbliższej liczby całkowitej
+                const finalSize = Math.round(size);
 
-                // ======================= POCZĄTEK ZMIAN =======================
-                // POPRAWKA: Dołączamy 'tier' do obiektu wysyłanego do hosta.
-                // Używamy 'fish.tier || 0' na wypadek, gdyby jakaś ryba w przyszłości
-                // nie miała zdefiniowanego tieru, domyślnie przyjmie 0.
                 sendPlayerAction('fishCaught', { 
-                fishName: fish.name, 
-                size: finalSize,
-                tier: fish.tier || 0 
-            });
+                    fishName: fish.name, 
+                    size: finalSize,
+                    tier: fish.tier || 0 
+                });
             
-            // --- DODAJ TEN BLOK KODU ---
-            // Dodaj rybę do ekwipunku lokalnego gracza
-            inventoryManager.addItem({
-                name: fish.name,
-                image: fishImages[fish.name], // Obrazek ryby
-                tier: fish.tier || 0 // Tier (gwiazdka)
-            });
-                // ======================== KONIEC ZMIAN =========================
+                 inventoryManager.addItem({
+                    name: fish.name,
+                    image: allItemImages[fish.name],
+                    tier: fish.tier || 0
+                });
                 
-                // Wyczyść UI minigry (pasek, ryba w pasku etc.) i zresetuj stan łowienia
                 fishingManager.cleanUpAfterCatch();
             }
-            event.preventDefault(); // Zatrzymaj dalsze domyślne akcje (np. zwijanie żyłki)
+            event.preventDefault();
         } 
         
-        // Ta część odpowiada za rzucanie wędką - jest poprawna i pozostaje bez zmian
         else if (localPlayer.isCasting) {
             localPlayer.isCasting = false;
             const angle = Math.atan2(localPlayer.currentMouseY - localPlayer.rodTipWorldY, localPlayer.currentMouseX - localPlayer.rodTipWorldX);
             sendPlayerAction('castFishingLine', { power: localPlayer.castingPower, angle: angle, startX: localPlayer.rodTipWorldX, startY: localPlayer.rodTipWorldY });
             event.preventDefault();
         } 
-        // Ta część odpowiada za zwijanie żyłki
         else if (localPlayer.hasLineCast) {
             if (!fishingManager.isBiting) {
                 sendPlayerAction('reelInFishingLine');
@@ -2336,16 +2266,20 @@ console.log("Initializing P2P client...");
 setupNotificationArea();
 initializeSignaling();
 cycleManager.load();
+
 loadImages(() => {
     console.log("All images loaded, starting render loop.");
     
-    // ======================= POCZĄTEK ZMIAN =======================
-    // Przekaż załadowane obrazki do menedżera łowienia
     fishingManager.strikeImage = fishingUIImages.strike;
     fishingManager.fishFrameImage = fishingUIImages.fishframe;
-    fishingManager.fishImages = fishImages; // Przekaż obiekt z obrazkami ryb
+    fishingManager.fishImages = allItemImages;
+    fishingManager.baitImages = allItemImages;
+
     fishingManager.onFishingResetCallback = () => sendPlayerAction('reelInFishingLine');
-    // ======================== KONIEC ZMIAN =========================
+
+    fishingManager.onBaitConsumedCallback = () => {
+        inventoryManager.consumeBait();
+    };
 
     requestAnimationFrame(gameLoop);
 });

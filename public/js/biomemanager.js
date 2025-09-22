@@ -9,7 +9,8 @@ class BiomeManager {
         this.biomeBuildingsImages = {};
         this.biomeInsectImages = {};
         this.biomePierImages = {}; 
-        this.biomePierSpanImages = {}; // <-- NOWE: Do przechowywania obrazków bali
+        this.biomePierSpanImages = {};
+
         this.placedPiers = [];     
 
         this.backgroundImage = new Image();
@@ -28,6 +29,42 @@ class BiomeManager {
         this.WATER_OSCILLATION_SPEED = 1;
         this.WATER_ANIMATION_TILE_SPEED = 0;
         this.currentWaterTileFrame = 0;
+        
+        // Właściwości dla ogniska
+        this.fireplaceImage = new Image();
+        this.fireplaceLoaded = false;
+        this.fireplaceFrame = 0;
+        this.fireplaceAnimationTimer = 0;
+        this.fireplaceObject = null;
+        this.fireplaceParticles = [];
+        this.particleSpawnTimer = 0;
+
+        this.fireplaceImage.src = 'img/world/fireplace.png';
+        this.fireplaceImage.onload = () => { this.fireplaceLoaded = true; };
+        this.fireplaceImage.onerror = () => { console.error('Failed to load fireplace.png'); };
+
+        // Właściwości dla smugi światła
+        this.lightImage = new Image();
+        this.lightLoaded = false;
+        this.lightAlpha = 1.0;
+        this.lightScale = 1.0;
+        this.lightAnimationTime = 0;
+
+        this.lightImage.src = 'img/world/light.png';
+        this.lightImage.onload = () => { this.lightLoaded = true; };
+        this.lightImage.onerror = () => { console.error('Failed to load light.png'); };
+
+        // === POCZĄTEK ZMIAN ===
+        // Właściwości dla kempingu
+        this.campsiteImage = new Image();
+        this.campsiteLoaded = false;
+        this.campsiteObject = null;
+
+        this.campsiteImage.src = 'img/world/camp.png';
+        this.campsiteImage.onload = () => { this.campsiteLoaded = true; };
+        this.campsiteImage.onerror = () => { console.error('Failed to load camp.png'); };
+        // === KONIEC ZMIAN ===
+
 
         const BASE_BUILDING_SOURCE_TILE_SIZE = 128;
 
@@ -39,7 +76,7 @@ class BiomeManager {
                 buildingsPath: 'img/world/biome/jurassic/buildings.png',
                 insectPath: 'img/world/biome/jurassic/insect.png',
                 pierPath: 'img/world/biome/jurassic/pier.png',
-                pierSpanPath: 'img/world/biome/jurassic/pierspan.png', // <-- NOWE
+                pierSpanPath: 'img/world/biome/jurassic/pierspan.png',
                 buildingDefinitions: [
                     { id: 'j_house1', x: 0, y: 0, width: BASE_BUILDING_SOURCE_TILE_SIZE, height: BASE_BUILDING_SOURCE_TILE_SIZE },
                     { id: 'j_house2', x: BASE_BUILDING_SOURCE_TILE_SIZE, y: 0, width: BASE_BUILDING_SOURCE_TILE_SIZE, height: BASE_BUILDING_SOURCE_TILE_SIZE },
@@ -84,14 +121,13 @@ class BiomeManager {
                 ]
             },
             grassland: {
-                 // ... (reszta definicji biomu grassland)
                 backgroundPath: 'img/world/biome/grassland/background.png',
                 background2Path: 'img/world/biome/grassland/background2.png',
                 imgPath: 'img/world/biome/grassland/ground.png',
                 buildingsPath: 'img/world/biome/grassland/buildings.png',
                 insectPath: 'img/world/biome/grassland/insect.png',
                 pierPath: 'img/world/biome/grassland/pier.png',
-                pierSpanPath: 'img/world/biome/grassland/pierspan.png', // <-- NOWE
+                pierSpanPath: 'img/world/biome/grassland/pierspan.png',
                 buildingDefinitions: [
                     { id: 'g_hut1', x: 0, y: 0, width: BASE_BUILDING_SOURCE_TILE_SIZE, height: BASE_BUILDING_SOURCE_TILE_SIZE },
                     { id: 'g_hut2', x: BASE_BUILDING_SOURCE_TILE_SIZE, y: 0, width: BASE_BUILDING_SOURCE_TILE_SIZE, height: BASE_BUILDING_SOURCE_TILE_SIZE },
@@ -178,7 +214,126 @@ class BiomeManager {
         this._generateFirstLayerTileGrid();
     }
     
+    _initializeFireplace(groundLevel) {
+        if (this.fireplaceObject) return;
 
+        const FIREPLACE_SCALE = 3.5;
+        const FIREPLACE_SPRITE_WIDTH = 32;
+        const FIREPLACE_SPRITE_HEIGHT = 32;
+        
+        this.fireplaceObject = {
+            x: 420,
+            y: this.gameHeight - groundLevel, // y to spód obiektu
+            scale: FIREPLACE_SCALE,
+            width: FIREPLACE_SPRITE_WIDTH * FIREPLACE_SCALE,
+            height: FIREPLACE_SPRITE_HEIGHT * FIREPLACE_SCALE,
+        };
+    }
+
+    // === POCZĄTEK ZMIAN ===
+    _initializeCampsite(groundLevel) {
+        if (this.campsiteObject) return;
+
+        const CAMPSITE_SCALE = 3.5;
+        const SOURCE_WIDTH = 128;
+        const SOURCE_HEIGHT = 86;
+        
+        this.campsiteObject = {
+            x: 350, // Trochę na prawo od ogniska
+            y: this.gameHeight - groundLevel, // y to spód obiektu, wyrównany z ziemią
+            scale: CAMPSITE_SCALE,
+            width: SOURCE_WIDTH * CAMPSITE_SCALE,
+            height: SOURCE_HEIGHT * CAMPSITE_SCALE,
+        };
+    }
+    // === KONIEC ZMIAN ===
+
+    _updateFireplaceAnimation(deltaTime) {
+        if (!this.fireplaceLoaded || !this.fireplaceObject) return;
+
+        const FIREPLACE_FRAME_COUNT = 4;
+        const FIREPLACE_ANIMATION_SPEED = 0.15;
+
+        this.fireplaceAnimationTimer += deltaTime;
+        if (this.fireplaceAnimationTimer >= FIREPLACE_ANIMATION_SPEED) {
+            this.fireplaceAnimationTimer -= FIREPLACE_ANIMATION_SPEED;
+            this.fireplaceFrame = (this.fireplaceFrame + 1) % FIREPLACE_FRAME_COUNT;
+        }
+    }
+    
+    _updateLightEffect(deltaTime) {
+        if (!this.lightLoaded) return;
+
+        this.lightAnimationTime += deltaTime;
+
+        const LIGHT_MIN_ALPHA = 0.12;
+        const LIGHT_MAX_ALPHA = 0.3;
+        const LIGHT_MIN_SCALE = 3.5;
+        const LIGHT_MAX_SCALE = 6.5;
+        const LIGHT_ALPHA_SPEED = 2.2;
+        const LIGHT_SCALE_SPEED = 0.6;
+
+        const alphaWave = (Math.sin(this.lightAnimationTime * LIGHT_ALPHA_SPEED) + 1) / 2;
+        this.lightAlpha = LIGHT_MIN_ALPHA + alphaWave * (LIGHT_MAX_ALPHA - LIGHT_MIN_ALPHA);
+
+        const scaleWave = (Math.sin(this.lightAnimationTime * LIGHT_SCALE_SPEED) + 1) / 2;
+        this.lightScale = LIGHT_MIN_SCALE + scaleWave * (LIGHT_MAX_SCALE - LIGHT_MIN_SCALE);
+    }
+
+
+    _spawnFireplaceParticle() {
+        if (!this.fireplaceObject) return;
+
+        const colors = ['#d8a808ff', '#e48918', '#cc280c'];
+        const sourceX = this.fireplaceObject.x + this.fireplaceObject.width / 2;
+        const sourceY = this.fireplaceObject.y - this.fireplaceObject.height * 0.1; // Wyżej, bo y to spód
+
+        const particle = {
+            x: sourceX + (Math.random() - 0.5) * 20,
+            y: sourceY + (Math.random() - 0.5) * 15,
+            baseX: 0,
+            size: 4,
+            color: colors[Math.floor(Math.random() * colors.length)],
+            life: 0,
+            maxLife: 4 + Math.random() * 2,
+            velocityY: -(30 + Math.random() * 80),
+            rotation: Math.random() * Math.PI * 2,
+            rotationSpeed: (Math.random() - 0.5) * 2,
+            sineAmplitude: 15 + Math.random() * 45,
+            sineFrequency: 0.1 + Math.random() * 0.1,
+        };
+        particle.baseX = particle.x;
+        
+        this.fireplaceParticles.push(particle);
+    }
+
+    
+    _updateFireplaceParticles(deltaTime) {
+        if (!this.fireplaceLoaded || !this.fireplaceObject) return;
+
+        this.particleSpawnTimer -= deltaTime;
+        if (this.particleSpawnTimer <= 0) {
+            this._spawnFireplaceParticle();
+            this.particleSpawnTimer = 0.01 + Math.random() * 0.1;
+        }
+        
+        for (let i = this.fireplaceParticles.length - 1; i >= 0; i--) {
+            const p = this.fireplaceParticles[i];
+
+            p.life += deltaTime;
+            if (p.life >= p.maxLife) {
+                this.fireplaceParticles.splice(i, 1);
+                continue;
+            }
+            
+            p.y += p.velocityY * deltaTime;
+            const sineOffset = Math.sin(p.life * p.sineFrequency) * p.sineAmplitude;
+            p.x = p.baseX + sineOffset;
+            
+            p.rotation += p.rotationSpeed * deltaTime;
+        }
+    }
+    
     getCurrentInsectImage() {
         return this.biomeInsectImages[this.currentBiomeName];
     }
@@ -202,7 +357,7 @@ class BiomeManager {
         this.treesLoaded = false;
         this.backgroundLoaded = false;
         this.background2Loaded = false;
-        this.placedPiers = []; // Czyścimy pomosty przy zmianie biomu
+        this.placedPiers = [];
         if (this.currentBiomeDef.backgroundPath) {
             this.backgroundImage.onload = () => { this.backgroundLoaded = true; };
             this.backgroundImage.onerror = () => { console.error(`Failed to load background.png for ${newBiomeName}`); };
@@ -435,6 +590,9 @@ class BiomeManager {
     updateAnimations(deltaTime) {
         this.updateWaterAnimation(deltaTime);
         this._updateGroundPlantsAnimation(deltaTime);
+        this._updateFireplaceAnimation(deltaTime);
+        this._updateFireplaceParticles(deltaTime);
+        this._updateLightEffect(deltaTime);
     }
 
     drawWater(ctx, biomeName, cameraX) {
@@ -504,7 +662,7 @@ class BiomeManager {
             if (def.imgPath) imagesToLoadPaths.add(def.imgPath);
             if (def.insectPath) imagesToLoadPaths.add(def.insectPath);
             if (def.pierPath) imagesToLoadPaths.add(def.pierPath);
-            if (def.pierSpanPath) imagesToLoadPaths.add(def.pierSpanPath); // <-- NOWE
+            if (def.pierSpanPath) imagesToLoadPaths.add(def.pierSpanPath);
         });
 
         const pathArray = Array.from(imagesToLoadPaths);
@@ -524,18 +682,10 @@ class BiomeManager {
                 loadedCount++;
                 for (const biomeName of biomeNames) {
                     const def = this.biomeDefinitions[biomeName];
-                    if (def.imgPath === src) {
-                        this.biomeTiles[biomeName] = img;
-                    }
-                    if (def.insectPath === src) {
-                        this.biomeInsectImages[biomeName] = img;
-                    }
-                    if (def.pierPath === src) {
-                        this.biomePierImages[biomeName] = img;
-                    }
-                    if (def.pierSpanPath === src) { // <-- NOWE
-                        this.biomePierSpanImages[biomeName] = img;
-                    }
+                    if (def.imgPath === src) this.biomeTiles[biomeName] = img;
+                    if (def.insectPath === src) this.biomeInsectImages[biomeName] = img;
+                    if (def.pierPath === src) this.biomePierImages[biomeName] = img;
+                    if (def.pierSpanPath === src) this.biomePierSpanImages[biomeName] = img;
                 }
 
                 if (loadedCount === totalImages) {
@@ -552,6 +702,11 @@ class BiomeManager {
     }
 
     drawBackgroundBiomeGround(ctx, biomeName, groundLevel) {
+        this._initializeFireplace(groundLevel);
+        // === POCZĄTEK ZMIAN ===
+        this._initializeCampsite(groundLevel);
+        // === KONIEC ZMIAN ===
+    
         const biomeImage = this.biomeTiles[biomeName];
         if (!biomeImage) {
             ctx.fillStyle = 'brown';
@@ -585,6 +740,84 @@ class BiomeManager {
             }
         }
     }
+    
+    drawFireplace(ctx) {
+        if (!this.fireplaceLoaded || !this.fireplaceObject) return;
+
+        const FIREPLACE_SPRITE_WIDTH = 32;
+        const FIREPLACE_SPRITE_HEIGHT = 32;
+
+        const sourceX = this.fireplaceFrame * FIREPLACE_SPRITE_WIDTH;
+        const sourceY = 0;
+
+        // Rysuj od góry, bazując na dolnej krawędzi zapisanej w `y`
+        const drawY = this.fireplaceObject.y - this.fireplaceObject.height;
+
+        ctx.drawImage(
+            this.fireplaceImage,
+            sourceX, sourceY,
+            FIREPLACE_SPRITE_WIDTH, FIREPLACE_SPRITE_HEIGHT,
+            this.fireplaceObject.x, drawY,
+            this.fireplaceObject.width, this.fireplaceObject.height
+        );
+    }
+    drawFireplaceParticles(ctx) {
+        if (this.fireplaceParticles.length === 0) return;
+
+        for (const p of this.fireplaceParticles) {
+            ctx.save();
+            ctx.fillStyle = p.color;
+            ctx.translate(p.x, p.y);
+            ctx.rotate(p.rotation);
+            ctx.fillRect(-p.size / 2, -p.size / 2, p.size, p.size);
+            ctx.restore();
+        }
+    }
+    
+    drawLightEffect(ctx) {
+        if (!this.lightLoaded || !this.fireplaceObject || !this.lightImage.complete || this.lightImage.naturalWidth === 0) return;
+
+        ctx.save();
+        ctx.globalAlpha = this.lightAlpha;
+
+        const lightWidth = this.lightImage.naturalWidth * this.lightScale;
+        const lightHeight = this.lightImage.naturalHeight * this.lightScale;
+        
+        const centerX = this.fireplaceObject.x + (this.fireplaceObject.width / 2);
+        const centerY = this.fireplaceObject.y - (this.fireplaceObject.height * 1.1); // Wyżej, bo y to spód
+        const drawX = centerX - lightWidth / 2;
+        const drawY = centerY - lightHeight / 2;
+        
+        ctx.drawImage(
+            this.lightImage,
+            drawX, drawY,
+            lightWidth, lightHeight
+        );
+        
+        ctx.restore();
+    }
+
+    // === POCZĄTEK ZMIAN ===
+    /**
+     * Rysuje statyczny obiekt kempingu.
+     * @param {CanvasRenderingContext2D} ctx 
+     */
+    drawCampsite(ctx) {
+        if (!this.campsiteLoaded || !this.campsiteObject) return;
+
+        const { x, y, width, height } = this.campsiteObject;
+        const drawY = y - height; // Obliczamy górną krawędź do rysowania
+
+        ctx.drawImage(
+            this.campsiteImage,
+            0, 0,
+            113, 80, // Wymiary źródłowe obrazka
+            x-320, drawY,
+            width, height
+        );
+    }
+    // === KONIEC ZMIAN ===
+
 
     drawForegroundBiomeGround(ctx, biomeName, groundLevel) {
         const biomeImage = this.biomeTiles[biomeName];
@@ -600,9 +833,6 @@ class BiomeManager {
         }
     }
     
-    // ====================================================================
-    // === NOWA FUNKCJA DO RYSOWANIA BALI PODTRZYMUJĄCYCH POMOST ===
-    // ====================================================================
     drawPierSupports(ctx, pierSupportData) {
         const supportImage = this.biomePierSpanImages[this.currentBiomeName];
 
@@ -620,7 +850,7 @@ class BiomeManager {
             
             const scaledPierGfxHeight = this.scaledTileSize; 
             const pierPlankTopY = originalPier.y - scaledPierGfxHeight + 116;
-            const PIER_PLANK_THICKNESS = 20; // Przyjęta grubość deski, aby bale zaczynały się pod nią
+            const PIER_PLANK_THICKNESS = 20;
             const pileStartY = pierPlankTopY + PIER_PLANK_THICKNESS;
 
             pierData.sections.forEach((sectionData, sectionIndex) => {
@@ -648,7 +878,6 @@ class BiomeManager {
             });
         });
     }
-
 
     drawPiers(ctx) {
         const pierImage = this.biomePierImages[this.currentBiomeName];
