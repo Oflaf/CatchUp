@@ -480,6 +480,15 @@ class GameHost {
                 }
             });
         }, 150);
+
+        setTimeout(() => {
+        this.broadcast({
+                type: 'playerJoinedRoomNotification', // ZMIANA TUTAJ
+                payload: {
+                    username: this.room.players[peerId].username
+                }
+            });
+        }, 100);
         // ======================== KONIEC ZMIAN =========================
         
         setTimeout(() => {
@@ -495,15 +504,24 @@ class GameHost {
     }
 
     removePlayer(peerId) {
-        if (this.room && this.room.players[peerId]) {
-             console.log(`[HOST-WORKER] Gracz ${this.room.players[peerId].username} (${peerId}) opuścił grę.`);
-             delete this.room.players[peerId];
-             delete this.room.playerInputs[peerId];
-             delete this.digCooldowns[peerId];
-             
-             this.broadcast({ type: 'playerLeftRoom', payload: peerId });
-        }
+    if (this.room && this.room.players[peerId]) {
+         // === POCZĄTEK ZMIAN ===
+         // 1. Pobieramy nazwę użytkownika, ZANIM usuniemy obiekt gracza
+         const username = this.room.players[peerId].username;
+         console.log(`[HOST-WORKER] Gracz ${username} (${peerId}) opuścił grę.`);
+         
+         delete this.room.players[peerId];
+         delete this.room.playerInputs[peerId];
+         delete this.digCooldowns[peerId];
+         
+         // 2. Wysyłamy broadcast z POPRAWNĄ nazwą i payloadem
+         this.broadcast({ 
+             type: 'playerLeftRoomNotification', // Poprawna nazwa
+             payload: { username: username }    // Wysyłamy username, a nie peerId
+         });
+         // === KONIEC ZMIAN ===
     }
+}
     
     handlePlayerInput(peerId, inputData) {
         if(this.room && this.room.playerInputs[peerId]) {
@@ -527,6 +545,23 @@ class GameHost {
         if(!player) return;
 
         switch(actionData.type) {
+
+            case 'sendChatMessage': {
+            const message = actionData.payload.message;
+            // Sprawdzamy, czy wiadomość nie jest pusta i czy nie przekracza limitu
+            if (message && message.length > 0 && message.length <= 100) {
+                console.log(`[HOST-WORKER] Czat od ${player.username}: ${message}`);
+                this.broadcast({
+                    type: 'chatMessageBroadcast',
+                    payload: {
+                        username: player.username,
+                        message: message // Wysyłamy oczyszczoną wiadomość
+                    }
+                });
+            }
+            break;
+        }
+
             case 'dropItem': {
                 console.log(`[HOST-WORKER] Gracz ${player.username} wyrzucił ${actionData.payload.name}`);
                 
@@ -583,20 +618,35 @@ class GameHost {
                 break;
             }
             case 'fishCaught': {
-                const { fishName, size, tier } = actionData.payload;
-                console.log(`[HOST-WORKER] Gracz ${player.username} złapał ${fishName} (Tier: ${tier}) o wielkości ${size}cm.`);
+    const { fishName, size, tier } = actionData.payload;
+    
 
-                this.broadcast({
-                    type: 'fishCaughtBroadcast',
-                    payload: {
-                        playerId: peerId,
-                        fishName: fishName,
-                        size: size,
-                        tier: tier
-                    }
-                });
-                break;
-            }
+    // 1. Rozgłoś informację o animacji lecącej ryby do gracza (to już było)
+    this.broadcast({
+        type: 'fishCaughtBroadcast',
+        payload: {
+            playerId: peerId,
+            fishName: fishName,
+            size: size,
+            tier: tier,
+            // Przekazujemy aktualną pozycję spławika gracza, aby animacja zaczęła się we właściwym miejscu
+            startPos: { x: player.floatWorldX, y: player.floatWorldY }
+        }
+    });
+
+    // 2. <<< NOWA CZĘŚĆ >>>
+    // Rozgłoś osobną informację do czatu dla wszystkich graczy
+    this.broadcast({
+        type: 'fishCaughtNotification',
+        payload: {
+            username: player.username,
+            fishName: fishName,
+            size: size
+        }
+    });
+    
+    break;
+}
             case 'digForBait': {
                 const now = Date.now();
                 const lastDigTime = this.digCooldowns[peerId] || 0;
@@ -609,7 +659,7 @@ class GameHost {
 
                 const dugBait = getRandomBait();
                 if (dugBait) {
-                    console.log(`[HOST-WORKER] Gracz ${player.username} wykopał: ${dugBait.name}`);
+                    
                     
                     this.broadcast({
                         type: 'baitDugBroadcast',

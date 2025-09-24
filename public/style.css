@@ -4,6 +4,7 @@ html, body {
     margin: 0;
     padding: 0;
     overflow: hidden; /* Zapobiega paskom przewijania */
+    
 }
 
 body {
@@ -52,19 +53,99 @@ body {
 /* --- Koniec kluczowych zmian --- */
 
 #lobby {
-    /* Użycie position: fixed i transform jest już prawidłowe do centrowania */
     position: fixed;
     top: 50%;
     left: 50%;
     transform: translate(-50%, -50%);
     
-    background-color: rgba(30, 30, 30, 0.85); /* Lepszy, półprzezroczysty kolor */
-    padding: 25px;
-    border-radius: 12px;
-    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.7);
     text-align: center;
-    z-index: 1000; /* Upewnia się, że lobby jest na wierzchu */
-    min-width: 300px;
+    z-index: 1000;
+    min-width: 320px;
+}
+
+#lobby p {
+    margin: 0 0 25px 0;
+    color: #ccc;
+    font-size: 1.1em;
+}
+
+#myUsername {
+    font-weight: bold;
+    color: #fff;
+}
+
+/* --- NOWE STYLE DLA PRZYCISKÓW MENU --- */
+.main-menu {
+    display: flex;
+    flex-direction: column;
+    gap: 15px; /* Odstęp między przyciskami */
+}
+
+.main-menu button {
+    padding: 16px 20px;
+    font-size: 1.2em;
+    font-weight: bold;
+    color: white;
+    border: none;
+    border-radius: 8px; /* Bardziej zaokrąglone rogi */
+    cursor: pointer;
+    text-transform: uppercase; /* Wielkie litery */
+    letter-spacing: 1px; /* Odstęp między literami */
+    
+    /* Dodajemy subtelny cień i przejścia dla płynnych animacji */
+    box-shadow: 0 3px 10px rgba(0,0,0,0.3);
+    transition: background-color 0.2s, transform 0.1s, box-shadow 0.2s;
+}
+
+#joinGameBtn {
+    background: linear-gradient(145deg, #28a745, #24913c);
+    border-bottom: 3px solid #1a682b;
+}
+
+#joinGameBtn:hover {
+    background: linear-gradient(145deg, #2ebf4f, #28a745);
+    box-shadow: 0 5px 15px rgba(46, 191, 79, 0.2);
+}
+
+#optionsBtn {
+    background: linear-gradient(145deg, #6c757d, #5a6268);
+    border-bottom: 3px solid #495057;
+}
+
+#optionsBtn:hover {
+    background: linear-gradient(145deg, #818a91, #6c757d);
+}
+
+/* Efekt wciśnięcia przycisku */
+.main-menu button:active {
+    transform: translateY(2px); /* Przesuń w dół */
+    border-bottom-width: 1px; /* Zmniejsz ramkę na dole */
+    box-shadow: 0 1px 5px rgba(0,0,0,0.3);
+}
+
+/* Styl dla nieaktywnych/wyłączonych przycisków */
+.main-menu button:disabled {
+    background: #555;
+    color: #999;
+    cursor: not-allowed;
+}
+
+.main-menu button:disabled:hover {
+     background: #555; /* Bez zmiany koloru na hover */
+     box-shadow: 0 3px 10px rgba(0,0,0,0.3); /* Bez zmiany cienia */
+}
+.main-menu button:disabled:active {
+    transform: none; /* Bez efektu wciśnięcia */
+}
+
+/* Styl dla tekstu statusu pod przyciskami */
+.menu-status {
+    margin-top: 25px;
+    margin-bottom: 0;
+    min-height: 20px; 
+    font-style: italic;
+    color: #aaa;
+    transition: color 0.3s;
 }
 
 #gameContainer {
@@ -105,6 +186,19 @@ body {
     pointer-events: auto;
 }
 
+#usernameInput {
+    padding: 8px 12px;
+    font-size: 1.1em;
+    font-weight: bold;
+    color: #fff;
+    background-color: rgba(0, 0, 0, 0);
+    border: 0px solid #555;
+    border-radius: 6px;
+    text-align: center;
+    outline: none; /* Usuwa domyślną ramkę po kliknięciu */
+}
+
+
 /* Klasa, którą będziemy usuwać/dodawać w JS, aby ukryć ekran */
 #loadingOverlay:not(.visible) {
     opacity: 0;
@@ -135,85 +229,4 @@ body {
     border-radius: 4px;
     cursor: pointer;
     font-size: 1em;
-}
-
-/* Reszta stylów lobby (bez zmian, można je zostawić) */
-#lobby h1 {
-    color: #aaffaa;
-    margin-top: 0;
-}
-
-#roomList {
-    list-style: none;
-    padding: 0;
-    max-height: 300px;
-    overflow-y: auto;
-    border: 1px solid #666;
-    margin-top: 15px;
-    background-color: #3a3a3a;
-    border-radius: 5px;
-}
-
-#roomList li {
-    padding: 10px 15px;
-    border-bottom: 1px solid #555;
-    cursor: pointer;
-    transition: background-color 0.2s;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-}
-
-#roomList li:last-child {
-    border-bottom: none;
-}
-
-#roomList li:hover {
-    background-color: #5c5c5c;
-}
-
-#roomList button {
-    margin-left: 10px;
-    padding: 5px 10px;
-    cursor: pointer;
-    background-color: #28a745;
-    color: white;
-    border: none;
-    border-radius: 4px;
-}
-
-.room-actions {
-    margin-top: 20px;
-    display: flex; /* Lepsze ułożenie inputa i przycisku */
-    justify-content: center;
-}
-
-.room-actions input {
-    padding: 8px;
-    border: 1px solid #666;
-    border-radius: 4px;
-    margin-right: 5px;
-    background-color: #666;
-    color: #eee;
-    flex-grow: 1; /* Input zajmie dostępną przestrzeń */
-}
-
-.room-actions button {
-    padding: 8px 15px;
-    background-color: #007bff;
-    color: white;
-    border: none;
-    border-radius: 4px;
-    cursor: pointer;
-    font-size: 1em;
-}
-
-#myColorDisplay {
-    border-radius: 50%;
-    vertical-align: middle;
-    width: 20px;
-    height: 20px;
-    display: inline-block;
-    margin-left: 5px;
-    border: 1px solid #888;
 }

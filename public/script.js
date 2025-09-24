@@ -387,8 +387,7 @@ class NPCManager {
 
 const lobbyDiv = document.getElementById('lobby');
 const gameContainerDiv = document.getElementById('gameContainer');
-const myUsernameSpan = document.getElementById('myUsername');
-const myColorDisplay = document.getElementById('myColorDisplay');
+const usernameInput = document.getElementById('usernameInput');
 const createRoomBtn = document.getElementById('createRoomBtn');
 const newRoomNameInput = document.getElementById('newRoomName');
 const roomListUl = document.getElementById('roomList');
@@ -494,7 +493,19 @@ const exampleCustomItemPaths = {
 };
 
 let localPlayer = { id: null, username: 'Player' + Math.floor(Math.random()*1000), danglingBobber: { x: 0, y: 0, oldX: 0, oldY: 0, initialized: false } , color: '#' + Math.floor(Math.random()*16777215).toString(16).padStart(6,'0'), x: 50, y: DEDICATED_GAME_HEIGHT-50-playerSize, isJumping: false, velocityY: 0, isWalking: false, isIdle: false, animationFrame: 0, idleAnimationFrame: 0, direction: 1, velocityX: 0, currentMouseX: undefined, currentMouseY: undefined, customizations: { hat:'none', hair:'none', accessories:'none', beard:'none', clothes:'none', pants:'none', shoes:'none', rightHandItem:ITEM_NONE, hairSaturation:50, hairHue:180, hairBrightness:50, beardSaturation:50, beardHue:180, beardBrightness:50 }, isCasting:false, castingPower:0, fishingBarSliderPosition:0, fishingBarTime:0, castingDirectionAngle:0, hasLineCast:false, floatWorldX:null, floatWorldY:null, rodTipWorldX:null, rodTipWorldY:null, lineAnchorWorldY:null };
-myUsernameSpan.textContent = localPlayer.username; myColorDisplay.style.backgroundColor = localPlayer.color;
+usernameInput.value = localPlayer.username;
+
+// Dodajemy event listener, który aktualizuje nick gracza przy każdej zmianie w polu
+usernameInput.addEventListener('input', () => {
+    const newUsername = usernameInput.value.trim(); // Pobieramy wartość i usuwamy białe znaki z początku/końca
+    
+    if (newUsername) {
+        localPlayer.username = newUsername;
+    } else {
+        // Jeśli użytkownik usunie cały tekst, możemy ustawić domyślną nazwę
+        localPlayer.username = 'Player';
+    }
+}); 
 
 let playersInRoom = {};
 let insectsInRoom = [];
@@ -520,16 +531,8 @@ let customizationMenuState = 'category';
 let selectedColorPropertyIndex = 0;
 const colorProperties = ['brightness', 'saturation', 'hue'];
 let lastTime = 0;
-const inventoryManager = new InventoryManager();
-const fishingManager = new FishingManager();
-let previousHasLineCast = false;
-const pierSpanImages = {};
-let pierSupportData = [];
 
-const caughtFishAnimations = [];
-const FISH_ANIMATION_DURATION = 1200;
-const FISH_DISPLAY_DURATION = 4000;
-
+// ======================= WKLEJ TUTAJ =======================
 const FISH_TIER_CONFIG = {
     0: { color: 'rgba(221, 221, 221, 1)', font: `16px ${PIXEL_FONT}`, imageKey: null },
     1: { color: 'rgba(14, 168, 40, 1)', font: `16px ${PIXEL_FONT}`, imageKey: 'common_star' },
@@ -538,6 +541,39 @@ const FISH_TIER_CONFIG = {
     4: { color: 'rgba(152, 65, 199, 1)', font: `16px ${PIXEL_FONT}`, imageKey: 'epic_star' },
     5: { color: 'rgba(185, 6, 117, 1)', font: `bold 16px ${PIXEL_FONT}`, imageKey: 'legendary_star' }
 };
+// =============================================================
+
+// ======================= POCZĄTEK ZMIAN =======================
+const TIER_NAMES = {
+    0: 'basic',
+    1: 'common',
+    2: 'uncommon',
+    3: 'rare',
+    4: 'epic',
+    5: 'legendary'
+};
+// =============================================================
+
+const inventoryManager = new InventoryManager();
+const fishingManager = new FishingManager();
+
+// ======================= POCZĄTEK ZMIAN =======================
+// Przekaż potrzebne obiekty konfiguracyjne do obu managerów
+fishingManager.tierConfig = FISH_TIER_CONFIG;
+fishingManager.starImages = starImages;
+inventoryManager.tierConfig = FISH_TIER_CONFIG;
+inventoryManager.starImages = starImages;
+inventoryManager.tierNames = TIER_NAMES; // <-- DODAJ TĘ LINIĘ
+// ======================== KONIEC ZMIAN =========================
+
+let previousHasLineCast = false;
+const pierSpanImages = {};
+let pierSupportData = [];
+
+const caughtFishAnimations = [];
+const FISH_ANIMATION_DURATION = 1200;
+const FISH_DISPLAY_DURATION = 4000;
+
 
 
 // ====================================================================
@@ -922,11 +958,9 @@ function drawPlayer(p, imageSet = characterImages) {
     if (p.username) {
         const ROD_TIP_OFFSET_X = playerSize * 1.07; 
         const ROD_TIP_OFFSET_Y = -playerSize * 0.32;
-
         p.customizations && p.customizations.rightHandItem === ITEM_ROD ? (p.rodTipWorldX = p.x + playerSize / 2 + (frontArmOffsetX + originalArmPivotInImageX - playerSize / 2) * p.direction + (ROD_TIP_OFFSET_X * Math.cos(b) - ROD_TIP_OFFSET_Y * Math.sin(b)) * p.direction, p.rodTipWorldY = p.y + playerSize / 2 + (0 + originalArmPivotInImageY - playerSize / 2) + (ROD_TIP_OFFSET_X * Math.sin(b) + ROD_TIP_OFFSET_Y * Math.cos(b)), p.id === localPlayer.id && (localPlayer.rodTipWorldX = p.rodTipWorldX, localPlayer.rodTipWorldY = p.rodTipWorldY)) : (p.rodTipWorldX = null, p.rodTipWorldY = null, p.id === localPlayer.id && (localPlayer.rodTipWorldX = null, localPlayer.rodTipWorldY = null)), ctx.fillStyle = "white", ctx.font = `${DEFAULT_FONT_SIZE_USERNAME}px ${PIXEL_FONT}`, ctx.textAlign = "center", ctx.fillText(p.username || p.id.substring(0, 5), p.x + playerSize / 2, p.y - 10 + a)
     }
 }
-
 function drawCustomizationMenu() {
     const ROLLER_X_OFFSET_FROM_PLAYER = playerSize * currentZoomLevel * 1.5;
     const ROLLER_Y_OFFSET = -playerSize * currentZoomLevel * 0.5;
@@ -1303,6 +1337,49 @@ function updateAndDrawCaughtFishAnimations() {
 // === SEKCJA 3: LOGIKA SIECIOWA (z modyfikacjami) ===
 // ====================================================================
 
+function createFullItemObject(itemName) {
+    const baitData = fishingManager.baitData[itemName];
+    if (baitData) {
+        return {
+            name: itemName,
+            image: allItemImages[itemName],
+            tier: baitData.tier || 0,
+            description: baitData.description || '' // <-- DODAJ TĘ LINIĘ
+        };
+    }
+
+    const hookData = fishingManager.hookData[itemName];
+    if (hookData) {
+        return {
+            name: itemName,
+            image: allItemImages[itemName],
+            tier: hookData.tier || 0,
+            description: hookData.description || '' // <-- DODAJ TĘ LINIĘ
+        };
+    }
+
+    const fishData = fishingManager.getFishData();
+    for (const biome in fishData) {
+        if (fishData[biome][itemName]) {
+            const itemDetails = fishData[biome][itemName];
+            return {
+                name: itemName,
+                image: allItemImages[itemName],
+                tier: itemDetails.tier || 0,
+                description: itemDetails.description || '' // <-- DODAJ TĘ LINIĘ
+            };
+        }
+    }
+    
+    console.warn(`Nie znaleziono szczegółowych danych dla przedmiotu: ${itemName}. Tworzenie podstawowego obiektu.`);
+    return {
+        name: itemName,
+        image: allItemImages[itemName],
+        tier: 0,
+        description: 'No description available.' // <-- DODAJ TĘ LINIĘ
+    };
+}
+
 function initializeSignaling() {
     signalingSocket = io();
     signalingSocket.on('connect', () => {
@@ -1363,40 +1440,36 @@ function initializePeer(callback) {
 }
 
 function onSuccessfulJoin(roomData, hostPeerId = null) {
+    // Krok 1: Upewnij się, że dane pokoju są poprawne
     if (!roomData || !roomData.name) {
         if (hostPeerId && availableRooms[hostPeerId] && availableRooms[hostPeerId].name) {
             roomData = roomData || {};
             roomData.name = availableRooms[hostPeerId].name;
-            console.log(`[INFO] The room name was empty, I'm using the name from the lobby list: ${roomData.name}`);
         } else {
-            console.warn(`[WARN] Failed to determine room name. Room details: `, roomData);
             roomData = roomData || {};
-            roomData.name = "Undefined room";
+            roomData.name = "Undefined Room";
+            console.warn(`[WARN] Failed to determine room name.`);
         }
     }
+    
+    // Krok 2: Ustaw wszystkie zmienne stanu gry
     currentRoom = roomData;
     playersInRoom = roomData.playersInRoom;
     if (roomData.gameData) {
         currentWorldWidth = roomData.gameData.worldWidth;
         biomeManager.worldWidth = currentWorldWidth;
-
         if (typeof roomData.gameData.initialCycleRotation === 'number' && typeof roomData.gameData.roomCreationTimestamp === 'number') {
             const timeElapsedSeconds = (Date.now() - roomData.gameData.roomCreationTimestamp) / 1000;
             const rotationToAdd = timeElapsedSeconds * cycleManager.ROTATION_SPEED;
             cycleManager.rotation = roomData.gameData.initialCycleRotation + rotationToAdd;
-            console.log(`Synchronized day cycle. Time since host start: ${timeElapsedSeconds.toFixed(2)}s.`);
         }
-        
-        npcManager.loadCurrentBiomeAssets(roomData.gameData.biome, () => {
-            npcManager.spawnNPCs(roomData.gameData);
-        });
+        npcManager.loadCurrentBiomeAssets(roomData.gameData.biome, () => npcManager.spawnNPCs(roomData.gameData));
         biomeManager.setBiome(roomData.gameData.biome);
         biomeManager.setVillageData(roomData.gameData.villageType, roomData.gameData.villageXPosition, roomData.gameData.placedBuildings);
         biomeManager.initializeGroundPlants(roomData.gameData.groundPlants || []);
         biomeManager.initializeTrees(roomData.gameData.trees || []);
-        if (biomeManager.initializePiers) {
-            biomeManager.initializePiers(roomData.gameData.piers || []);
-        }
+        if (biomeManager.initializePiers) biomeManager.initializePiers(roomData.gameData.piers || []);
+        
         pierSupportData = [];
         const serverPiers = roomData.gameData.piers || [];
         const SCALED_TILE_SIZE = 120;
@@ -1408,7 +1481,7 @@ function onSuccessfulJoin(roomData, hostPeerId = null) {
                 const PILE_GFX_WIDTH = 32;
                 const PILE_RENDER_SCALE = 1.5;
                 const PILE_RENDER_WIDTH = PILE_GFX_WIDTH * PILE_RENDER_SCALE;
-                const margin = 25; 
+                const margin = 25;
                 const maxStartPosition = sectionWidth - PILE_RENDER_WIDTH - margin;
                 const pileX = margin + Math.random() * (maxStartPosition - margin);
                 const rotation = (Math.random() * 16 - 8) * (Math.PI / 180);
@@ -1444,10 +1517,15 @@ function onSuccessfulJoin(roomData, hostPeerId = null) {
     if (cameraX > currentWorldWidth - visibleWorldWidthAtInit) cameraX = currentWorldWidth - visibleWorldWidthAtInit;
     if (cameraY < 0) cameraY = 0;
     if (cameraY > DEDICATED_GAME_HEIGHT - visibleWorldHeightAtInit) cameraY = DEDICATED_GAME_HEIGHT - visibleWorldHeightAtInit;
+    
+    // Krok 3: Zmień UI - ukryj menu, pokaż grę i DOPIERO TERAZ pokaż czat
     lobbyDiv.style.display = 'none';
     gameContainerDiv.style.display = 'block';
-    console.log(`Successfully joined the room: "${currentRoom.name}"`);
-    showNotification(`Successfully joined the room: "${currentRoom.name}"`, 'success');
+    resetMenuUI();
+    showNotification(`Successfully joined room: "${currentRoom.name}"`, 'success');
+    
+    // <<< KLUCZOWA POPRAWKA: Wywołanie jest tutaj, na samym końcu funkcji.
+    chatManager.show(); 
 }
 
 
@@ -1545,7 +1623,7 @@ function gameLoop(currentTime) {
         localPlayer.x = Math.max(0, Math.min(currentWorldWidth - playerSize, localPlayer.x));
     }
 
-    if (!lastTime) lastTime = currentTime;
+     if (!lastTime) lastTime = currentTime;
     
     let deltaTime = (currentTime - lastTime) / 1000;
     deltaTime = Math.min(deltaTime, MAX_DELTA_TIME);
@@ -1604,21 +1682,29 @@ function gameLoop(currentTime) {
     reconcilePlayerPosition();
     updateCamera();
     
-    const playerScreenX = (localPlayer.x - cameraX) * currentZoomLevel;
-    const playerScreenY = (localPlayer.y - cameraY) * currentZoomLevel;
+
+    
+    const playerCenterScreenX = (localPlayer.x + playerSize / 2 - cameraX) * currentZoomLevel;
+    const playerCenterScreenY = (localPlayer.y + playerSize / 2 - cameraY) * currentZoomLevel;
+
     const inventoryWidth = 3 * inventoryManager.SLOT_SIZE + 2 * inventoryManager.GRID_GAP;
     const inventoryHeight = 3 * inventoryManager.SLOT_SIZE + 2 * inventoryManager.GRID_GAP;
 
-    invX = playerScreenX - inventoryWidth - 40;
-    if (invX < 10) invX = 10;
-    invY = playerScreenY - (inventoryHeight / 2) + 30;
-    if (invY < 10) invY = 10;
-    if (invY + inventoryHeight > canvas.height - 10) invY = canvas.height - inventoryHeight - 10;
+    // Ustaw pozycję ekwipunku względem stabilnego środka gracza, a nie jego lewego górnego rogu.
+    // Odejmujemy szerokość ekwipunku i dodatkowy margines, aby umieścić go po lewej stronie gracza.
+    invX = playerCenterScreenX - inventoryWidth - 60; 
+    if (invX < 10) invX = 10; // Upewnij się, że ekwipunek nie wychodzi poza lewą krawędź ekranu.
+
+    // Wyśrodkowujemy ekwipunek w pionie względem środka gracza.
+    invY = playerCenterScreenY - (inventoryHeight / 2); 
+    if (invY < 10) invY = 10; // Upewnij się, że ekwipunek nie wychodzi poza górną krawędź.
+    if (invY + inventoryHeight > canvas.height - 10) invY = canvas.height - inventoryHeight - 10; // Sprawdź dolną krawędź.
     
     const inventoryOrigin = { x: invX, y: invY };
     inventoryManager.origin = inventoryOrigin;
-    inventoryManager.update(deltaTime);
+    // ======================== KONIEC ZMIAN ========================
     
+    inventoryManager.update(deltaTime);
     if (localPlayer.isCasting) {
         localPlayer.fishingBarTime += FISHING_SLIDER_SPEED;
         localPlayer.fishingBarSliderPosition = (Math.sin(localPlayer.fishingBarTime) + 1) / 2;
@@ -1707,7 +1793,11 @@ function gameLoop(currentTime) {
     if(isCustomizationMenuOpen) drawCustomizationMenu();
     if(localPlayer.isCasting) drawFishingBar(localPlayer);
     
-    inventoryManager.draw(ctx, inventoryOrigin);
+    inventoryManager.draw(ctx, PIXEL_FONT);
+
+// ======================= POCZĄTEK KODU DEBUGUJĄCEGO =======================
+ctx.save();
+ctx.setTransform(1, 0, 0, 1, 0, 0); // Resetuj wszystkie transformacje, aby rysować w przestrzeni ekranu
 
     let bobberScreenPos = null;
 if (localPlayer.hasLineCast && localPlayer.floatWorldX !== null) {
@@ -1735,116 +1825,340 @@ fishingManager.draw(ctx, localPlayer, bobberScreenPos, cameraX, currentZoomLevel
 // === SEKCJA 5: OBSŁUGA UI i P2P (z modyfikacjami) ===
 // ====================================================================
 
-createRoomBtn.addEventListener('click', () => {
-    if (isHost) return;
-    isHost = true;
-    createRoomBtn.disabled = true;
-    newRoomNameInput.disabled = true;
+const joinGameBtn = document.getElementById('joinGameBtn');
+const optionsBtn = document.getElementById('optionsBtn');
+const menuStatus = document.getElementById('menuStatus');
+const MAX_PLAYERS_PER_ROOM = 8;
+
+// --- GŁÓWNA FUNKCJA MATCHMAKINGU ---
+
+joinGameBtn.addEventListener('click', () => {
+    joinGameBtn.disabled = true;
+    optionsBtn.disabled = true;
+    menuStatus.textContent = 'Initializing network...';
 
     initializePeer((peerId) => {
         if (!peerId) {
-            showNotification("Network error: unable to create room.", 'error');
-            isHost = false; createRoomBtn.disabled = false; newRoomNameInput.disabled = false;
+            showNotification("Network error: Could not initialize.", 'error');
+            resetMenuUI();
             return;
         }
-
-        console.log(`[HOST-UI] Peer ID: ${peerId}. Uruchamianie workera...`);
         localPlayer.id = peerId;
-        gameHostWorker = new Worker('js/host-worker.js');
-        
-        gameHostWorker.onmessage = (event) => {
-            const { type, peerId: targetPeerId, message } = event.data;
-            
-            if (type === 'broadcast' || (type === 'sendTo' && targetPeerId === localPlayer.id)) {
-                handleDataFromServer(message);
-            }
-            
-            if (type === 'broadcast') {
-                Object.values(hostPeerConnections).forEach(conn => conn.send(message));
-            } else if (type === 'sendTo' && targetPeerId !== localPlayer.id) {
-                const conn = hostPeerConnections[targetPeerId];
-                if (conn) conn.send(message);
-            }
-        };
 
-        const roomName = newRoomNameInput.value.trim() || `Pokój ${localPlayer.username}`;
-        gameHostWorker.postMessage({ type: 'start', payload: { id: peerId, username: localPlayer.username, color: localPlayer.color, customizations: localPlayer.customizations } });
+        menuStatus.textContent = 'Searching for an available game...';
+        
+        // Pobieramy listę pokoi, filtrujemy te, które nie są pełne
+        const joinableRooms = Object.values(availableRooms)
+            .filter(room => room.playerCount < MAX_PLAYERS_PER_ROOM);
 
-        signalingSocket.emit('register-host', { peerId, name: roomName });
-        peer.on('connection', (conn) => {
-            console.log(`[HOST-UI] Nowe połączenie od klienta: ${conn.peer}`);
-            hostPeerConnections[conn.peer] = conn;
-            conn.on('open', () => {
-                conn.on('data', (data) => {
-                    if (data.type === 'requestJoin') {
-                        gameHostWorker.postMessage({ type: 'addPlayer', payload: { peerId: conn.peer, initialPlayerData: data.payload } });
-                    } else {
-                        gameHostWorker.postMessage({ type: data.type, payload: { ...data.payload, peerId: conn.peer } });
-                    }
-                });
-            });
-            conn.on('close', () => {
-                delete hostPeerConnections[conn.peer];
-                gameHostWorker.postMessage({ type: 'removePlayer', payload: { peerId: conn.peer } });
-                signalingSocket.emit('notify-leave', peerId);
-            });
-        });
-        
-        hostConnection = {
-            send: (data) => gameHostWorker.postMessage({ type: data.type, payload: { ...data.payload, peerId: localPlayer.id } })
-        };
-        
-        setTimeout(() => {
-            console.log('[HOST-UI] Dodawanie hosta jako gracza...');
-            gameHostWorker.postMessage({ type: 'addPlayer', payload: { peerId: localPlayer.id, initialPlayerData: localPlayer } });
-        }, 100);
+        if (joinableRooms.length > 0) {
+            // Jeśli są dostępne pokoje, próbujemy do nich dołączyć po kolei
+            tryToJoinRooms(joinableRooms);
+        } else {
+            // Jeśli nie ma pokoi, tworzymy własny
+            menuStatus.textContent = 'No available games found. Creating a new one...';
+            createNewRoom();
+        }
     });
 });
 
-function joinRoom(hostPeerId) {
-    initializePeer((myPeerId) => {
-        localPlayer.id = myPeerId;
-        isHost = false;
-
-        console.log(`[GUEST] Próba połączenia z hostem: ${hostPeerId}`);
-        hostConnection = peer.connect(hostPeerId, { reliable: true });
-
-        if (!hostConnection) {
-            showNotification("Failed to initialize connection to host.", 'error');
+function tryToJoinRooms(rooms) {
+    let roomIndex = 0;
+    
+    function tryNext() {
+        if (roomIndex >= rooms.length) {
+            // Próbowaliśmy dołączyć do wszystkich i się nie udało
+            menuStatus.textContent = 'Could not connect to available games. Creating a new one...';
+            createNewRoom();
             return;
         }
 
+        const roomToJoin = rooms[roomIndex];
+        menuStatus.textContent = `Attempting to join "${roomToJoin.name}" (${roomToJoin.playerCount}/${MAX_PLAYERS_PER_ROOM})...`;
+        
+        // Zwiększamy indeks na potrzeby następnej próby
+        roomIndex++;
+
+        // Czyścimy poprzednie połączenie, jeśli istnieje
+        if (hostConnection) hostConnection.close();
+
+        hostConnection = peer.connect(roomToJoin.peerId, { reliable: true });
+        
+        // Timeout połączenia - jeśli nie uda się połączyć w 10 sekund, próbujemy następny pokój
+        const connectionTimeout = setTimeout(() => {
+            showNotification(`Connection to "${roomToJoin.name}" timed out.`, 'warning');
+            hostConnection.close(); // Ważne, aby zamknąć próbę połączenia
+            tryNext();
+        }, 10000);
+
         hostConnection.on('open', () => {
-            console.log(`[GUEST] Połączenie P2P z hostem otwarte.`);
-            signalingSocket.emit('notify-join', hostPeerId);
+            clearTimeout(connectionTimeout); // Anuluj timeout, bo się udało
+            console.log(`[GUEST] Połączenie P2P z hostem ${roomToJoin.peerId} otwarte.`);
+            signalingSocket.emit('notify-join', roomToJoin.peerId);
             hostConnection.send({ type: 'requestJoin', payload: localPlayer });
+            // onSuccessfulJoin zostanie wywołane, gdy host odpowie
         });
 
         hostConnection.on('data', (data) => handleDataFromServer(data));
-        hostConnection.on('error', (err) => showNotification('Connection error.', 'error'));
-        hostConnection.on('close', () => {
-            showNotification('The host closed the room or the connection was lost.', 'warning');
-            leaveCurrentRoomUI();
+        
+        hostConnection.on('error', (err) => {
+            clearTimeout(connectionTimeout);
+            console.error(`[GUEST] Błąd połączenia z ${roomToJoin.peerId}:`, err);
+            showNotification(`Failed to connect to "${roomToJoin.name}".`, 'error');
+            tryNext();
         });
+
+        hostConnection.on('close', () => {
+            // Jeśli nie jesteśmy jeszcze w grze, to znaczy, że połączenie zostało zamknięte przedwcześnie
+            if (!currentRoom) {
+                clearTimeout(connectionTimeout);
+                console.warn(`[GUEST] Połączenie z ${roomToJoin.peerId} zamknięte przed dołączeniem.`);
+                // Celowo nie wywołujemy tryNext() ponownie, aby uniknąć pętli,
+                // bo "close" może być wywołane zaraz po timeoucie.
+            } else {
+                 showNotification('The host closed the room or the connection was lost.', 'warning');
+                 leaveCurrentRoomUI();
+            }
+        });
+    }
+
+    tryNext(); // Rozpocznij proces prób dołączenia
+}
+
+function createNewRoom() {
+    isHost = true;
+    
+    console.log(`[HOST-UI] Tworzenie nowego pokoju z Peer ID: ${localPlayer.id}. Uruchamianie workera...`);
+    gameHostWorker = new Worker('js/host-worker.js');
+    
+    gameHostWorker.onmessage = (event) => {
+        const { type, peerId: targetPeerId, message } = event.data;
+        if (type === 'broadcast' || (type === 'sendTo' && targetPeerId === localPlayer.id)) {
+            handleDataFromServer(message);
+        }
+        if (type === 'broadcast') {
+            Object.values(hostPeerConnections).forEach(conn => conn.send(message));
+        } else if (type === 'sendTo' && targetPeerId !== localPlayer.id) {
+            const conn = hostPeerConnections[targetPeerId];
+            if (conn) conn.send(message);
+        }
+    };
+
+    const roomName = `Game of ${localPlayer.username}`;
+    gameHostWorker.postMessage({ type: 'start', payload: { id: localPlayer.id, username: localPlayer.username, color: localPlayer.color, customizations: localPlayer.customizations } });
+
+    signalingSocket.emit('register-host', { peerId: localPlayer.id, name: roomName });
+
+    peer.on('connection', (conn) => {
+        console.log(`[HOST-UI] Nowe połączenie od klienta: ${conn.peer}`);
+        hostPeerConnections[conn.peer] = conn;
+        conn.on('open', () => {
+            conn.on('data', (data) => {
+                if (data.type === 'requestJoin') {
+                    gameHostWorker.postMessage({ type: 'addPlayer', payload: { peerId: conn.peer, initialPlayerData: data.payload } });
+                } else {
+                    gameHostWorker.postMessage({ type: data.type, payload: { ...data.payload, peerId: conn.peer } });
+                }
+            });
+        });
+        conn.on('close', () => {
+            delete hostPeerConnections[conn.peer];
+            gameHostWorker.postMessage({ type: 'removePlayer', payload: { peerId: conn.peer } });
+            signalingSocket.emit('notify-leave', localPlayer.id);
+        });
+    });
+    
+    hostConnection = {
+        send: (data) => gameHostWorker.postMessage({ type: data.type, payload: { ...data.payload, peerId: localPlayer.id } })
+    };
+    
+    setTimeout(() => {
+        console.log('[HOST-UI] Dodawanie hosta jako gracza...');
+        gameHostWorker.postMessage({ type: 'addPlayer', payload: { peerId: localPlayer.id, initialPlayerData: localPlayer } });
+    }, 100);
+}
+
+function resetMenuUI() {
+    joinGameBtn.disabled = false;
+    // optionsBtn pozostaje nieaktywny zgodnie z założeniem, ale można go tu włączyć w przyszłości
+    optionsBtn.disabled = false;
+    menuStatus.textContent = '';
+}
+
+
+// --- FUNKCJE OBSŁUGI SIECI I STANU GRY ---
+
+function initializeSignaling() {
+    signalingSocket = io();
+    signalingSocket.on('connect', () => {
+        console.log('Connected to the signaling server.', signalingSocket.id);
+        showNotification('Connected to the signaling server.', 'success');
+    });
+
+    // Ta funkcja już nie aktualizuje listy w HTML, tylko zapisuje dane
+    signalingSocket.on('roomListUpdate', (hosts) => {
+        availableRooms = hosts;
+        console.log('Updated room list received:', availableRooms);
+    });
+
+    signalingSocket.on('roomRemoved', (removedRoomId) => {
+        if (hostConnection && hostConnection.peer === removedRoomId) {
+            showNotification('The room you were in has been removed by the host.', 'warning');
+            leaveCurrentRoomUI();
+        }
     });
 }
 
-// === POCZĄTEK OSTATECZNEJ POPRAWKI ===
+function initializePeer(callback) {
+    if (peer && !peer.destroyed) return callback(peer.id);
+    const peerConfig = {
+        debug: 2, // Poziom logowania dla PeerJS
+        config: { 'iceServers': [ { urls: 'stun:stun.l.google.com:19302' }, { urls: 'stun:stun1.l.google.com:19302' } ] }
+    };
+    peer = new Peer(undefined, peerConfig);
+    peer.on('open', (id) => {
+        console.log('My ID in the P2P network: ' + id);
+        if (callback) callback(id);
+    });
+    peer.on('error', (err) => {
+        console.error("MAIN PEER OBJECT ERROR: ", err);
+        showNotification(`A fatal PeerJS error occurred: ${err.type}`, 'error');
+        resetMenuUI();
+    });
+    peer.on('disconnected', () => {
+        showNotification('Disconnected from PeerJS server. Reconnecting...', 'warning');
+    });
+    peer.on('close', () => {
+        showNotification('Connection to PeerJS server closed permanently.', 'error');
+        resetMenuUI();
+    });
+}
+
+function onSuccessfulJoin(roomData, hostPeerId = null) {
+    if (!roomData || !roomData.name) {
+        if (hostPeerId && availableRooms[hostPeerId] && availableRooms[hostPeerId].name) {
+            roomData = roomData || {};
+            roomData.name = availableRooms[hostPeerId].name;
+        } else {
+            roomData = roomData || {};
+            roomData.name = "Undefined Room";
+        }
+    }
+    currentRoom = roomData;
+    playersInRoom = roomData.playersInRoom;
+    if (roomData.gameData) {
+        currentWorldWidth = roomData.gameData.worldWidth;
+        biomeManager.worldWidth = currentWorldWidth;
+        if (typeof roomData.gameData.initialCycleRotation === 'number' && typeof roomData.gameData.roomCreationTimestamp === 'number') {
+            const timeElapsedSeconds = (Date.now() - roomData.gameData.roomCreationTimestamp) / 1000;
+            const rotationToAdd = timeElapsedSeconds * cycleManager.ROTATION_SPEED;
+            cycleManager.rotation = roomData.gameData.initialCycleRotation + rotationToAdd;
+        }
+        npcManager.loadCurrentBiomeAssets(roomData.gameData.biome, () => npcManager.spawnNPCs(roomData.gameData));
+        biomeManager.setBiome(roomData.gameData.biome);
+        biomeManager.setVillageData(roomData.gameData.villageType, roomData.gameData.villageXPosition, roomData.gameData.placedBuildings);
+        biomeManager.initializeGroundPlants(roomData.gameData.groundPlants || []);
+        biomeManager.initializeTrees(roomData.gameData.trees || []);
+        if (biomeManager.initializePiers) biomeManager.initializePiers(roomData.gameData.piers || []);
+        
+        pierSupportData = [];
+        const serverPiers = roomData.gameData.piers || [];
+        const SCALED_TILE_SIZE = 120;
+        serverPiers.forEach(pier => {
+            const newPierSupport = { sections: [] };
+            for (let i = 0; i < pier.sections.length - 1; i++) {
+                const piles = [];
+                const sectionWidth = SCALED_TILE_SIZE;
+                const PILE_GFX_WIDTH = 32;
+                const PILE_RENDER_SCALE = 1.5;
+                const PILE_RENDER_WIDTH = PILE_GFX_WIDTH * PILE_RENDER_SCALE;
+                const margin = 25;
+                const maxStartPosition = sectionWidth - PILE_RENDER_WIDTH - margin;
+                const pileX = margin + Math.random() * (maxStartPosition - margin);
+                const rotation = (Math.random() * 16 - 8) * (Math.PI / 180);
+                piles.push({ x: pileX, rotation: rotation, scale: PILE_RENDER_SCALE });
+                newPierSupport.sections.push({ piles: piles });
+            }
+            pierSupportData.push(newPierSupport);
+        });
+        insectsInRoom = roomData.gameData.insects || [];
+    }
+    const myId = peer ? peer.id : null;
+    if (myId && playersInRoom[myId]) {
+        const serverPlayerState = playersInRoom[myId];
+        Object.assign(localPlayer, serverPlayerState);
+        if (serverPlayerState.customizations) Object.assign(localPlayer.customizations, serverPlayerState.customizations);
+        Object.assign(localPlayerCustomizations, localPlayer.customizations);
+        for (const category in customizationOptions) {
+            const selectedOption = localPlayer.customizations[category];
+            const options = customizationOptions[category];
+            if (options) {
+                const index = options.indexOf(selectedOption);
+                if (index !== -1) currentCustomizationOptionIndices[category] = index;
+            }
+        }
+    }
+    const playerInitialCenterX = localPlayer.x + playerSize / 2;
+    const playerInitialCenterY = localPlayer.y + playerSize / 2;
+    const visibleWorldWidthAtInit = DEDICATED_GAME_WIDTH / currentZoomLevel;
+    const visibleWorldHeightAtInit = DEDICATED_GAME_HEIGHT / currentZoomLevel;
+    cameraX = playerInitialCenterX - visibleWorldWidthAtInit / 2;
+    cameraY = playerInitialCenterY - visibleWorldHeightAtInit / 2;
+    if (cameraX < 0) cameraX = 0;
+    if (cameraX > currentWorldWidth - visibleWorldWidthAtInit) cameraX = currentWorldWidth - visibleWorldWidthAtInit;
+    if (cameraY < 0) cameraY = 0;
+    if (cameraY > DEDICATED_GAME_HEIGHT - visibleWorldHeightAtInit) cameraY = DEDICATED_GAME_HEIGHT - visibleWorldHeightAtInit;
+    
+    lobbyDiv.style.display = 'none';
+    gameContainerDiv.style.display = 'block';
+    resetMenuUI();
+    showNotification(`Successfully joined room: "${currentRoom.name}"`, 'success');
+    
+    chatManager.show(); // <<< DODAJ TĘ LINIĘ
+}
+
 function handleDataFromServer(data) {
     switch (data.type) {
         case 'awardStarterItem': {
-            const { itemName, itemTier, targetSlot } = data.payload;
-            const fullItemObject = { name: itemName, tier: itemTier, image: allItemImages[itemName] };
-            inventoryManager.placeItemInSlot(fullItemObject, targetSlot);
+            const { itemName, targetSlot } = data.payload;
+            const fullItemObject = createFullItemObject(itemName);
+            if (fullItemObject) {
+                inventoryManager.placeItemInSlot(fullItemObject, targetSlot);
+            }
             break;
         }
+
+        case 'chatMessageBroadcast': {
+        const { username, message } = data.payload;
+        chatManager.addMessage(username, message);
+        break;
+        }
+        case 'playerJoinedRoomNotification': {
+            chatManager.addMessage(null, `${data.payload.username} joined the room.`, true);
+            break;
+        }
+        case 'playerLeftRoomNotification': {
+            chatManager.addMessage(null, `${data.payload.username} left the room.`, true);
+            break;
+        }
+
+        // === POCZĄTEK NOWEGO KODU ===
+        case 'fishCaughtNotification': {
+            const { username, fishName, size } = data.payload;
+            const message = `${username} caught a  ${fishName} (${size}cm)!`;
+            chatManager.addMessage(null, message, true); // true, bo to powiadomienie
+            break;
+        }
+
         case 'itemPickedUp': {
             const itemData = data.payload;
-            const fullItemObject = { name: itemData.name, tier: itemData.tier, image: allItemImages[itemData.name] };
-            if (!inventoryManager.addItem(fullItemObject)) {
-                showNotification('Ekwipunek pełny!', 'warning');
-            } else {
-                showNotification(`Podniesiono: ${itemData.name}`, 'success');
+            const fullItemObject = createFullItemObject(itemData.name);
+            if (fullItemObject) {
+                if (!inventoryManager.addItem(fullItemObject)) {
+                    showNotification('Inventory full!', 'warning');
+                } else {
+                    showNotification(`Picked up: ${itemData.name}`, 'success');
+                }
             }
             break;
         }
@@ -1863,50 +2177,37 @@ function handleDataFromServer(data) {
         }
         case 'dugBaitAwarded': {
             const { baitData } = data.payload;
-            const wasAdded = inventoryManager.addItem({ name: baitData.name, image: allItemImages[baitData.name], tier: 0 });
-            showNotification(wasAdded ? `found: ${baitData.name}` : 'inventory full', wasAdded ? 'success' : 'warning');
+            const fullBaitObject = createFullItemObject(baitData.name);
+            if (fullBaitObject) {
+                const wasAdded = inventoryManager.addItem(fullBaitObject);
+                showNotification(wasAdded ? `Found: ${baitData.name}` : 'Inventory full', wasAdded ? 'success' : 'warning');
+            }
             break;
         }
         case 'roomJoined':
             onSuccessfulJoin(data.payload, hostConnection?.peer);
             break;
-        case 'gameStateUpdate':
-            const playersData = data.payload.players;
-            const worldItemsData = data.payload.worldItems;
-
+        case 'gameStateUpdate': {
+            const { players: playersData, worldItems: worldItemsData } = data.payload;
             playersData.forEach(serverPlayer => {
-                const clientPlayer = playersInRoom[serverPlayer.id]; // Pobranie stanu gracza z poprzedniej klatki
-
-                // Sprawdzamy, czy spławik się porusza i jest na wodzie
+                const clientPlayer = playersInRoom[serverPlayer.id];
                 if (serverPlayer.hasLineCast && clientPlayer) {
-                    
-                    // Warunek sprawdzający, czy pozycja spławika się zmienia (z małą tolerancją)
-                    const isBobberMoving =
-                        Math.abs(serverPlayer.floatWorldX - clientPlayer.floatWorldX) > 0.1 ||
-                        Math.abs(serverPlayer.floatWorldY - clientPlayer.floatWorldY) > 0.1;
-
-                    // Warunek sprawdzający, czy spławik jest na wodzie
+                    const isBobberMoving = Math.abs(serverPlayer.floatWorldX - clientPlayer.floatWorldX) > 0.1 || Math.abs(serverPlayer.floatWorldY - clientPlayer.floatWorldY) > 0.1;
                     const isBobberOnWater = serverPlayer.floatWorldY >= (biomeManager.WATER_TOP_Y_WORLD - 15);
-
-                    // Jeśli spławik się porusza I jest na wodzie, tworzymy mały rozprysk
                     if (isBobberMoving && isBobberOnWater) {
-                        // Wywołujemy funkcję z mniejszą liczbą cząsteczek (np. 5) i mniejszą prędkością (np. 0.5x),
-                        // aby stworzyć efekt ślizgania się po wodzie, a nie dużego plusku.
                         fishingManager.createWaterSplash(serverPlayer.floatWorldX, serverPlayer.floatWorldY, 5, 0.5);
                     }
                 }
             });
-
-
-            const map = {};
+            const playerMap = {};
             for (const p of playersData) {
                 if (playersInRoom[p.id]) {
                     p.animationFrame = playersInRoom[p.id].animationFrame;
                     p.idleAnimationFrame = playersInRoom[p.id].idleAnimationFrame;
                 }
-                map[p.id] = p;
+                playerMap[p.id] = p;
             }
-            playersInRoom = map;
+            playersInRoom = playerMap;
             worldItems = worldItemsData;
             if (playersInRoom[localPlayer.id]) {
                 const castingState = { isCasting: localPlayer.isCasting, castingPower: localPlayer.castingPower };
@@ -1914,18 +2215,9 @@ function handleDataFromServer(data) {
                 Object.assign(localPlayer, castingState);
             }
             break;
-        case 'playerJoinedRoom':
-            if (!playersInRoom[data.payload.id]) {
-                playersInRoom[data.payload.id] = data.payload.playerData;
-                showNotification(`Player ${data.payload.username} joined.`, 'success');
-            }
-            break;
-        case 'playerLeftRoom':
-            if (playersInRoom[data.payload]) {
-                showNotification(`Player ${playersInRoom[data.payload].username} has left.`, 'warning');
-                delete playersInRoom[data.payload];
-            }
-            break;
+        }
+        
+
         case 'playerCustomizationUpdated':
             if (playersInRoom[data.payload.id]) playersInRoom[data.payload.id].customizations = data.payload.customizations;
             break;
@@ -1937,26 +2229,20 @@ function handleDataFromServer(data) {
 
 leaveRoomBtn.addEventListener('click', () => {
     const hostPeerId = hostConnection?.peer || (isHost ? peer?.id : null);
-    
     if (isHost) {
         if (gameHostWorker) {
             gameHostWorker.terminate();
             gameHostWorker = null;
         }
-        for(const peerId in hostPeerConnections) {
-            if (hostPeerConnections[peerId].close) {
-                 hostPeerConnections[peerId].close();
-            }
-        }
+        Object.values(hostPeerConnections).forEach(conn => conn.close());
         hostPeerConnections = {};
         setTimeout(() => { if(peer && !peer.destroyed) peer.destroy(); peer = null; }, 500);
     }
-
     if (!isHost && hostConnection) hostConnection.close();
     if (hostPeerId) signalingSocket.emit('notify-leave', hostPeerId);
-    
     leaveCurrentRoomUI();
 });
+
 
 
 function leaveCurrentRoomUI() {
@@ -1978,6 +2264,7 @@ function leaveCurrentRoomUI() {
     keys={}; cameraX=0; cameraY=0; isCustomizationMenuOpen=false;
     console.log('You left the room, returned to the lobby.');
     showNotification('You left the room and returned to the lobby.', 'warning');
+    chatManager.hide(); // <<< DODAJ TĘ LINIĘ
 }
 
 
@@ -1997,30 +2284,31 @@ function advanceTutorialStep(nextState) {
 }
 
 function getMousePosOnCanvas(canvas, evt) {
-    const gameWidth = 1920; const gameHeight = 1080;
-    const gameAspectRatio = gameWidth / gameHeight;
+    // Pobierz rzeczywiste wymiary i pozycję elementu <canvas> na stronie
     const rect = canvas.getBoundingClientRect();
-    const windowAspectRatio = rect.width / rect.height;
-    let renderWidth, renderHeight, offsetX, offsetY;
-    if (windowAspectRatio > gameAspectRatio) {
-        renderWidth = rect.height * gameAspectRatio;
-        renderHeight = rect.height;
-        offsetX = (rect.width - renderWidth) / 2;
-        offsetY = 0;
-    } else {
-        renderWidth = rect.width;
-        renderHeight = rect.width / gameAspectRatio;
-        offsetX = 0;
-        offsetY = (rect.height - renderHeight) / 2;
-    }
-    const mouseXInRenderedArea = evt.clientX - rect.left - offsetX;
-    const mouseYInRenderedArea = evt.clientY - rect.top - offsetY;
-    const scale = gameWidth / renderWidth;
-    return { x: mouseXInRenderedArea * scale, y: mouseYInRenderedArea * scale };
+
+    // Oblicz współczynniki skalowania między rozmiarem logicznym (1920x1080)
+    // a rozmiarem, w jakim canvas jest faktycznie renderowany na ekranie.
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+
+    // Przelicz pozycję myszy:
+    // 1. Weź pozycję myszy względem lewego górnego rogu wyrenderowanego płótna (evt.clientX - rect.left)
+    // 2. Przemnóż przez współczynnik skalowania, aby uzyskać współrzędne w logicznej przestrzeni gry (1920x1080)
+    const mouseX = (evt.clientX - rect.left) * scaleX;
+    const mouseY = (evt.clientY - rect.top) * scaleY;
+
+    return { x: mouseX, y: mouseY };
 }
 
 document.addEventListener('keydown', (event) => {
     if (!currentRoom) return;
+
+    // === POCZĄTEK NOWEGO KODU ===
+    // Jeśli pole czatu jest aktywne, ignoruj wszystkie inne skróty klawiszowe w grze
+    if (chatManager && chatManager.isFocused) {
+        return;
+    }
 
     if (event.code === 'Escape' && isCustomizationMenuOpen) {
         event.preventDefault();
@@ -2214,27 +2502,27 @@ canvas.addEventListener('mouseup', (event) => {
     if (event.button === 0 && !isCustomizationMenuOpen && currentRoom && localPlayer.customizations.rightHandItem === ITEM_ROD) {
         
         if (fishingManager.isCatchComplete) {
-            const fish = fishingManager.currentFish;
-            if (fish) {
-                const size = fish.minsize + Math.random() * (fish.maxsize - fish.minsize);
-                const finalSize = Math.round(size);
+    const fish = fishingManager.currentFish;
+    if (fish) {
+        const size = fish.minsize + Math.random() * (fish.maxsize - fish.minsize);
+        const finalSize = Math.round(size);
 
-                sendPlayerAction('fishCaught', { 
-                    fishName: fish.name, 
-                    size: finalSize,
-                    tier: fish.tier || 0 
-                });
-            
-                 inventoryManager.addItem({
-                    name: fish.name,
-                    image: allItemImages[fish.name],
-                    tier: fish.tier || 0
-                });
-                
-                fishingManager.cleanUpAfterCatch();
-            }
-            event.preventDefault();
-        } 
+        // Wysyłamy jedną, kompletną informację do hosta. I nic więcej.
+        sendPlayerAction('fishCaught', { 
+            fishName: fish.name, 
+            size: finalSize,
+            tier: fish.tier || 0 
+        });
+    
+        const fullFishObject = createFullItemObject(fish.name);
+        fullFishObject.size = finalSize;
+        inventoryManager.addItem(fullFishObject);
+        
+        fishingManager.cleanUpAfterCatch();
+    }
+    event.preventDefault();
+}
+        // ======================== KONIEC ZMIAN =========================
         
         else if (localPlayer.isCasting) {
             localPlayer.isCasting = false;
@@ -2283,3 +2571,6 @@ loadImages(() => {
 
     requestAnimationFrame(gameLoop);
 });
+
+// Inicjalizacja Chatu
+const chatManager = new ChatManager();

@@ -2,21 +2,14 @@
 <html lang="pl">
 <head>
     <meta charset="UTF-8">
-    <!-- Upewnij się, że twój meta tag viewport wciąż blokuje skalowanie na urządzeniach mobilnych -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Prosta Platformówka Multiplayer - Pokoje</title>
     <link rel="stylesheet" href="style.css">
 
-    <!-- ===== NOWY FRAGMENT BLOKUJĄCY ZOOM PRZEGLĄDARKI ===== -->
     <script>
-        // Zapobiegaj zoomowi za pomocą kółka myszy z wciśniętym Ctrl
         document.addEventListener('wheel', function(event) {
-            if (event.ctrlKey) {
-                event.preventDefault();
-            }
-        }, { passive: false }); // 'passive: false' jest konieczne, aby preventDefault() działało
+            if (event.ctrlKey) event.preventDefault();
+        }, { passive: false });
 
-        // Zapobiegaj zoomowi za pomocą klawiszy Ctrl + '+' / Ctrl + '-' / Ctrl + '0'
         document.addEventListener('keydown', function(event) {
             if (event.ctrlKey && (event.key === '+' || event.key === '-' || event.key === '0')) {
                 event.preventDefault();
@@ -25,47 +18,36 @@
     </script>
 </head>
 <body>
-    <!-- Canvas dla tła menu, który będzie za div#lobby -->
     <canvas id="menuCanvas"></canvas>
 
     <div id="lobby">
-        <h1>Catch</h1>
-        <p>Twoja nazwa: <span id="myUsername"></span> (Kolor: <span id="myColorDisplay" style="display: inline-block; width: 20px; height: 20px; border: 1px solid black;"></span>)</p>
-
-        <div class="room-actions">
-            <input type="text" id="newRoomName" placeholder="Nazwa nowego pokoju (opcjonalnie)">
-            <button id="createRoomBtn">Stwórz Pokój</button>
+        <p>Your Name: <input type="text" id="usernameInput" maxlength="16" autocomplete="off"></p>
+        
+        <!-- ======================= NOWA STRUKTURA MENU ======================= -->
+        <div class="main-menu">
+            <button id="joinGameBtn">Join the Game</button>
+            <button id="optionsBtn" disabled>Options</button> <!-- 'disabled' bo jest nieaktywny -->
         </div>
-
-        <h2>Dostępne Pokoje:</h2>
-        <ul id="roomList">
-            <!-- Pokoje będą ładowane tutaj przez JS -->
-            <li>Brak dostępnych pokoi. Stwórz jeden!</li>
-        </ul>
+        <p id="menuStatus" class="menu-status"></p> <!-- Paragraf na status, np. "Searching..." -->
+        <!-- =================================================================== -->
     </div>
 
-    <!-- ZMIANA 1: Dodano "position: relative;" do stylu. To sprawia, że ten div jest ramką odniesienia dla nakładki. -->
     <div id="gameContainer" style="display: none; position: relative;">
-        <button id="leaveRoomBtn">Opuść Pokój</button>
-        <canvas id="gameCanvas"></canvas> <!-- BEZ atrybutów width/height tutaj -->
-        
-        <!-- ZMIANA 2: Dodano nową warstwę (div) do obsługi efektów kolorystycznych. -->
+        <button id="leaveRoomBtn">Leave</button>
+        <canvas id="gameCanvas"></canvas>
         <div id="cycleOverlay"></div>
-
     </div>
 
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script> 
     <script src="/socket.io/socket.io.js"></script> 
 
-    <!-- Skrypty gry -->
     <script src="js/biomemanager.js"></script>
-    
-    <!-- Nowy skrypt do obsługi świata w tle menu -->
     <script src="js/menuworld.js"></script>
-
     <script src="js/cycle.js"></script>
     <script src="js/inventory.js"></script> 
     <script src="js/fishing.js"></script>
+    <script src="js/chat.js"></script> 
     <script src="script.js"></script>
+
 </body>
 </html>

@@ -210,13 +210,113 @@ class InventoryManager {
             return { x, y };
         }
     }
+   _drawTooltip(ctx, slot, pixelFont) {
+        if (!slot.item || !this.tierConfig || !this.tierNames) return;
+
+        ctx.save();
+
+        const item = slot.item;
+        const tierConfig = this.tierConfig[item.tier] || this.tierConfig[0];
+        
+        const PADDING = 32;
+        const NAME_FONT = `bold 17px ${pixelFont}`;
+        const DESC_FONT = `16px ${pixelFont}`;
+        // ======================= POCZĄTEK ZMIAN =======================
+        const TIER_FONT = `14px ${pixelFont}`; // Taka sama wielkość, ale bez "bold"
+        const TIER_ALPHA = 0.8; // Ustawiamy poziom przezroczystości
+        // ======================== KONIEC ZMIAN =========================
+        const LINE_HEIGHT = 20;
+        const MARGIN_ABOVE_SLOT = 16;
+        const GAP_BETWEEN_LINES = 6;
+        
+        const ROCKING_SPEED = 2.5;
+        const ROCKING_AMPLITUDE_DEGREES = 2.3;
+
+        // --- Obliczanie szerokości ---
+        const tierName = this.tierNames[item.tier];
+        const tierText = tierName ? ` (${tierName})` : '';
+
+        ctx.font = NAME_FONT;
+        const itemNameWidth = ctx.measureText(item.name).width;
+        ctx.font = TIER_FONT;
+        const tierTextWidth = ctx.measureText(tierText).width;
+        
+        const titleLineWidth = itemNameWidth + tierTextWidth;
+
+        ctx.font = DESC_FONT;
+        const descText = item.description || "";
+        const descWidth = ctx.measureText(descText).width;
+        
+        let sizeText = null;
+        if (item.size) sizeText = `Size: ${item.size}cm`;
+        const sizeWidth = sizeText ? ctx.measureText(sizeText).width : 0;
+        
+        const tooltipWidth = Math.max(titleLineWidth, descWidth, sizeWidth) + PADDING * 2;
+        
+        let tooltipHeight = LINE_HEIGHT * 2 + PADDING + GAP_BETWEEN_LINES;
+        if (sizeText) tooltipHeight += LINE_HEIGHT + GAP_BETWEEN_LINES;
+        
+        // --- Pozycja i rotacja ---
+        const slotPos = this._getSlotPosition(slot);
+        const x = slotPos.x + (this.SLOT_SIZE / 2) - (tooltipWidth / 2);
+        const y = slotPos.y - tooltipHeight - MARGIN_ABOVE_SLOT;
+        const rotationAngle = Math.sin(Date.now() / 1000 * ROCKING_SPEED) * (ROCKING_AMPLITUDE_DEGREES * Math.PI / 180);
+        const centerX = x + tooltipWidth / 2;
+        const centerY = y + tooltipHeight / 2;
+        ctx.translate(centerX, centerY);
+        ctx.rotate(rotationAngle);
+        ctx.translate(-centerX, -centerY);
+
+        // --- Rysowanie tła ---
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.29)';
+        ctx.fillRect(x, y, tooltipWidth, tooltipHeight);
+        ctx.strokeStyle = tierConfig.color;
+        ctx.lineWidth = 2;
+        ctx.strokeRect(x, y, tooltipWidth, tooltipHeight);
+
+        // --- Rysowanie tekstów ---
+        const textStartX = x + PADDING;
+        const textStartY = y + PADDING / 2;
+
+        // 1. Rysuj nazwę przedmiotu (pogrubiona, pełny kolor)
+        ctx.font = NAME_FONT;
+        ctx.fillStyle = tierConfig.color;
+        ctx.textAlign = 'left';
+        ctx.textBaseline = 'top';
+        ctx.fillText(item.name, textStartX, textStartY);
+
+        // 2. Rysuj nazwę tieru (normalna czcionka, kolor z alpha)
+        if (tierText) {
+            ctx.font = TIER_FONT;
+            // Tworzymy nowy kolor z zadaną przezroczystością
+            const tierColorWithAlpha = tierConfig.color.replace(', 1)', `, ${TIER_ALPHA})`);
+            ctx.fillStyle = tierColorWithAlpha;
+            ctx.fillText(tierText, textStartX + itemNameWidth, textStartY);
+        }
+
+        // 3. Rysuj opis
+        ctx.font = DESC_FONT;
+        ctx.fillStyle = '#FFFFFF';
+        ctx.fillText(descText, textStartX, textStartY + LINE_HEIGHT + GAP_BETWEEN_LINES);
+
+        // 4. Rysuj rozmiar (jeśli istnieje)
+        if (sizeText) {
+            ctx.fillStyle = '#b3b3b3ff';
+            const sizeY = textStartY + (LINE_HEIGHT + GAP_BETWEEN_LINES) * 2;
+            ctx.fillText(sizeText, textStartX, sizeY);
+        }
+
+        ctx.restore();
+    }
 
 
     update(deltaTime) {
         if (!this.isOpen || !this.assetsLoaded) return;
 
         const hoveredSlot = this._getHoveredSlot();
-        
+        if (hoveredSlot && hoveredSlot.item) {
+            this._drawTooltip(ctx, hoveredSlot);
+        }
         this.slots.forEach(slot => {
             slot.rockingTimer += slot.rockingSpeed * deltaTime;
             const isHovered = hoveredSlot && hoveredSlot.id === slot.id;
@@ -232,7 +332,7 @@ class InventoryManager {
         });
     }
 
-    draw(ctx) {
+    draw(ctx, pixelFont) { // <--- DODANY PARAMETR pixelFont
         if (!this.isOpen || !this.assetsLoaded) {
             return;
         }
@@ -258,7 +358,8 @@ class InventoryManager {
                 const textX = pos.x + this.SLOT_SIZE / 2;
                 const textY = pos.y - 8;
 
-                ctx.font = `16px ${PIXEL_FONT}`
+                // Używamy przekazanej czcionki
+                ctx.font = `18px ${pixelFont}`
                 ctx.textAlign = 'center';
                 ctx.textBaseline = 'bottom';
 
@@ -270,29 +371,44 @@ class InventoryManager {
             }
         });
 
+        const hoveredSlot = this._getHoveredSlot();
+        if (hoveredSlot && hoveredSlot.item) {
+            // Przekazujemy czcionkę do funkcji rysującej tooltip
+            this._drawTooltip(ctx, hoveredSlot, pixelFont);
+        }
+
         if (this.heldItem) {
             this._drawItem(ctx, this.heldItem, this.mousePos.x, this.mousePos.y);
         }
     }
 
     _drawItem(ctx, item, x, y) {
-        const ITEM_IMAGE_SIZE = this.SLOT_SIZE * 0.7;
-        const STAR_SIZE = 24;
-        
-        if (item.image && item.image.complete) {
-            ctx.drawImage(item.image, x - ITEM_IMAGE_SIZE / 2, y - ITEM_IMAGE_SIZE / 2, ITEM_IMAGE_SIZE, ITEM_IMAGE_SIZE);
-        }
+    const ITEM_IMAGE_SIZE = this.SLOT_SIZE * 0.7;
+    const STAR_SIZE = 24;
+    
+    // Rysowanie obrazka przedmiotu (bez zmian)
+    if (item.image && item.image.complete) {
+        ctx.drawImage(item.image, x - ITEM_IMAGE_SIZE / 2, y - ITEM_IMAGE_SIZE / 2, ITEM_IMAGE_SIZE, ITEM_IMAGE_SIZE);
+    }
 
-        if (item.tier && item.tier > 0) {
-            const tierConfig = FISH_TIER_CONFIG[item.tier];
-            if (tierConfig && tierConfig.imageKey) {
-                const starImg = starImages[tierConfig.imageKey];
-                if (starImg && starImg.complete) {
-                    const starX = x + ITEM_IMAGE_SIZE / 2 - STAR_SIZE;
-                    const starY = y + ITEM_IMAGE_SIZE / 2 - STAR_SIZE;
-                    ctx.drawImage(starImg, starX, starY, STAR_SIZE, STAR_SIZE);
-                }
+    // ======================= POCZĄTEK ZMIAN =======================
+    // Sprawdź, czy przekazano konfigurację i czy przedmiot ma tier
+    if (this.tierConfig && this.starImages && item.tier && item.tier > 0) {
+        
+        // Pobierz konfigurację dla danego tieru
+        const tierConfig = this.tierConfig[item.tier];
+
+        // Sprawdź, czy konfiguracja istnieje i czy ma przypisany obrazek gwiazdki
+        if (tierConfig && tierConfig.imageKey) {
+            const starImg = this.starImages[tierConfig.imageKey];
+            
+            // Jeśli obrazek gwiazdki istnieje i jest załadowany, narysuj go
+            if (starImg && starImg.complete) {
+                const starX = x + ITEM_IMAGE_SIZE / 2 - STAR_SIZE;
+                const starY = y + ITEM_IMAGE_SIZE / 2 - STAR_SIZE;
+                ctx.drawImage(starImg, starX, starY, STAR_SIZE, STAR_SIZE);
             }
         }
     }
-}
+    // ======================== KONIEC ZMIAN =========================
+}}
