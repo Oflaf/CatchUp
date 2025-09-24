@@ -444,17 +444,21 @@ class GameHost {
     }
 
     addPlayer(peerId, initialPlayerData) {
-        console.log(`[HOST-WORKER] Gracz ${initialPlayerData.username} (${peerId}) dołącza.`);
+    console.log(`[HOST-WORKER] Gracz ${initialPlayerData.username} (${peerId}) dołącza.`);
 
-        const initialY = DEDICATED_GAME_HEIGHT - this.room.gameData.groundLevel - PLAYER_SIZE;
-        
-        this.room.players[peerId] = {
-            id: peerId, x: 50, y: initialY, color: initialPlayerData.color, username: initialPlayerData.username,
-            customizations: { ...initialPlayerData.customizations }, isJumping: false, velocityY: 0, 
-            direction: 1, velocityX: 0, hasLineCast: false, floatWorldX: null, floatWorldY: null, 
-            floatVelocityX: 0, floatVelocityY: 0, lineAnchorWorldX: null, lineAnchorWorldY: null, 
-            rodTipWorldX: null, rodTipWorldY: null
-        };
+    const initialY = DEDICATED_GAME_HEIGHT - this.room.gameData.groundLevel - PLAYER_SIZE;
+    
+    this.room.players[peerId] = {
+        id: peerId, x: 50, y: initialY, color: initialPlayerData.color, username: initialPlayerData.username,
+        customizations: { ...initialPlayerData.customizations }, isJumping: false, velocityY: 0, 
+        direction: 1, velocityX: 0, hasLineCast: false, floatWorldX: null, floatWorldY: null, 
+        floatVelocityX: 0, floatVelocityY: 0, lineAnchorWorldX: null, lineAnchorWorldY: null, 
+        rodTipWorldX: null, rodTipWorldY: null,
+        // ======================= POCZĄTEK ZMIAN =======================
+        meActionText: null, 
+        meActionExpiry: null
+        // ======================== KONIEC ZMIAN =========================
+    };
         this.room.playerInputs[peerId] = { keys: {} };
         
         this.sendTo(peerId, {
@@ -546,21 +550,68 @@ class GameHost {
 
         switch(actionData.type) {
 
-            case 'sendChatMessage': {
-            const message = actionData.payload.message;
-            // Sprawdzamy, czy wiadomość nie jest pusta i czy nie przekracza limitu
-            if (message && message.length > 0 && message.length <= 100) {
-                console.log(`[HOST-WORKER] Czat od ${player.username}: ${message}`);
+            
+
+            // NOWY CASE START
+            case 'sendDirectMessage': {
+                const { targetNickname, message } = actionData.payload;
+                const sender = this.room.players[peerId];
+    
+                if (!sender) return;
+    
+                const targetPlayer = Object.values(this.room.players).find(p => p.username.toLowerCase() === targetNickname.toLowerCase());
+    
+                if (targetPlayer && targetPlayer.id !== sender.id) {
+                    this.sendTo(targetPlayer.id, {
+                        type: 'directMessageReceived',
+                        payload: { senderUsername: sender.username, message: message }
+                    });
+                    this.sendTo(sender.id, {
+                        type: 'directMessageSent',
+                        payload: { recipientUsername: targetPlayer.username, message: message }
+                    });
+                } else {
+                    this.sendTo(sender.id, {
+                        type: 'systemNotification',
+                        payload: {
+                            message: `Nie znaleziono gracza "${targetNickname}" lub nie możesz wysyłać wiadomości do siebie.`,
+                            notificationType: 'error'
+                        }
+                    });
+                }
+                break;
+            }
+            // NOWY CASE KONIEC
+
+            case 'sendMeCommand': {
+            const actionText = actionData.payload.action;
+            if (actionText && actionText.length > 0 && actionText.length <= 100) {
                 this.broadcast({
-                    type: 'chatMessageBroadcast',
+                    type: 'meCommandBroadcast',
                     payload: {
+                        peerId: peerId,
                         username: player.username,
-                        message: message // Wysyłamy oczyszczoną wiadomość
+                        action: actionText
                     }
                 });
             }
             break;
         }
+
+            case 'sendChatMessage': {
+                const message = actionData.payload.message;
+                if (message && message.length > 0 && message.length <= 100) {
+                    console.log(`[HOST-WORKER] Czat od ${player.username}: ${message}`);
+                    this.broadcast({
+                        type: 'chatMessageBroadcast',
+                        payload: {
+                            username: player.username,
+                            message: message
+                        }
+                    });
+                }
+                break;
+            }
 
             case 'dropItem': {
                 console.log(`[HOST-WORKER] Gracz ${player.username} wyrzucił ${actionData.payload.name}`);

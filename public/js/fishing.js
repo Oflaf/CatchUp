@@ -116,22 +116,56 @@ class FishingManager {
         velocityY: -450,
         rotationSpeed: 10,
         scaleX: -1,
-        // ======================= POCZĄTEK ZMIAN =======================
         hasSplashed: false,
-        splashTime: 0, // Czas wpadnięcia do wody
-        alpha: 1       // Początkowa przezroczystość
-        // ======================== KONIEC ZMIAN =========================
+        splashTime: 0, 
+        alpha: 1       
     };
 
     this.isFishHooked = false;
     this.currentFish = null;
 }
 
-    handlePrematurePull() {
-        if (this.isFishHooked) {
-            this._triggerFailAnimation();
+    // ======================= POCZĄTEK ZMIAN =======================
+    /**
+     * Obsługuje sytuację, gdy gracz pociągnie za wędkę (np. klikając) zbyt wcześnie,
+     * zanim ryba chwyci przynętę (w stanie `isWaitingForBite`).
+     * Powoduje to anulowanie łowienia i odtworzenie animacji ucieczki ryby.
+     * @param {string} biomeName - Nazwa aktualnego biomu, potrzebna do wylosowania ryby do animacji.
+     */
+
+    abortMinigame() {
+        // Upewnij się, że minigra jest w toku.
+        if (!this.isFishHooked || !this.currentFish) {
+            return;
+        }
+        // Uruchom istniejącą logikę animacji porażki.
+        this._triggerFailAnimation();
+    }
+
+    handlePrematurePull(biomeName) {
+        if (this.isWaitingForBite) {
+            // Natychmiast anuluj oczekiwanie na branie, ale nie resetuj wszystkiego innego
+            clearTimeout(this.biteTimeoutId);
+            this.biteTimeoutId = null;
+            this.isWaitingForBite = false;
+
+            // Wylosuj rybę, która "uciekła", na potrzeby samej animacji
+            const escapedFishData = this.getRandomCatch(biomeName, this.currentBait);
+
+            if (escapedFishData) {
+                // Ustaw tę rybę jako aktualną, aby animacja mogła z niej skorzystać
+                this.currentFish = escapedFishData;
+                // Pokaż ramkę minigry, w której odbędzie się animacja
+                this.showFishFrame = true;
+                // Uruchom animację porażki
+                this._triggerFailAnimation();
+            } else {
+                // Jeśli z jakiegoś powodu nie udało się wylosować ryby, po prostu zresetuj stan
+                this.failFishing();
+            }
         }
     }
+    // ======================== KONIEC ZMIAN =========================
 
     createWaterSplash(x, y, particleCount, speedMultiplier) {
         this.particleManager.createWaterSplash(x, y + 10, particleCount, speedMultiplier);
@@ -334,12 +368,9 @@ class FishingManager {
             this.escapedFish.rotation += this.escapedFish.rotationSpeed * deltaTime;
         }
 
-        // ======================= POCZĄTEK ZMIAN =======================
-        // Sprawdź, czy ryba "wpadła do wody"
         if (bobberScreenPos && this.escapedFish.y > 0 && !this.escapedFish.hasSplashed) {
-            this.escapedFish.hasSplashed = true; // Ustaw flagę, by rozprysk był jednorazowy
+            this.escapedFish.hasSplashed = true; 
             
-            // Zapisz czas, w którym ryba wpadła do wody, aby obliczyć zanikanie
             this.escapedFish.splashTime = this.failAnimationTimer;
 
             const frameWidth = this.fishFrameImage.width * this.fishFrameScale;
@@ -350,20 +381,16 @@ class FishingManager {
             const splashWorldX = (splashX / currentZoomLevel) + cameraX;
             const splashWorldY = (bobberScreenPos.y / currentZoomLevel) + cameraY;
 
-            // Stwórz WIĘKSZY rozprysk (więcej cząsteczek, większa prędkość)
             this.createWaterSplash(splashWorldX, splashWorldY, 130, 1.5);
         }
 
-        // Oblicz zanikanie (alpha) po wpadnięciu do wody
         if (this.escapedFish.hasSplashed) {
-            const FADE_DURATION = 0.3; // Czas trwania zanikania w sekundach
+            const FADE_DURATION = 0.3;
             const timeSinceSplash = this.failAnimationTimer - this.escapedFish.splashTime;
-            // Alpha maleje od 1 do 0 w czasie FADE_DURATION
             this.escapedFish.alpha = Math.max(0, 1 - (timeSinceSplash / FADE_DURATION));
         } else {
-            this.escapedFish.alpha = 1; // Domyślnie w pełni widoczna
+            this.escapedFish.alpha = 1;
         }
-        // ======================== KONIEC ZMIAN =========================
     }
 
     if (this.failAnimationTimer > 2.0) {
@@ -452,10 +479,7 @@ class FishingManager {
      if(showDuringFlicker || !isFlickering) {
         ctx.save();
         
-        // ======================= POCZĄTEK ZMIAN =======================
-        // Zastosuj obliczoną przezroczystość
         ctx.globalAlpha = this.escapedFish.alpha;
-        // ======================== KONIEC ZMIAN =========================
 
         ctx.translate(this.escapedFish.x, this.escapedFish.y);
         ctx.rotate(this.escapedFish.rotation);
@@ -611,6 +635,41 @@ class FishingManager {
                 'catfish': {chance: 20, power: 38, minsize: 30, maxsize: 100, tier: 4, description: 'A bottom-dweller with characteristic whiskers.'},
                 'perch': {chance: 50, power: 28, minsize: 10, maxsize: 60, tier: 1, description: 'A predatory fish with spiny fins.'},
                 'longear sunfish': {chance: 20, power: 34, minsize: 6, maxsize: 15, tier: 4, description: 'A colorful and small sunfish.'},
+                'rudd': {
+                    chance: 35,
+                    power: 20,
+                    minsize: 15,
+                    maxsize: 35,
+                    tier: 1,
+                    description: 'A small freshwater fish with red fins and golden sides.'
+                },
+
+                'sand eel': {
+                    chance: 25,
+                    power: 12,
+                    minsize: 15,
+                    maxsize: 35,
+                    tier: 0,
+                    description: 'A slender marine fish that buries itself in the sand.'
+                },
+
+                'spined loach': {
+                    chance: 40,
+                    power: 10,
+                    minsize: 8,
+                    maxsize: 12,
+                    tier: 0,
+                    description: 'A small bottom-dweller with barbels used to search for food.'
+                },
+
+                'european chub': {
+                    chance: 30,
+                    power: 26,
+                    minsize: 25,
+                    maxsize: 60,
+                    tier: 2,
+                    description: 'A strong and adaptable river fish that feeds on almost anything.'
+                }
             },
             'jurassic': {
                 'roach': {chance: 40, power: 18, minsize: 15, maxsize: 40, tier: 0, description: 'A common freshwater fish.'},
@@ -619,6 +678,41 @@ class FishingManager {
                 'catfish': {chance: 20, power: 38, minsize: 30, maxsize: 100, tier: 4, description: 'A bottom-dweller with characteristic whiskers.'},
                 'perch': {chance: 50, power: 28, minsize: 10, maxsize: 60, tier: 1, description: 'A predatory fish with spiny fins.'},
                 'longear sunfish': {chance: 20, power: 34, minsize: 6, maxsize: 15, tier: 4, description: 'A colorful and small sunfish.'},
+                'rudd': {
+                    chance: 35,
+                    power: 20,
+                    minsize: 15,
+                    maxsize: 35,
+                    tier: 1,
+                    description: 'A small freshwater fish with red fins and golden sides.'
+                },
+
+                'sand eel': {
+                    chance: 25,
+                    power: 12,
+                    minsize: 15,
+                    maxsize: 35,
+                    tier: 0,
+                    description: 'A slender marine fish that buries itself in the sand.'
+                },
+
+                'spined loach': {
+                    chance: 40,
+                    power: 10,
+                    minsize: 8,
+                    maxsize: 12,
+                    tier: 0,
+                    description: 'A small bottom-dweller with barbels used to search for food.'
+                },
+
+                'chub': {
+                    chance: 30,
+                    power: 26,
+                    minsize: 25,
+                    maxsize: 60,
+                    tier: 2,
+                    description: 'A strong and adaptable river fish that feeds on almost anything.'
+                }
             }
         };
     }

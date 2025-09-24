@@ -491,8 +491,56 @@ const exampleCustomItemPaths = {
     shoes: { 'shoes1': 'img/character/custom/shoes/type1.png' },
     items: {'rod':{path:'img/item/rod.png',width:playerSize*2,height:playerSize,pivotX_in_img:Math.round(20*(playerSize/128)),pivotY_in_round:(20*(playerSize/128))},'shovel':{path:'img/item/shovel.png',width:playerSize,height:playerSize,pivotX_in_img:playerSize/2,pivotY_in_img:playerSize/2},'float':{path:'img/item/float.png',width:32,height:62,pivotX_in_img:FLOAT_SIZE/2,pivotY_in_img:FLOAT_SIZE/2}}
 };
+let localPlayer = { 
+    id: null, 
+    username: 'Player' + Math.floor(Math.random()*1000), 
+    danglingBobber: { x: 0, y: 0, oldX: 0, oldY: 0, initialized: false }, 
+    color: '#' + Math.floor(Math.random()*16777215).toString(16).padStart(6,'0'), 
+    x: 50, 
+    y: DEDICATED_GAME_HEIGHT-50-playerSize, 
+    isJumping: false, 
+    velocityY: 0, 
+    isWalking: false, 
+    isIdle: false, 
+    animationFrame: 0, 
+    idleAnimationFrame: 0, 
+    direction: 1, 
+    velocityX: 0, 
+    currentMouseX: undefined, 
+    currentMouseY: undefined, 
+    // --- POCZĄTEK POPRAWKI ---
+    customizations: { 
+        hat: 'none', 
+        hair: 'none', 
+        accessories: 'none', 
+        beard: 'none', 
+        clothes: 'none', 
+        pants: 'none', 
+        shoes: 'none', 
+        rightHandItem: ITEM_NONE, 
+        hairSaturation: 100, 
+        hairHue: 160, 
+        hairBrightness: 100, 
+        beardSaturation: 100, 
+        beardHue: 160, 
+        beardBrightness: 100 
+    }, 
+    // --- KONIEC POPRAWKI ---
+    isCasting:false, 
+    castingPower:0, 
+    fishingBarSliderPosition:0, 
+    fishingBarTime:0, 
+    castingDirectionAngle:0, 
+    hasLineCast:false, 
+    floatWorldX:null, 
+    floatWorldY:null, 
+    rodTipWorldX:null, 
+    rodTipWorldY:null, 
+    lineAnchorWorldY:null,
+    meActionText: null,
+    meActionExpiry: null
+};
 
-let localPlayer = { id: null, username: 'Player' + Math.floor(Math.random()*1000), danglingBobber: { x: 0, y: 0, oldX: 0, oldY: 0, initialized: false } , color: '#' + Math.floor(Math.random()*16777215).toString(16).padStart(6,'0'), x: 50, y: DEDICATED_GAME_HEIGHT-50-playerSize, isJumping: false, velocityY: 0, isWalking: false, isIdle: false, animationFrame: 0, idleAnimationFrame: 0, direction: 1, velocityX: 0, currentMouseX: undefined, currentMouseY: undefined, customizations: { hat:'none', hair:'none', accessories:'none', beard:'none', clothes:'none', pants:'none', shoes:'none', rightHandItem:ITEM_NONE, hairSaturation:50, hairHue:180, hairBrightness:50, beardSaturation:50, beardHue:180, beardBrightness:50 }, isCasting:false, castingPower:0, fishingBarSliderPosition:0, fishingBarTime:0, castingDirectionAngle:0, hasLineCast:false, floatWorldX:null, floatWorldY:null, rodTipWorldX:null, rodTipWorldY:null, lineAnchorWorldY:null };
 usernameInput.value = localPlayer.username;
 
 // Dodajemy event listener, który aktualizuje nick gracza przy każdej zmianie w polu
@@ -959,6 +1007,12 @@ function drawPlayer(p, imageSet = characterImages) {
         const ROD_TIP_OFFSET_X = playerSize * 1.07; 
         const ROD_TIP_OFFSET_Y = -playerSize * 0.32;
         p.customizations && p.customizations.rightHandItem === ITEM_ROD ? (p.rodTipWorldX = p.x + playerSize / 2 + (frontArmOffsetX + originalArmPivotInImageX - playerSize / 2) * p.direction + (ROD_TIP_OFFSET_X * Math.cos(b) - ROD_TIP_OFFSET_Y * Math.sin(b)) * p.direction, p.rodTipWorldY = p.y + playerSize / 2 + (0 + originalArmPivotInImageY - playerSize / 2) + (ROD_TIP_OFFSET_X * Math.sin(b) + ROD_TIP_OFFSET_Y * Math.cos(b)), p.id === localPlayer.id && (localPlayer.rodTipWorldX = p.rodTipWorldX, localPlayer.rodTipWorldY = p.rodTipWorldY)) : (p.rodTipWorldX = null, p.rodTipWorldY = null, p.id === localPlayer.id && (localPlayer.rodTipWorldX = null, localPlayer.rodTipWorldY = null)), ctx.fillStyle = "white", ctx.font = `${DEFAULT_FONT_SIZE_USERNAME}px ${PIXEL_FONT}`, ctx.textAlign = "center", ctx.fillText(p.username || p.id.substring(0, 5), p.x + playerSize / 2, p.y - 10 + a)
+    if (p.meActionText && Date.now() < p.meActionExpiry) {
+            ctx.fillStyle = "#C77CFF"; // Fioletowy kolor
+            ctx.font = `italic ${DEFAULT_FONT_SIZE_USERNAME}px ${PIXEL_FONT}`;
+            // Rysuj tekst nieco wyżej niż nick gracza
+            ctx.fillText(`* ${p.meActionText} *`, p.x + playerSize / 2, p.y - 30 + a);
+        }
     }
 }
 function drawCustomizationMenu() {
@@ -1655,6 +1709,11 @@ function gameLoop(currentTime) {
             const p = playersInRoom[id];
             const isOnGround = (p.y >= groundY_target_for_player_top - 1 && p.y <= groundY_target_for_player_top + 1);
             p.isWalking = Math.abs(p.velocityX || 0) > MIN_VELOCITY_FOR_WALK_ANIMATION && isOnGround;
+            
+            if (p.meActionText && Date.now() >= p.meActionExpiry) {
+        p.meActionText = null;
+        p.meActionExpiry = null;
+    }
             const isStationaryHorizontal = Math.abs(p.velocityX || 0) < MIN_VELOCITY_FOR_WALK_ANIMATION;
             p.isIdle = !p.isWalking && !p.isJumping && isStationaryHorizontal && isOnGround;
             if (p.isWalking) {
@@ -1828,7 +1887,7 @@ fishingManager.draw(ctx, localPlayer, bobberScreenPos, cameraX, currentZoomLevel
 const joinGameBtn = document.getElementById('joinGameBtn');
 const optionsBtn = document.getElementById('optionsBtn');
 const menuStatus = document.getElementById('menuStatus');
-const MAX_PLAYERS_PER_ROOM = 8;
+const MAX_PLAYERS_PER_ROOM = 4;
 
 // --- GŁÓWNA FUNKCJA MATCHMAKINGU ---
 
@@ -2128,10 +2187,45 @@ function handleDataFromServer(data) {
             break;
         }
 
+        // NOWE FRAGMENTY START
+        case 'directMessageReceived': {
+            const { senderUsername, message } = data.payload;
+            chatManager.addMessage(senderUsername, message, false, 'dm-received', null);
+            break;
+        }
+
+        case 'directMessageSent': {
+            const { recipientUsername, message } = data.payload;
+            chatManager.addMessage(null, message, false, 'dm-sent', recipientUsername);
+            break;
+        }
+
+        case 'systemNotification': {
+            const { message, notificationType } = data.payload;
+            showNotification(message, notificationType);
+            break;
+        }
+        // NOWE FRAGMENTY KONIEC
+
+        case 'meCommandBroadcast': {
+            const { peerId, username, action } = data.payload;
+            const player = playersInRoom[peerId];
+            if (player) {
+                player.meActionText = action;
+                player.meActionExpiry = Date.now() + 8000; // Wyświetlaj tekst przez 8 sekund
+            }
+            chatManager.addMeActionMessage(username, action);
+            break;
+        }
+
         case 'chatMessageBroadcast': {
         const { username, message } = data.payload;
         chatManager.addMessage(username, message);
         break;
+        }
+        case 'playerJoinedRoomNotification': {
+            chatManager.addMessage(null, `${data.payload.username} joined the room.`, true);
+            break;
         }
         case 'playerJoinedRoomNotification': {
             chatManager.addMessage(null, `${data.payload.username} joined the room.`, true);
@@ -2188,34 +2282,49 @@ function handleDataFromServer(data) {
             onSuccessfulJoin(data.payload, hostConnection?.peer);
             break;
         case 'gameStateUpdate': {
-            const { players: playersData, worldItems: worldItemsData } = data.payload;
-            playersData.forEach(serverPlayer => {
-                const clientPlayer = playersInRoom[serverPlayer.id];
-                if (serverPlayer.hasLineCast && clientPlayer) {
-                    const isBobberMoving = Math.abs(serverPlayer.floatWorldX - clientPlayer.floatWorldX) > 0.1 || Math.abs(serverPlayer.floatWorldY - clientPlayer.floatWorldY) > 0.1;
-                    const isBobberOnWater = serverPlayer.floatWorldY >= (biomeManager.WATER_TOP_Y_WORLD - 15);
-                    if (isBobberMoving && isBobberOnWater) {
-                        fishingManager.createWaterSplash(serverPlayer.floatWorldX, serverPlayer.floatWorldY, 5, 0.5);
-                    }
-                }
-            });
-            const playerMap = {};
-            for (const p of playersData) {
-                if (playersInRoom[p.id]) {
-                    p.animationFrame = playersInRoom[p.id].animationFrame;
-                    p.idleAnimationFrame = playersInRoom[p.id].idleAnimationFrame;
-                }
-                playerMap[p.id] = p;
-            }
-            playersInRoom = playerMap;
-            worldItems = worldItemsData;
-            if (playersInRoom[localPlayer.id]) {
-                const castingState = { isCasting: localPlayer.isCasting, castingPower: localPlayer.castingPower };
-                Object.assign(localPlayer, playersInRoom[localPlayer.id]);
-                Object.assign(localPlayer, castingState);
-            }
-            break;
+    const { players: playersData, worldItems: worldItemsData } = data.payload;
+
+    
+playersData.forEach(serverPlayer => {
+    const clientPlayer = playersInRoom[serverPlayer.id];
+    if (serverPlayer.hasLineCast && clientPlayer) {
+        const isBobberMoving = Math.abs(serverPlayer.floatWorldX - clientPlayer.floatWorldX) > 0.1 || Math.abs(serverPlayer.floatWorldY - clientPlayer.floatWorldY) > 0.1;
+        const isBobberOnWater = serverPlayer.floatWorldY >= (biomeManager.WATER_TOP_Y_WORLD - 15);
+        if (isBobberMoving && isBobberOnWater) {
+            // TUTAJ TWORZONY JEST ROZPRYSK WODY
+            fishingManager.createWaterSplash(serverPlayer.floatWorldX, serverPlayer.floatWorldY, 5, 0.5);
         }
+    }
+});
+    // Aktualizuj dane graczy, ale zachowaj stan /me
+    playersData.forEach(serverPlayer => {
+        const clientPlayer = playersInRoom[serverPlayer.id];
+        
+        if (clientPlayer) {
+            // Zachowaj aktualny stan /me, który jest zarządzany tylko po stronie klienta
+            const meText = clientPlayer.meActionText;
+            const meExpiry = clientPlayer.meActionExpiry;
+
+            // Zaktualizuj gracza danymi z serwera
+            Object.assign(clientPlayer, serverPlayer);
+
+            // Przywróć stan /me, nadpisując ewentualne `null` z serwera
+            clientPlayer.meActionText = meText;
+            clientPlayer.meActionExpiry = meExpiry;
+        } else {
+            // Jeśli gracz jest nowy, po prostu go dodaj
+            playersInRoom[serverPlayer.id] = serverPlayer;
+        }
+    });
+
+    worldItems = worldItemsData;
+    if (playersInRoom[localPlayer.id]) {
+        const castingState = { isCasting: localPlayer.isCasting, castingPower: localPlayer.castingPower };
+        Object.assign(localPlayer, playersInRoom[localPlayer.id]);
+        Object.assign(localPlayer, castingState);
+    }
+    break;
+}
         
 
         case 'playerCustomizationUpdated':
@@ -2499,42 +2608,63 @@ canvas.addEventListener('contextmenu', (event) => {
 });
 
 canvas.addEventListener('mouseup', (event) => {
-    if (event.button === 0 && !isCustomizationMenuOpen && currentRoom && localPlayer.customizations.rightHandItem === ITEM_ROD) {
-        
-        if (fishingManager.isCatchComplete) {
-    const fish = fishingManager.currentFish;
-    if (fish) {
-        const size = fish.minsize + Math.random() * (fish.maxsize - fish.minsize);
-        const finalSize = Math.round(size);
-
-        // Wysyłamy jedną, kompletną informację do hosta. I nic więcej.
-        sendPlayerAction('fishCaught', { 
-            fishName: fish.name, 
-            size: finalSize,
-            tier: fish.tier || 0 
-        });
-    
-        const fullFishObject = createFullItemObject(fish.name);
-        fullFishObject.size = finalSize;
-        inventoryManager.addItem(fullFishObject);
-        
-        fishingManager.cleanUpAfterCatch();
+    if (event.button !== 0 || !currentRoom || isCustomizationMenuOpen || localPlayer.customizations.rightHandItem !== ITEM_ROD) {
+        return;
     }
-    event.preventDefault();
-}
-        // ======================== KONIEC ZMIAN =========================
-        
-        else if (localPlayer.isCasting) {
-            localPlayer.isCasting = false;
-            const angle = Math.atan2(localPlayer.currentMouseY - localPlayer.rodTipWorldY, localPlayer.currentMouseX - localPlayer.rodTipWorldX);
-            sendPlayerAction('castFishingLine', { power: localPlayer.castingPower, angle: angle, startX: localPlayer.rodTipWorldX, startY: localPlayer.rodTipWorldY });
+
+    // SCENARIUSZ 1: ZAKOŃCZONO MINIGRĘ I ZŁOWIONO RYBĘ (najwyższy priorytet)
+    if (fishingManager.isCatchComplete) {
+        const fish = fishingManager.currentFish;
+        if (fish) {
+            const size = fish.minsize + Math.random() * (fish.maxsize - fish.minsize);
+            const finalSize = Math.round(size);
+
+            sendPlayerAction('fishCaught', {
+                fishName: fish.name,
+                size: finalSize,
+                tier: fish.tier || 0
+            });
+
+            const fullFishObject = createFullItemObject(fish.name);
+            fullFishObject.size = finalSize;
+            inventoryManager.addItem(fullFishObject);
+
+            fishingManager.cleanUpAfterCatch();
+        }
+        event.preventDefault();
+        return;
+    }
+
+    // SCENARIUSZ 2: GRACZ JEST W TRAKCIE USTALANIA MOCY RZUTU
+    if (localPlayer.isCasting) {
+        localPlayer.isCasting = false;
+        const angle = Math.atan2(localPlayer.currentMouseY - localPlayer.rodTipWorldY, localPlayer.currentMouseX - localPlayer.rodTipWorldX);
+        sendPlayerAction('castFishingLine', {
+            power: localPlayer.castingPower,
+            angle: angle,
+            startX: localPlayer.rodTipWorldX,
+            startY: localPlayer.rodTipWorldY
+        });
+        event.preventDefault();
+        return;
+    }
+
+    // SCENARIUSZ 3: ŻYŁKA JEST W WODZIE
+    if (localPlayer.hasLineCast) {
+        // ======================= POCZĄTEK ZMIAN =======================
+        // NOWA LOGIKA: Jeśli minigra jest aktywna, kliknięcie lewym przyciskiem ją przerywa i uruchamia animację ucieczki.
+        if (fishingManager.isFishHooked) {
+            fishingManager.abortMinigame();
             event.preventDefault();
-        } 
-        else if (localPlayer.hasLineCast) {
-            if (!fishingManager.isBiting) {
-                sendPlayerAction('reelInFishingLine');
-                event.preventDefault();
-            }
+            return; // Ważne, aby zakończyć tutaj i nie wykonywać dalszego kodu.
+        }
+        // ======================== KONIEC ZMIAN =========================
+
+        // STARA/POPRAWNA LOGIKA: Jeśli NIE ma brania (ani minigry), zwiń żyłkę.
+        // Obejmuje to zarówno stan oczekiwania na branie, jak i moment po przegapieniu brania.
+        if (!fishingManager.isBiting) {
+            sendPlayerAction('reelInFishingLine');
+            event.preventDefault();
         }
     }
 });
@@ -2574,3 +2704,4 @@ loadImages(() => {
 
 // Inicjalizacja Chatu
 const chatManager = new ChatManager();
+
