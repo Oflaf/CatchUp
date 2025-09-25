@@ -23,13 +23,11 @@
     <div id="lobby">
         <p>Your Name: <input type="text" id="usernameInput" maxlength="16" autocomplete="off"></p>
         
-        <!-- ======================= NOWA STRUKTURA MENU ======================= -->
         <div class="main-menu">
             <button id="joinGameBtn">Join the Game</button>
-            <button id="optionsBtn" disabled>Options</button> <!-- 'disabled' bo jest nieaktywny -->
+            <button id="optionsBtn" disabled>Options</button>
         </div>
-        <p id="menuStatus" class="menu-status"></p> <!-- Paragraf na status, np. "Searching..." -->
-        <!-- =================================================================== -->
+        <p id="menuStatus" class="menu-status"></p>
     </div>
 
     <div id="gameContainer" style="display: none; position: relative;">
@@ -41,6 +39,9 @@
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script> 
     <script src="/socket.io/socket.io.js"></script> 
 
+    <!-- WAŻNA ZMIANA: Dodajemy loading.js PRZED innymi skryptami gry -->
+    <script src="js/loading.js"></script> 
+    
     <script src="js/biomemanager.js"></script>
     <script src="js/menuworld.js"></script>
     <script src="js/cycle.js"></script>

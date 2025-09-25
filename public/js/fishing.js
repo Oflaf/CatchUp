@@ -401,111 +401,122 @@ class FishingManager {
 }}
 
     draw(ctx, player, bobberPosition, cameraX, currentZoom) {
-        ctx.save();
-        ctx.scale(currentZoom, currentZoom);
-        ctx.translate(-cameraX, -cameraY);
-        this.particleManager.draw(ctx);
-        ctx.restore();
+    // Rysowanie cząsteczek - bez zmian
+    ctx.save();
+    ctx.scale(currentZoom, currentZoom);
+    ctx.translate(-cameraX, -cameraY);
+    this.particleManager.draw(ctx);
+    ctx.restore();
 
-        if (this.isBiting && this.strikeImage && this.strikeImage.complete && bobberPosition) {
-            const PULSE_SPEED = 25, PULSE_AMPLITUDE = 0.4, BASE_SCALE = 1.2, ROCKING_SPEED = 10, MAX_ROCKING_ANGLE_DEG = 25;
+    // Rysowanie animacji "STRIKE!" - bez zmian
+    if (this.isBiting && this.strikeImage && this.strikeImage.complete && bobberPosition) {
+        const PULSE_SPEED = 25, PULSE_AMPLITUDE = 0.4, BASE_SCALE = 1.2, ROCKING_SPEED = 10, MAX_ROCKING_ANGLE_DEG = 25;
+        const scale = BASE_SCALE + Math.sin(this.strikeAnimationTime * PULSE_SPEED) * PULSE_AMPLITUDE;
+        const rotation = Math.sin(this.strikeAnimationTime * ROCKING_SPEED) * (MAX_ROCKING_ANGLE_DEG * Math.PI / 180);
+        const imgWidth = this.strikeImage.width * scale, imgHeight = this.strikeImage.height * scale;
+        const x = bobberPosition.x - imgWidth / 2, y = bobberPosition.y - imgHeight / 2 - 50;
+        ctx.save();
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
+        ctx.translate(x + imgWidth / 2, y + imgHeight / 2);
+        ctx.rotate(rotation);
+        ctx.drawImage(this.strikeImage, -imgWidth / 2, -imgHeight / 2, imgWidth, imgHeight);
+        ctx.restore();
+    }
+
+    // Rysowanie ramki minigry - TUTAJ WPROWADZAMY ZMIANY
+    if ((this.showFishFrame || this.isFailAnimationPlaying) && this.fishFrameImage && this.fishFrameImage.complete && bobberPosition) {
+        const frameWidth = this.fishFrameImage.width * this.fishFrameScale;
+        const frameHeight = this.fishFrameImage.height * this.fishFrameScale;
+        const x = bobberPosition.x + 40, y = bobberPosition.y - frameHeight;
+        
+        ctx.save();
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
+        ctx.translate(x + frameWidth / 2, y + frameHeight / 2);
+
+        // === POCZĄTEK POPRAWKI: BUJANIE RAMKI ===
+        // Jeśli minigra jest aktywna (ale nie jest to animacja porażki), dodaj bujanie.
+        if (this.isFishHooked && !this.isFailAnimationPlaying) {
+            const ROCKING_SPEED = 4; // Jak szybko ma się bujać
+            const MAX_ROCKING_ANGLE_DEG = 7; // Maksymalny kąt wychylenia w stopniach
+            const rockingAngle = Math.sin(Date.now() / 1000 * ROCKING_SPEED) * (MAX_ROCKING_ANGLE_DEG * Math.PI / 180);
+            ctx.rotate(rockingAngle);
+        }
+        // === KONIEC POPRAWKI ===
+        
+        const isFlickering = this.isFailAnimationPlaying && this.failAnimationTimer < 0.7;
+        const showDuringFlicker = isFlickering ? (Math.floor(this.failAnimationTimer * 10) % 2 === 0) : true;
+        const showUI = !this.isFailAnimationPlaying || isFlickering;
+
+        if (showUI && showDuringFlicker) {
+            const barWidth = 128 * (this.currentHook?.playerBarWidthModifier || 1.0);
+            const barHeight = frameHeight;
+            const barX = this.minigameBarPosition - (barWidth / 2);
+            const barY = -frameHeight / 2;
+            ctx.fillStyle = 'rgba(11, 207, 34, 0.9)';
+            ctx.fillRect(barX, barY, barWidth, barHeight);
+            ctx.drawImage(this.fishFrameImage, -frameWidth / 2, -frameHeight / 2, frameWidth, frameHeight);
+            
+            const progressBarHeight = 20, progressBarY = (frameHeight / 2) + 8;
+            const gradient = ctx.createLinearGradient(-frameWidth / 2, 0, frameWidth / 2, 0);
+            gradient.addColorStop(0, 'red');
+            gradient.addColorStop(0.5, 'yellow');
+            gradient.addColorStop(1, 'lime');
+            ctx.fillStyle = gradient;
+            ctx.fillRect(-frameWidth / 2, progressBarY, this.catchProgressBarWidth, progressBarHeight);
+        }
+        
+        if (this.isFishHooked && this.currentFish) {
+            if(showDuringFlicker) {
+                const fishImg = this.fishImages[this.currentFish.name];
+                if (fishImg && fishImg.complete) {
+                    const fishHeight = fishImg.height * 3, fishWidth = fishImg.width * 3;
+                    const fishX = this.fishPosition, fishY = 0;
+                    const barWidth = 128 * (this.currentHook?.playerBarWidthModifier || 1.0);
+                    const barLeftEdge = this.minigameBarPosition - (barWidth / 2);
+                    const barRightEdge = this.minigameBarPosition + (barWidth / 2);
+                    const fishLeftEdge = this.fishPosition - (fishWidth / 2);
+                    const fishRightEdge = this.fishPosition + (fishWidth / 2);
+                    const isOverlapping = barLeftEdge < fishRightEdge && barRightEdge > fishLeftEdge;
+                    const targetAlpha = isOverlapping ? 1.0 : 0.3;
+                    ctx.globalAlpha = lerp(ctx.globalAlpha, targetAlpha, 0.7);
+                    const fishRotation = Math.sin(Date.now() / 1000 * 8) * (14 * Math.PI / 180);
+                    ctx.save();
+                    ctx.translate(fishX, fishY);
+                    ctx.rotate(fishRotation);
+                    ctx.drawImage(fishImg, -fishWidth / 2, -fishHeight / 2, fishWidth, fishHeight);
+                    ctx.restore();
+                    ctx.globalAlpha = 1.0;
+                }
+            }
+        } else if (this.escapedFish) {
+            if(showDuringFlicker || !isFlickering) {
+                ctx.save();
+                ctx.globalAlpha = this.escapedFish.alpha;
+                ctx.translate(this.escapedFish.x, this.escapedFish.y);
+                ctx.rotate(this.escapedFish.rotation);
+                ctx.scale(this.escapedFish.scaleX, 1);
+                ctx.drawImage(this.escapedFish.img, -this.escapedFish.width / 2, -this.escapedFish.height / 2, this.escapedFish.width, this.escapedFish.height);
+                ctx.restore();
+            }
+        }
+
+        if (this.isCatchComplete && this.strikeImage && this.strikeImage.complete) {
+            const PULSE_SPEED = 25, PULSE_AMPLITUDE = 0.4, BASE_SCALE = 1.0, ROCKING_SPEED = 10, MAX_ROCKING_ANGLE_DEG = 25;
             const scale = BASE_SCALE + Math.sin(this.strikeAnimationTime * PULSE_SPEED) * PULSE_AMPLITUDE;
             const rotation = Math.sin(this.strikeAnimationTime * ROCKING_SPEED) * (MAX_ROCKING_ANGLE_DEG * Math.PI / 180);
-            const imgWidth = this.strikeImage.width * scale, imgHeight = this.strikeImage.height * scale;
-            const x = bobberPosition.x - imgWidth / 2, y = bobberPosition.y - imgHeight / 2 - 50;
+            const strikeBaseWidth = this.strikeImage.width * 1.5, strikeBaseHeight = this.strikeImage.height * 1.5;
+            const imgWidth = strikeBaseWidth * scale, imgHeight = strikeBaseHeight * scale;
+            const xPos = (frameWidth / 2) - (strikeBaseWidth / 2) - 5, yPos = (-frameHeight / 2) + (strikeBaseHeight / 2) + 5;
             ctx.save();
-            ctx.setTransform(1, 0, 0, 1, 0, 0);
-            ctx.translate(x + imgWidth / 2, y + imgHeight / 2);
+            ctx.translate(xPos, yPos);
             ctx.rotate(rotation);
             ctx.drawImage(this.strikeImage, -imgWidth / 2, -imgHeight / 2, imgWidth, imgHeight);
             ctx.restore();
         }
-
-        if ((this.showFishFrame || this.isFailAnimationPlaying) && this.fishFrameImage && this.fishFrameImage.complete && bobberPosition) {
-            const frameWidth = this.fishFrameImage.width * this.fishFrameScale;
-            const frameHeight = this.fishFrameImage.height * this.fishFrameScale;
-            const x = bobberPosition.x + 40, y = bobberPosition.y - frameHeight;
-            
-            ctx.save();
-            ctx.setTransform(1, 0, 0, 1, 0, 0);
-            ctx.translate(x + frameWidth / 2, y + frameHeight / 2);
-            
-            const isFlickering = this.isFailAnimationPlaying && this.failAnimationTimer < 0.7;
-            const showDuringFlicker = isFlickering ? (Math.floor(this.failAnimationTimer * 10) % 2 === 0) : true;
-            const showUI = !this.isFailAnimationPlaying || isFlickering;
-
-            if (showUI && showDuringFlicker) {
-                const barWidth = 128 * (this.currentHook?.playerBarWidthModifier || 1.0);
-                const barHeight = frameHeight;
-                const barX = this.minigameBarPosition - (barWidth / 2);
-                const barY = -frameHeight / 2;
-                ctx.fillStyle = 'rgba(11, 207, 34, 0.9)';
-                ctx.fillRect(barX, barY, barWidth, barHeight);
-                ctx.drawImage(this.fishFrameImage, -frameWidth / 2, -frameHeight / 2, frameWidth, frameHeight);
-                
-                const progressBarHeight = 20, progressBarY = (frameHeight / 2) + 8;
-                const gradient = ctx.createLinearGradient(-frameWidth / 2, 0, frameWidth / 2, 0);
-                gradient.addColorStop(0, 'red');
-                gradient.addColorStop(0.5, 'yellow');
-                gradient.addColorStop(1, 'lime');
-                ctx.fillStyle = gradient;
-                ctx.fillRect(-frameWidth / 2, progressBarY, this.catchProgressBarWidth, progressBarHeight);
-            }
-            
-            if (this.isFishHooked && this.currentFish) {
-                if(showDuringFlicker) {
-                    const fishImg = this.fishImages[this.currentFish.name];
-                    if (fishImg && fishImg.complete) {
-                        const fishHeight = fishImg.height * 3, fishWidth = fishImg.width * 3;
-                        const fishX = this.fishPosition, fishY = 0;
-                        const barWidth = 128 * (this.currentHook?.playerBarWidthModifier || 1.0);
-                        const barLeftEdge = this.minigameBarPosition - (barWidth / 2);
-                        const barRightEdge = this.minigameBarPosition + (barWidth / 2);
-                        const fishLeftEdge = this.fishPosition - (fishWidth / 2);
-                        const fishRightEdge = this.fishPosition + (fishWidth / 2);
-                        const isOverlapping = barLeftEdge < fishRightEdge && barRightEdge > fishLeftEdge;
-                        const targetAlpha = isOverlapping ? 1.0 : 0.3;
-                        ctx.globalAlpha = lerp(ctx.globalAlpha, targetAlpha, 0.7);
-                        const fishRotation = Math.sin(Date.now() / 1000 * 8) * (14 * Math.PI / 180);
-                        ctx.save();
-                        ctx.translate(fishX, fishY);
-                        ctx.rotate(fishRotation);
-                        ctx.drawImage(fishImg, -fishWidth / 2, -fishHeight / 2, fishWidth, fishHeight);
-                        ctx.restore();
-                        ctx.globalAlpha = 1.0;
-                    }
-                }
-            } else if (this.escapedFish) {
-     if(showDuringFlicker || !isFlickering) {
-        ctx.save();
         
-        ctx.globalAlpha = this.escapedFish.alpha;
-
-        ctx.translate(this.escapedFish.x, this.escapedFish.y);
-        ctx.rotate(this.escapedFish.rotation);
-        ctx.scale(this.escapedFish.scaleX, 1);
-        ctx.drawImage(this.escapedFish.img, -this.escapedFish.width / 2, -this.escapedFish.height / 2, this.escapedFish.width, this.escapedFish.height);
         ctx.restore();
-     }
-}
-
-            if (this.isCatchComplete && this.strikeImage && this.strikeImage.complete) {
-                const PULSE_SPEED = 25, PULSE_AMPLITUDE = 0.4, BASE_SCALE = 1.0, ROCKING_SPEED = 10, MAX_ROCKING_ANGLE_DEG = 25;
-                const scale = BASE_SCALE + Math.sin(this.strikeAnimationTime * PULSE_SPEED) * PULSE_AMPLITUDE;
-                const rotation = Math.sin(this.strikeAnimationTime * ROCKING_SPEED) * (MAX_ROCKING_ANGLE_DEG * Math.PI / 180);
-                const strikeBaseWidth = this.strikeImage.width * 1.5, strikeBaseHeight = this.strikeImage.height * 1.5;
-                const imgWidth = strikeBaseWidth * scale, imgHeight = strikeBaseHeight * scale;
-                const xPos = (frameWidth / 2) - (strikeBaseWidth / 2) - 5, yPos = (-frameHeight / 2) + (strikeBaseHeight / 2) + 5;
-                ctx.save();
-                ctx.translate(xPos, yPos);
-                ctx.rotate(rotation);
-                ctx.drawImage(this.strikeImage, -imgWidth / 2, -imgHeight / 2, imgWidth, imgHeight);
-                ctx.restore();
-            }
-            
-            ctx.restore();
-        }
     }
+}
 
      _initializeHookData() {
         this.hookData = {

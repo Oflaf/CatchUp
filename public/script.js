@@ -89,6 +89,10 @@ let peer;
 let isHost = false;
 let hostConnection;
 
+let hostPingTimeout = null; // Interwał sprawdzający, czy host żyje
+const HOST_TIMEOUT_LIMIT = 15000; // 15 sekund - limit dla gościa
+let lastPingTime = 0; // Czas ostatniego pingu od hosta
+
 let gameHostWorker = null; 
 let hostPeerConnections = {};
 
@@ -1578,6 +1582,21 @@ function onSuccessfulJoin(roomData, hostPeerId = null) {
     resetMenuUI();
     showNotification(`Successfully joined room: "${currentRoom.name}"`, 'success');
     
+    // NOWOŚĆ: Uruchom mechanizm sprawdzania hosta po stronie gościa
+    if (!isHost) {
+        lastPingTime = Date.now(); // Ustawiamy początkowy czas
+        if (hostPingTimeout) clearInterval(hostPingTimeout); // Wyczyść stary na wszelki wypadek
+
+        hostPingTimeout = setInterval(() => {
+            if (Date.now() - lastPingTime > HOST_TIMEOUT_LIMIT) {
+                console.warn('[GUEST-HEARTBEAT] Host przestał odpowiadać. Powrót do lobby.');
+                showNotification('Connection to the host timed out.', 'error');
+                leaveCurrentRoomUI(); // Używamy tej samej funkcji co przycisk "Leave"
+            }
+        }, 5000); // Sprawdzaj co 5 sekund
+    }
+
+    
     // <<< KLUCZOWA POPRAWKA: Wywołanie jest tutaj, na samym końcu funkcji.
     chatManager.show(); 
 }
@@ -1894,31 +1913,38 @@ const MAX_PLAYERS_PER_ROOM = 4;
 joinGameBtn.addEventListener('click', () => {
     joinGameBtn.disabled = true;
     optionsBtn.disabled = true;
-    menuStatus.textContent = 'Initializing network...';
+    
+    // === POCZĄTEK ZMIAN ===
+    loadingManager.show(() => {
+        // Ekran jest już widoczny, rozpoczynamy proces łączenia
+        menuStatus.textContent = 'Initializing network...';
+        loadingManager.updateProgress(10);
 
-    initializePeer((peerId) => {
-        if (!peerId) {
-            showNotification("Network error: Could not initialize.", 'error');
-            resetMenuUI();
-            return;
-        }
-        localPlayer.id = peerId;
+        initializePeer((peerId) => {
+            if (!peerId) {
+                showNotification("Network error: Could not initialize.", 'error');
+                resetMenuUI();
+                loadingManager.hide(); // Ukryj ekran w razie błędu
+                return;
+            }
+            localPlayer.id = peerId;
+            loadingManager.updateProgress(30);
 
-        menuStatus.textContent = 'Searching for an available game...';
-        
-        // Pobieramy listę pokoi, filtrujemy te, które nie są pełne
-        const joinableRooms = Object.values(availableRooms)
-            .filter(room => room.playerCount < MAX_PLAYERS_PER_ROOM);
+            menuStatus.textContent = 'Searching for an available game...';
+            
+            const joinableRooms = Object.values(availableRooms)
+                .filter(room => room.playerCount < MAX_PLAYERS_PER_ROOM);
 
-        if (joinableRooms.length > 0) {
-            // Jeśli są dostępne pokoje, próbujemy do nich dołączyć po kolei
-            tryToJoinRooms(joinableRooms);
-        } else {
-            // Jeśli nie ma pokoi, tworzymy własny
-            menuStatus.textContent = 'No available games found. Creating a new one...';
-            createNewRoom();
-        }
+            if (joinableRooms.length > 0) {
+                tryToJoinRooms(joinableRooms);
+            } else {
+                menuStatus.textContent = 'No available games found. Creating a new one...';
+                loadingManager.updateProgress(50);
+                createNewRoom();
+            }
+        });
     });
+    // === KONIEC ZMIAN ===
 });
 
 function tryToJoinRooms(rooms) {
@@ -1928,12 +1954,14 @@ function tryToJoinRooms(rooms) {
         if (roomIndex >= rooms.length) {
             // Próbowaliśmy dołączyć do wszystkich i się nie udało
             menuStatus.textContent = 'Could not connect to available games. Creating a new one...';
+            loadingManager.updateProgress(50);
             createNewRoom();
             return;
         }
 
         const roomToJoin = rooms[roomIndex];
-        menuStatus.textContent = `Attempting to join "${roomToJoin.name}" (${roomToJoin.playerCount}/${MAX_PLAYERS_PER_ROOM})...`;
+        menuStatus.textContent = `Attempting to join "${roomToJoin.name}"...`;
+        loadingManager.updateProgress(60 + (roomIndex * 5)); // Mały postęp dla każdej próby
         
         // Zwiększamy indeks na potrzeby następnej próby
         roomIndex++;
@@ -1941,6 +1969,8 @@ function tryToJoinRooms(rooms) {
         // Czyścimy poprzednie połączenie, jeśli istnieje
         if (hostConnection) hostConnection.close();
 
+        // === POPRAWIONA LINIA ===
+        // Błąd był tutaj: użyto "roomToToJoin" zamiast "roomToJoin"
         hostConnection = peer.connect(roomToJoin.peerId, { reliable: true });
         
         // Timeout połączenia - jeśli nie uda się połączyć w 10 sekund, próbujemy następny pokój
@@ -1948,10 +1978,11 @@ function tryToJoinRooms(rooms) {
             showNotification(`Connection to "${roomToJoin.name}" timed out.`, 'warning');
             hostConnection.close(); // Ważne, aby zamknąć próbę połączenia
             tryNext();
-        }, 10000);
+        }, 4000); // <--- ZMIANA NA 4 SEKUNDY
 
         hostConnection.on('open', () => {
             clearTimeout(connectionTimeout); // Anuluj timeout, bo się udało
+            loadingManager.updateProgress(85); // Prawie gotowe!
             console.log(`[GUEST] Połączenie P2P z hostem ${roomToJoin.peerId} otwarte.`);
             signalingSocket.emit('notify-join', roomToJoin.peerId);
             hostConnection.send({ type: 'requestJoin', payload: localPlayer });
@@ -2173,11 +2204,29 @@ function onSuccessfulJoin(roomData, hostPeerId = null) {
     resetMenuUI();
     showNotification(`Successfully joined room: "${currentRoom.name}"`, 'success');
     
-    chatManager.show(); // <<< DODAJ TĘ LINIĘ
+     loadingManager.updateProgress(100);
+    setTimeout(() => { // Dajmy chwilę na 100%
+        loadingManager.hide(() => {
+            // Po zniknięciu ekranu ładowania, finalizujemy przejście
+            lobbyDiv.style.display = 'none';
+            gameContainerDiv.style.display = 'block';
+            chatManager.show();
+        });
+    }, 200);
+
 }
 
 function handleDataFromServer(data) {
     switch (data.type) {
+    case 'playerLeftRoom': {
+        const { peerId, username } = data.payload;
+        if (playersInRoom[peerId]) {
+            delete playersInRoom[peerId];
+            chatManager.addMessage(null, `${username} left the room.`, true);
+        }
+        break;
+    }
+
         case 'awardStarterItem': {
             const { itemName, targetSlot } = data.payload;
             const fullItemObject = createFullItemObject(itemName);
@@ -2186,6 +2235,14 @@ function handleDataFromServer(data) {
             }
             break;
         }
+
+        case 'ping':
+            if (!isHost && hostConnection) {
+                lastPingTime = Date.now(); // Zaktualizuj czas ostatniego kontaktu z hostem
+                // Odeślij odpowiedź 'pong' jako akcję gracza
+                sendPlayerAction('pong'); 
+            }
+            break;
 
         // NOWE FRAGMENTY START
         case 'directMessageReceived': {
@@ -2371,9 +2428,17 @@ function leaveCurrentRoomUI() {
     newRoomNameInput.disabled = false;
     currentWorldWidth=DEDICATED_GAME_WIDTH * 2; biomeManager.worldWidth=currentWorldWidth; biomeManager.setBiome('jurassic');
     keys={}; cameraX=0; cameraY=0; isCustomizationMenuOpen=false;
+if (hostPingTimeout) {
+        clearInterval(hostPingTimeout);
+        hostPingTimeout = null;
+    }
+    
     console.log('You left the room, returned to the lobby.');
     showNotification('You left the room and returned to the lobby.', 'warning');
-    chatManager.hide(); // <<< DODAJ TĘ LINIĘ
+    chatManager.hide();
+
+
+    
 }
 
 
@@ -2685,6 +2750,9 @@ setupNotificationArea();
 initializeSignaling();
 cycleManager.load();
 
+// WAŻNE: W tym miejscu nic nie zmieniamy. loadImages wciąż jest potrzebne,
+// aby zasoby gry były dostępne w pamięci, zanim gracz kliknie "Join".
+// Nasz drugi ekran ładowania symuluje wczytywanie stanu pokoju, nie plików.
 loadImages(() => {
     console.log("All images loaded, starting render loop.");
     

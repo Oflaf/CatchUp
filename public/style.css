@@ -22,8 +22,14 @@ body {
     left: 0;
     width: 100vw;
     height: 100vh;
-    z-index: -1; /* Umieszcza canvas ZA WSZYSTKIM */
-    background-color: #3498db; /* Domyślny kolor tła, jeśli JS zawiedzie */
+    z-index: -1;
+    background-color: black;
+    object-fit: calc();
+    
+    /* KLUCZOWA POPRAWKA: Mówi przeglądarce, by nie rozmywała pikseli przy skalowaniu */
+    image-rendering: pixelated;
+    image-rendering: -moz-crisp-edges; /* Dla starszych wersji Firefox */
+    image-rendering: crisp-edges;     /* Dla innych przeglądarek */
 }
 
 #cycleOverlay {
@@ -169,21 +175,44 @@ body {
 }
 
 #loadingOverlay {
-    position: fixed; /* Pozostaje w miejscu nawet podczas przewijania */
+    position: fixed;
     top: 0;
     left: 0;
-    width: 100vw;  /* 100% szerokości okna */
-    height: 100vh; /* 100% wysokości okna */
+    width: 100vw;
+    height: 100vh;
     background-color: black;
-    z-index: 9999; /* Bardzo wysoki z-index, aby był na wierzchu wszystkiego */
+    z-index: 9999;
+    
+    /* Zmieniamy układ na kolumnowy, aby postać była nad tekstem */
+    display: flex;
+    flex-direction: column; 
+    justify-content: center;
+    align-items: center;
 
-    /* Logika przejścia (transition) */
-    opacity: 1; /* Domyślnie w pełni widoczny */
-    visibility: visible;
+    opacity: 0;
+    visibility: hidden;
     transition: opacity 0.5s ease-in-out, visibility 0.5s ease-in-out;
+    pointer-events: none;
+}
 
-    /* Domyślnie blokuje kliknięcia */
+#loadingOverlay.visible {
+    opacity: 1;
+    visibility: visible;
     pointer-events: auto;
+}
+
+/* NOWY STYL DLA PŁÓTNA POSTACI */
+#loadingCanvas {
+    /* Wyłączamy antyaliasing dla ostrego, pixelartowego wyglądu */
+    image-rendering: pixelated;
+    image-rendering: crisp-edges;
+}
+
+#loadingPercentage {
+    color: white;
+    font-family: 'Segoe UI', monospace;
+    font-size: 1em; /* Nieco mniejszy, by zrobić miejsce dla postaci */
+    font-weight: bold;
 }
 
 #usernameInput {

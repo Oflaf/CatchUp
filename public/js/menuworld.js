@@ -1,4 +1,4 @@
-`'use strict';`
+'use strict';
 
 console.log("[MenuWorld] Skrypt załadowany.");
 
@@ -36,7 +36,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // ====================================================================
 
     // --- Stałe przeniesione z host.js do generowania świata ---
-    const DEDICATED_GAME_HEIGHT = 1080; // Używamy stałej wysokości do obliczeń
+    const DEDICATED_GAME_HEIGHT = 680; // Używamy stałej wysokości do obliczeń
     const GRASS_DENSITY_FACTOR = 0.075;
     const GRASS_SWAY_DURATION_MS = 1800;
     const GRASS_SPRITE_WIDTH = 32 * 3.8;
@@ -52,10 +52,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const groundLevel = 256;
     const AVAILABLE_BIOMES = ['jurassic', 'grassland'];
     const chosenBiome = AVAILABLE_BIOMES[Math.floor(Math.random() * AVAILABLE_BIOMES.length)];
-    // ===================================================
-    // === TUTAJ ZNAJDUJE SIĘ ZMIANA ===
-    const ZOOM_LEVEL = 1.2; // Zwiększona wartość dla przybliżenia (wcześniej 0.85)
-    // ===================================================
+    const ZOOM_LEVEL = 1.6;
 
     // --- Inicjalizacja BiomeManagera ---
     const biomeManager = new BiomeManager(currentWorldWidth, DEDICATED_GAME_HEIGHT);
@@ -146,7 +143,6 @@ document.addEventListener('DOMContentLoaded', () => {
         const trees = [];
         const seededRandom = createSeededRandom(roomId + '-trees');
         const groundY = DEDICATED_GAME_HEIGHT - groundLevel;
-        // Zakładamy, że BiomeManager ma dostęp do definicji biomów
         const biomeDetails = biomeManager.biomeDefinitions[biomeName];
 
         if (!biomeDetails || !biomeDetails.treeDefinitions) return trees;
@@ -202,44 +198,72 @@ document.addEventListener('DOMContentLoaded', () => {
     // === SEKCJA 3: ŁADOWANIE OBRAZÓW I INICJALIZACJA ===
     // ====================================================================
 
-    function loadAllImages(callback) {
+    // ZMODYFIKOWANA FUNKCJA
+    function loadAllImages(progressCallback, completionCallback) {
+        let completed = false;
         let characterImagesLoaded = false;
         let biomeImagesLoaded = false;
-        let totalCharacterImages = Object.keys(characterImagePaths).length;
+        const totalCharacterImages = Object.keys(characterImagePaths).length;
         let loadedCharacterImages = 0;
-
+    
+        const checkAllDone = () => {
+            if (characterImagesLoaded && biomeImagesLoaded && !completed) {
+                completed = true;
+                completionCallback();
+            }
+        };
+    
+        const updateProgress = () => {
+            let progress = 0;
+            // Obrazy postaci stanowią 50% postępu
+            if (totalCharacterImages > 0) {
+                progress += (loadedCharacterImages / totalCharacterImages) * 50;
+            } else {
+                progress += 50;
+            }
+            // Obrazy biomu stanowią drugie 50%
+            if (biomeImagesLoaded) {
+                progress += 50;
+            }
+            progressCallback(progress);
+        };
+    
         // 1. Ładuj obrazy postaci
-        for (const key in characterImagePaths) {
-            const img = new Image();
-            img.src = characterImagePaths[key];
-            img.onload = () => {
-                loadedCharacterImages++;
-                if (loadedCharacterImages === totalCharacterImages) {
-                    characterImagesLoaded = true;
-                    if (biomeImagesLoaded) callback();
-                }
-            };
-            img.onerror = () => {
-                loadedCharacterImages++;
-                console.error(`[MenuWorld] BŁĄD ładowania: ${img.src}`);
-                if (loadedCharacterImages === totalCharacterImages) {
-                    characterImagesLoaded = true;
-                    if (biomeImagesLoaded) callback();
-                }
-            };
-            characterImages[key] = img;
+        if (totalCharacterImages === 0) {
+            characterImagesLoaded = true;
+            updateProgress();
+        } else {
+            for (const key in characterImagePaths) {
+                const img = new Image();
+                img.src = characterImagePaths[key];
+                const onImageDone = () => {
+                    loadedCharacterImages++;
+                    updateProgress();
+                    if (loadedCharacterImages === totalCharacterImages) {
+                        characterImagesLoaded = true;
+                        checkAllDone();
+                    }
+                };
+                img.onload = onImageDone;
+                img.onerror = () => {
+                    console.error(`[MenuWorld] BŁĄD ładowania: ${img.src}`);
+                    onImageDone(); // Traktuj błąd jak sukces, aby nie zablokować ładowania
+                };
+                characterImages[key] = img;
+            }
         }
-
+    
         // 2. Ładuj obrazy biomu
         biomeManager.loadBiomeImages(() => {
             biomeImagesLoaded = true;
-            if (characterImagesLoaded) callback();
+            updateProgress();
+            checkAllDone();
         });
     }
 
-    // --- Inicjalizacja świata ---
+    // --- Inicjalizacja świata (przed ładowaniem obrazów) ---
     biomeManager.setBiome(chosenBiome);
-    const roomId = "localMenuWorld"; // Dowolny stały seed
+    const roomId = "localMenuWorld";
     const groundPlants = generateGroundPlants(roomId, groundLevel, currentWorldWidth);
     const trees = generateTrees(roomId, groundLevel, currentWorldWidth, chosenBiome);
     insectsInRoom = generateInsects(roomId, groundLevel, currentWorldWidth);
@@ -251,7 +275,6 @@ document.addEventListener('DOMContentLoaded', () => {
     // === SEKCJA 4: FUNKCJE RYSUJĄCE I AKTUALIZUJĄCE ===
     // ====================================================================
     
-    // --- Funkcje rysujące (przeniesione/zaadaptowane z script.js) ---
     function drawMenuPlayer(p) {
         menuCtx.save();
         let bodyPulseY = 0, arm1Rotation = 0, arm2Rotation = 0, leg1Rotation = 0, leg2Rotation = 0, headRotation = 0, headPulseY = 0;
@@ -343,27 +366,24 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
     
-function updateCamera() {
-    const playerWorldCenterX = menuPlayer.x + playerSize / 2;
-    const visibleWorldWidth = menuCanvas.width / ZOOM_LEVEL;
+    function updateCamera() {
+        const playerWorldCenterX = menuPlayer.x + playerSize / 2;
+        const visibleWorldWidth = menuCanvas.width / ZOOM_LEVEL;
 
-    let targetCameraX = playerWorldCenterX - visibleWorldWidth / 2;
-    if (targetCameraX < 0) targetCameraX = 0;
-    if (targetCameraX > currentWorldWidth - visibleWorldWidth) {
-        targetCameraX = currentWorldWidth - visibleWorldWidth;
+        let targetCameraX = playerWorldCenterX - visibleWorldWidth / 2;
+        if (targetCameraX < 0) targetCameraX = 0;
+        if (targetCameraX > currentWorldWidth - visibleWorldWidth) {
+            targetCameraX = currentWorldWidth - visibleWorldWidth;
+        }
+
+        cameraX = (1 - CAMERA_SMOOTHING_FACTOR) * cameraX + CAMERA_SMOOTHING_FACTOR * targetCameraX;
+        cameraY = 120; 
     }
 
-    cameraX = (1 - CAMERA_SMOOTHING_FACTOR) * cameraX + CAMERA_SMOOTHING_FACTOR * targetCameraX;
-    // Zmieniona linia - zamiast 0, używamy stałej
-    cameraY = 120; 
-}
-
-    // --- Główna pętla aktualizacji ---
     function update(deltaTime) {
         const lobbyDiv = document.getElementById('lobby');
         if (!lobbyDiv || lobbyDiv.style.display === 'none' || !areAllImagesReady) return;
         
-        // --- Ruch gracza ---
         let targetVelocityX = 0;
         if (keys['ArrowLeft'] || keys['KeyA']) {
             targetVelocityX = -PLAYER_WALK_SPEED;
@@ -380,7 +400,6 @@ function updateCamera() {
         menuPlayer.x += menuPlayer.velocityX;
         menuPlayer.x = Math.max(0, Math.min(currentWorldWidth - playerSize, menuPlayer.x));
 
-        // --- Stan animacji gracza ---
         menuPlayer.isWalking = Math.abs(menuPlayer.velocityX) > MIN_VELOCITY_FOR_WALK_ANIMATION;
         menuPlayer.isIdle = !menuPlayer.isWalking;
 
@@ -393,7 +412,6 @@ function updateCamera() {
             menuPlayer.idleAnimationFrame = (menuPlayer.idleAnimationFrame + 1) % IDLE_ANIM_CYCLE_LENGTH;
         }
 
-        // --- Aktualizacja owadów ---
         insectsInRoom.forEach(insect => {
              const time = (Date.now() / 1000) + (insect.timeOffset || 0);
              insect.anchorX += (insect.drift || 0);
@@ -404,7 +422,6 @@ function updateCamera() {
              insect.animationFrame = ((insect.animationFrame || 0) + 1) % 16;
         });
         
-        // --- Animacja kołysania roślin ---
         const playerHitbox = { x: menuPlayer.x + playerSize * 0.25, y: menuPlayer.y + playerSize * 0.8, width: playerSize * 0.5, height: playerSize * 0.2 };
         const allPlants = [...biomeManager.backgroundGroundPlants, ...biomeManager.foregroundGroundPlants];
         allPlants.forEach(grass => {
@@ -413,49 +430,30 @@ function updateCamera() {
                 const grassHitbox = { x: grass.x, y: grass.y - 20, width: GRASS_SPRITE_WIDTH / 2, height: 20 };
                 if (playerHitbox.x < grassHitbox.x + grassHitbox.width && playerHitbox.x + playerHitbox.width > grassHitbox.x) {
                     biomeManager.startSwayAnimation(grass.id, menuPlayer.direction);
-                    grass.swayStartTime = Date.now(); // Musimy to ustawić, bo BiomeManager nie przechowuje stanu
+                    grass.swayStartTime = Date.now();
                 }
             }
         });
         
-        // --- Aktualizacja kamery i animacji biomu ---
         updateCamera();
         biomeManager.updateAnimations(deltaTime);
     }
     
-    // --- Główna pętla rysująca ---
     function draw() {
         const lobbyDiv = document.getElementById('lobby');
-        if (!lobbyDiv || lobbyDiv.style.display === 'none') return;
+        if (!lobbyDiv || lobbyDiv.style.display === 'none' || !areAllImagesReady) return;
         
         menuCtx.clearRect(0, 0, menuCanvas.width, menuCanvas.height);
         
-        if (!areAllImagesReady) {
-            menuCtx.fillStyle = '#333';
-            menuCtx.fillRect(0, 0, menuCanvas.width, menuCanvas.height);
-            menuCtx.fillStyle = 'white';
-            menuCtx.font = '24px monospace';
-            menuCtx.textAlign = 'center';
-            menuCtx.fillText('Ładowanie świata...', menuCanvas.width / 2, menuCanvas.height / 2);
-            return;
-        }
-        
         menuCtx.save();
-        
-        // Ustawienie kamery
         menuCtx.scale(ZOOM_LEVEL, ZOOM_LEVEL);
         menuCtx.translate(-cameraX, -cameraY);
         
-        // Rysowanie warstw świata za pomocą BiomeManagera
         biomeManager.drawParallaxBackground(menuCtx, cameraX, cameraY, menuCanvas.width / ZOOM_LEVEL);
         biomeManager.drawBackgroundBiomeGround(menuCtx, chosenBiome, groundLevel);
         biomeManager.drawBackgroundTrees(menuCtx);
         biomeManager.drawBackgroundPlants(menuCtx);
-        
-        // Rysowanie gracza
         drawMenuPlayer(menuPlayer);
-        
-        // Rysowanie warstw pierwszego planu
         drawInsects();
         biomeManager.drawForegroundPlants(menuCtx);
         biomeManager.drawForegroundTrees(menuCtx);
@@ -471,10 +469,8 @@ function updateCamera() {
     function menuLoop(currentTime) {
         if (!lastTime) lastTime = currentTime;
         const deltaTime = (currentTime - lastTime) / 1000;
-        
         update(deltaTime);
         draw();
-        
         lastTime = currentTime;
         requestAnimationFrame(menuLoop);
     }
@@ -485,20 +481,42 @@ function updateCamera() {
     
     menuCanvas.addEventListener('mousemove', (event) => {
         const rect = menuCanvas.getBoundingClientRect();
-        // Pozycja myszy na canvasie (w koordynatach ekranowych)
         const mouseX_on_canvas = (event.clientX - rect.left) * (menuCanvas.width / rect.width);
         const mouseY_on_canvas = (event.clientY - rect.top) * (menuCanvas.height / rect.height);
-        
-        // Konwersja do koordynatów świata
         menuPlayer.currentMouseX = mouseX_on_canvas / ZOOM_LEVEL + cameraX;
         menuPlayer.currentMouseY = mouseY_on_canvas / ZOOM_LEVEL + cameraY;
     });
 
-    // --- Uruchomienie ---
-    console.log("[MenuWorld] Rozpoczynam ładowanie wszystkich zasobów...");
-    loadAllImages(() => {
-        console.log("[MenuWorld] Wszystkie zasoby załadowane. Uruchamiam pętlę animacji tła.");
-        areAllImagesReady = true;
-        requestAnimationFrame(menuLoop);
-    });
+    // --- NOWY BLOK URUCHOMIENIOWY ---
+    console.log("[MenuWorld] Przekazuję proces ładowania do menedżera...");
+
+    // Sprawdzamy, czy loadingManager istnieje (załadowany z loading.js)
+    if (typeof loadingManager !== 'undefined' && loadingManager.manageLoadingProcess) {
+        loadingManager.manageLoadingProcess(
+            // 1. Funkcja, która ładuje zasoby i raportuje postęp
+            (progressCallback, completionCallback) => {
+                loadAllImages(progressCallback, completionCallback);
+            },
+            // 2. Funkcja, która ma się wykonać po zakończeniu ładowania
+            () => {
+                console.log("[MenuWorld] Wszystkie zasoby załadowane. Uruchamiam pętlę animacji tła.");
+                areAllImagesReady = true;
+                // Pokaż lobby (jeśli było ukryte) i uruchom pętlę gry
+                const lobbyDiv = document.getElementById('lobby');
+                if(lobbyDiv) lobbyDiv.style.opacity = 1; // Płynne pojawienie się, jeśli masz CSS
+                
+                requestAnimationFrame(menuLoop);
+            }
+        );
+    } else {
+        // Awaryjne uruchomienie, jeśli loading.js nie został załadowany
+        console.error("[MenuWorld] Menedżer ładowania (loadingManager) nie został znaleziony! Uruchamiam awaryjnie.");
+        const dummyCompletion = () => {
+            console.log("[MenuWorld] Wszystkie zasoby załadowane. Uruchamiam pętlę animacji tła.");
+            areAllImagesReady = true;
+            requestAnimationFrame(menuLoop);
+        };
+        const dummyProgress = (p) => { console.log(`Postęp ładowania: ${Math.round(p)}%`); };
+        loadAllImages(dummyProgress, dummyCompletion);
+    }
 });

@@ -6,6 +6,9 @@
 // ====================================================================================
 console.log('[DEBUG] Plik host-worker.js został załadowany i uruchomiony.');
 
+const GUEST_TIMEOUT = 15000; // 15 sekund - czas, po którym gość bez odpowiedzi jest usuwany
+const PING_INTERVAL = 5000;   // 5 sekund - jak często host wysyła ping do gości
+
 
 // ====================================================================================
 // === SEKCJA 1: STAŁE GRY ===
@@ -361,6 +364,7 @@ class GameHost {
     constructor() {
         this.room = null;
         this.gameLoopInterval = null;
+        this.pingInterval = null; // NOWOŚĆ: Zmienna na interwał pingowania
         this.digCooldowns = {};
     }
 
@@ -427,6 +431,9 @@ class GameHost {
         console.log(`[HOST-WORKER] Gra wystartowała w pokoju ${roomId}`);
         
         this.gameLoopInterval = setInterval(() => this.updateGame(), GAME_TICK_RATE);
+
+        // NOWOŚĆ: Uruchom pętlę pingowania
+        this.pingInterval = setInterval(() => this.checkGuestHeartbeats(), PING_INTERVAL);
         
         return {
             name: this.room.name,
@@ -434,13 +441,36 @@ class GameHost {
         };
     }
 
-    stop() {
-        if (this.gameLoopInterval) {
-            clearInterval(this.gameLoopInterval);
-            this.gameLoopInterval = null;
-        }
+   stop() {
+        if (this.gameLoopInterval) clearInterval(this.gameLoopInterval);
+        if (this.pingInterval) clearInterval(this.pingInterval); // NOWOŚĆ: Zatrzymaj pingowanie
+        this.gameLoopInterval = null;
+        this.pingInterval = null; // NOWOŚĆ
         this.room = null;
         console.log("[HOST-WORKER] Gra zatrzymana i zresetowana.");
+    }
+
+    checkGuestHeartbeats() {
+        if (!this.room || !this.room.players) return;
+        const now = Date.now();
+
+        for (const peerId in this.room.players) {
+            // Nie pingujemy samego hosta
+            if (peerId === this.room.hostId) continue;
+
+            const player = this.room.players[peerId];
+            
+            // Sprawdź, czy gracz przekroczył limit czasu
+            if (now - player.lastPongTime > GUEST_TIMEOUT) {
+                console.log(`[HOST-WORKER-HEARTBEAT] Gość ${player.username} (${peerId}) przekroczył limit czasu. Usuwanie.`);
+                this.removePlayer(peerId);
+                // Kontynuuj pętlę, ponieważ removePlayer modyfikuje listę, po której iterujemy
+                continue; 
+            }
+        }
+        
+        // Wyślij ping do wszystkich (goście i tak zignorują pingi do innych)
+        this.broadcast({ type: 'ping' });
     }
 
     addPlayer(peerId, initialPlayerData) {
@@ -509,8 +539,6 @@ class GameHost {
 
     removePlayer(peerId) {
     if (this.room && this.room.players[peerId]) {
-         // === POCZĄTEK ZMIAN ===
-         // 1. Pobieramy nazwę użytkownika, ZANIM usuniemy obiekt gracza
          const username = this.room.players[peerId].username;
          console.log(`[HOST-WORKER] Gracz ${username} (${peerId}) opuścił grę.`);
          
@@ -518,12 +546,13 @@ class GameHost {
          delete this.room.playerInputs[peerId];
          delete this.digCooldowns[peerId];
          
-         // 2. Wysyłamy broadcast z POPRAWNĄ nazwą i payloadem
+         // === KLUCZOWA POPRAWKA ===
+         // Musimy rozgłosić nie tylko notyfikację na czacie,
+         // ale też informację dla klienta, aby FIZYCZNIE usunął gracza ze swojej lokalnej kopii stanu.
          this.broadcast({ 
-             type: 'playerLeftRoomNotification', // Poprawna nazwa
-             payload: { username: username }    // Wysyłamy username, a nie peerId
+             type: 'playerLeftRoom', // Nowy, dedykowany typ wiadomości!
+             payload: { peerId: peerId, username: username }
          });
-         // === KONIEC ZMIAN ===
     }
 }
     
@@ -549,8 +578,14 @@ class GameHost {
         if(!player) return;
 
         switch(actionData.type) {
-
-            
+    // NOWA AKCJA: Obsługa odpowiedzi 'pong' od gościa
+    case 'pong':
+        if (this.room && this.room.players[peerId]) {
+            // === KLUCZOWA POPRAWKA ===
+            // Aktualizujemy czas ostatniej odpowiedzi od gracza.
+            this.room.players[peerId].lastPongTime = Date.now();
+        }
+        break;
 
             // NOWY CASE START
             case 'sendDirectMessage': {
