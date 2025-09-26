@@ -483,16 +483,121 @@ const customizationUIImages = {};
 const fishingUIImages = {};
 const allItemImages = {}; 
 const baitImages = {};
-const characterCustomImages = { hat: {}, hair: {}, accessories: {}, beard: {}, clothes: {}, clothes_arm: {}, pants: {}, shoes: {}, items: {} };
+const characterCustomImages = { hat: {}, hair: {}, accessories: {}, beard: {}, clothes: {}, clothes_arm: {}, pants: {}, pants_leg: {}, shoes: {}, items: {} };
 const exampleCustomItemPaths = {
-    hat: { 'red cap': 'img/character/custom/hat/type1.png', 'blue cap': 'img/character/custom/hat/type2.png', 'special': 'img/character/custom/hat/type3.png', 'street cap': 'img/character/custom/hat/type4.png', 'pink cap': 'img/character/custom/hat/type5.png', 'black cap': 'img/character/custom/hat/type6.png', 'oldschool cap': 'img/character/custom/hat/type7.png', 'blue straight cap': 'img/character/custom/hat/type8.png', 'green straight cap': 'img/character/custom/hat/type9.png', 'kiddo cap': 'img/character/custom/hat/type10.png' },
-    hair: {'Curly':'img/character/custom/hair/type1.png','Curly Short':'img/character/custom/hair/type2.png','Short':'img/character/custom/hair/type3.png','Plodder':'img/character/custom/hair/type4.png','"Cool Kid"':'img/character/custom/hair/type5.png','inmate':'img/character/custom/hair/type6.png','maniac':'img/character/custom/hair/type7.png','alopecia':'img/character/custom/hair/type8.png','Mrs. Robinson':'img/character/custom/hair/type9.png','Bob':'img/character/custom/hair/type10.png','Mod':'img/character/custom/hair/type11.png','hair12':'img/character/custom/hair/type12.png','hair13':'img/character/custom/hair/type13.png','hair14':'img/character/custom/hair/type14.png','hair15':'img/character/custom/hair/type15.png','hair16':'img/character/custom/hair/type16.png','hair20':'img/character/custom/hair/type20.png'},
-    accessories: { 'librarian glasses': 'img/character/custom/accessories/type1.png', 'mole glasses': 'img/character/custom/accessories/type2.png', 'square glasses': 'img/character/custom/accessories/type3.png', 'black glasses': 'img/character/custom/accessories/type4.png', 'red glasses': 'img/character/custom/accessories/type5.png', '"cool" glasses': 'img/character/custom/accessories/type6.png', 'sunglasses': 'img/character/custom/accessories/type7.png', 'windsor glasses': 'img/character/custom/accessories/type8.png', 'eye patch': 'img/character/custom/accessories/type9.png'},
-    beard: { 'goatee': 'img/character/custom/beard/type1.png', 'overgrown goatee': 'img/character/custom/beard/type2.png' },
-    clothes: { 'white shirt': 'img/character/custom/clothes/type1.png', 'black shirt': 'img/character/custom/clothes/type2.png', 'hawaii shirt': 'img/character/custom/clothes/type3.png' },
-    clothes_arm: { 'white shirt': 'img/character/custom/clothes/arm/type1.png', 'black shirt': 'img/character/custom/clothes/arm/type2.png', 'hawaii shirt': 'img/character/custom/clothes/arm/type3.png' },
-    pants: { 'pants1': 'img/character/custom/pants/type1.png' },
-    shoes: { 'shoes1': 'img/character/custom/shoes/type1.png' },
+hat: {
+    'red cap': 'img/character/custom/hat/type1.png',
+    'blue cap': 'img/character/custom/hat/type2.png',
+    'special': 'img/character/custom/hat/type3.png',
+    'street cap': 'img/character/custom/hat/type4.png',
+    'pink cap': 'img/character/custom/hat/type5.png',
+    'black cap': 'img/character/custom/hat/type6.png',
+    'oldschool cap': 'img/character/custom/hat/type7.png',
+    'blue straight cap': 'img/character/custom/hat/type8.png',
+    'green straight cap': 'img/character/custom/hat/type9.png',
+    'kiddo cap': 'img/character/custom/hat/type10.png',
+    'red seasonal': 'img/character/custom/hat/type11.png',
+    'green seasonal': 'img/character/custom/hat/type12.png',
+    'flat cap': 'img/character/custom/hat/type13.png',
+    'cowboy hat': 'img/character/custom/hat/type14.png',
+    'adventure hat': 'img/character/custom/hat/type15.png',
+    'straw hat': 'img/character/custom/hat/type16.png',
+    'lake hat': 'img/character/custom/hat/type17.png',
+    'fedora': 'img/character/custom/hat/type18.png',
+},
+hair: {
+    'Curly': 'img/character/custom/hair/type1.png',
+    'Curly Short': 'img/character/custom/hair/type2.png',
+    'Short': 'img/character/custom/hair/type3.png',
+    'Plodder': 'img/character/custom/hair/type4.png',
+    '"Cool Kid"': 'img/character/custom/hair/type5.png',
+    'inmate': 'img/character/custom/hair/type6.png',
+    'maniac': 'img/character/custom/hair/type7.png',
+    'alopecia': 'img/character/custom/hair/type8.png',
+    'Mrs. Robinson': 'img/character/custom/hair/type9.png',
+    'Bob': 'img/character/custom/hair/type10.png',
+    'Mod': 'img/character/custom/hair/type11.png',
+    'U.S Army': 'img/character/custom/hair/type12.png',
+    'Afro': 'img/character/custom/hair/type13.png',
+    'Tuber Afro': 'img/character/custom/hair/type14.png',
+    'Greasy Grunge': 'img/character/custom/hair/type15.png',
+    'Mohawk': 'img/character/custom/hair/type16.png',
+    'Messy Bun': 'img/character/custom/hair/type17.png',
+    'Juliet': 'img/character/custom/hair/type18.png',
+    'I`m a Star': 'img/character/custom/hair/type19.png',
+    'Short Twist': 'img/character/custom/hair/type20.png',
+    '"Emo"': 'img/character/custom/hair/type21.png',
+    'Dandere': 'img/character/custom/hair/type22.png',
+    'Smart Bangs': 'img/character/custom/hair/type23.png',
+    'Richie': 'img/character/custom/hair/type24.png',
+},
+accessories: {
+    'librarian glasses': 'img/character/custom/accessories/type1.png',
+    'mole glasses': 'img/character/custom/accessories/type2.png',
+    'square glasses': 'img/character/custom/accessories/type3.png',
+    'black glasses': 'img/character/custom/accessories/type4.png',
+    'red glasses': 'img/character/custom/accessories/type5.png',
+    '"cool" glasses': 'img/character/custom/accessories/type6.png',
+    'sunglasses': 'img/character/custom/accessories/type7.png',
+    'windsor glasses': 'img/character/custom/accessories/type8.png',
+    'eye patch': 'img/character/custom/accessories/type9.png'
+},
+beard: {
+    'goatee': 'img/character/custom/beard/type1.png',
+    'overgrown goatee': 'img/character/custom/beard/type2.png',
+    'mustache': 'img/character/custom/beard/type3.png',
+    'overgrown mustache': 'img/character/custom/beard/type4.png',
+    'charlie?': 'img/character/custom/beard/type5.png',
+    'unshaven': 'img/character/custom/beard/type6.png',
+    'sailor': 'img/character/custom/beard/type7.png'
+},
+clothes: {
+    'white t-shirt': 'img/character/custom/clothes/type1.png',
+    'black t-shirt': 'img/character/custom/clothes/type2.png',
+    'hawaii shirt': 'img/character/custom/clothes/type3.png',
+    'red hoodie': 'img/character/custom/clothes/type4.png',
+    'blue hoodie': 'img/character/custom/clothes/type5.png',
+    'skull t-shirt': 'img/character/custom/clothes/type6.png',
+    'red plaid vest': 'img/character/custom/clothes/type7.png',
+    'dark blue soccer shirt': 'img/character/custom/clothes/type8.png',
+    'green soccer shirt': 'img/character/custom/clothes/type9.png',
+    'light soccer shirt': 'img/character/custom/clothes/type10.png',
+    'denim vest': 'img/character/custom/clothes/type11.png',
+    'coquette dress': 'img/character/custom/clothes/type12.png',
+},
+clothes_arm: {
+    'white t-shirt': 'img/character/custom/clothes/arm/type1.png',
+    'black t-shirt': 'img/character/custom/clothes/arm/type2.png',
+    'hawaii shirt': 'img/character/custom/clothes/arm/type3.png',
+    'red hoodie': 'img/character/custom/clothes/arm/type4.png',
+    'blue hoodie': 'img/character/custom/clothes/arm/type5.png',
+    'skull t-shirt': 'img/character/custom/clothes/arm/type6.png',
+    'red plaid vest': 'img/character/custom/clothes/arm/type7.png',
+    'dark blue soccer shirt': 'img/character/custom/clothes/arm/type8.png',
+    'green soccer shirt': 'img/character/custom/clothes/arm/type9.png',
+    'light soccer shirt': 'img/character/custom/clothes/arm/type10.png',
+    'denim vest': 'img/character/custom/clothes/arm/type11.png',
+    'coquette dress': 'img/character/custom/clothes/arm/type12.png',
+},
+pants: {
+    'blue jeans': 'img/character/custom/pants/type1.png',
+    'ripped jeans': 'img/character/custom/pants/type2.png',
+    'black jeans': 'img/character/custom/pants/type3.png',
+    'black skirt': 'img/character/custom/pants/type4.png',
+    'black bell bottom jeans': 'img/character/custom/pants/type5.png',
+    'blue bell bottom jeans': 'img/character/custom/pants/type6.png',
+},
+pants_leg: {
+    'blue jeans': 'img/character/custom/pants/leg/type1.png',
+    'ripped jeans': 'img/character/custom/pants/leg/type2.png',
+    'black jeans': 'img/character/custom/pants/leg/type3.png',
+    'black skirt': 'img/character/custom/pants/leg/type4.png',
+    'black bell bottom jeans': 'img/character/custom/pants/leg/type5.png',
+    'blue bell bottom jeans': 'img/character/custom/pants/leg/type6.png',
+},
+shoes: {
+    'shoes1': 'img/character/custom/shoes/type1.png'
+},
     items: {'rod':{path:'img/item/rod.png',width:playerSize*2,height:playerSize,pivotX_in_img:Math.round(20*(playerSize/128)),pivotY_in_round:(20*(playerSize/128))},'shovel':{path:'img/item/shovel.png',width:playerSize,height:playerSize,pivotX_in_img:playerSize/2,pivotY_in_img:playerSize/2},'float':{path:'img/item/float.png',width:32,height:62,pivotX_in_img:FLOAT_SIZE/2,pivotY_in_img:FLOAT_SIZE/2}}
 };
 let localPlayer = { 
@@ -575,7 +680,7 @@ let isCustomizationMenuOpen = false;
 const customizationCategories = [ 'hat', 'hair', 'accessories', 'beard', 'clothes', 'pants', 'shoes' ];
 let selectedCategoryIndex = 0;
 let localPlayerCustomizations = { hat: 'none', hair: 'none', accessories: 'none', beard: 'none', clothes: 'none', pants: 'none', shoes: 'none', rightHandItem: ITEM_NONE, hairSaturation: 100, hairHue: 0, hairBrightness: 100, beardSaturation: 100, beardHue: 0, beardBrightness: 100 };
-const customizationOptions = { hat: ['none', 'red cap', 'blue cap', 'special', 'street cap', 'pink cap', 'black cap', 'oldschool cap', 'blue straight cap', 'green straight cap', 'kiddo cap'], hair: ['none', 'Curly', 'Curly Short', 'Short', 'Plodder', '"Cool Kid"', 'inmate', 'maniac', 'alopecia', 'Mrs. Robinson', 'Bob', 'Mod', 'hair12', 'hair13', 'hair14', 'hair15', 'hair16', 'hair17', 'hair18', 'hair19', 'hair20'], accessories: ['none', 'librarian glasses', 'mole glasses', 'square glasses', 'black glasses', 'red glasses', '"cool" glasses', 'sunglasses', 'windsor glasses', 'eye patch'], beard: ['none', 'goatee', 'overgrown goatee'], clothes: ['none', 'white shirt', 'black shirt', 'hawaii shirt'], pants: ['none', 'pants1'], shoes: ['none', 'shoes1'] };
+const customizationOptions = { hat: ['none', 'red cap', 'blue cap', 'special', 'street cap', 'pink cap', 'black cap', 'oldschool cap', 'blue straight cap', 'green straight cap', 'kiddo cap', 'red seasonal', 'green seasonal', 'flat cap','cowboy hat', 'adventure hat', 'straw hat', 'lake hat', 'fedora'], hair: ['none', 'Curly', 'Curly Short', 'Short', 'Plodder', '"Cool Kid"', 'inmate', 'maniac', 'alopecia', 'Mrs. Robinson', 'Bob', 'Mod', 'U.S Army', 'Afro', 'Tuber Afro', 'Greasy Grunge', 'Mohawk', 'Messy Bun', 'Juliet', 'I`m a Star', 'Short Twist', '"Emo"', "Dandere", "Smart Bangs", 'Richie'], accessories: ['none', 'librarian glasses', 'mole glasses', 'square glasses', 'black glasses', 'red glasses', '"cool" glasses', 'sunglasses', 'windsor glasses', 'eye patch'], beard: ['none', 'goatee', 'overgrown goatee', 'mustache', 'overgrown mustache', 'charlie?', 'unshaven', 'sailor'], clothes: ['none', 'white t-shirt', 'black t-shirt', 'hawaii shirt', 'red hoodie', 'blue hoodie', 'skull t-shirt', 'red plaid vest', 'dark blue soccer shirt', 'green soccer shirt', 'light soccer shirt', 'denim vest', 'coquette dress'], pants: ['none', 'blue jeans', 'ripped jeans', 'black jeans', 'black skirt', 'black bell bottom jeans', 'blue bell bottom jeans'], shoes: ['none', 'shoes1'] };
 let currentCustomizationOptionIndices = { hat: 0, hair: 0, accessories: 0, beard: 0, clothes: 0, pants: 0, shoes: 0 };
 
 const MENU_WIDTH=150,MENU_TEXT_COLOR='white',MENU_HIGHLIGHT_COLOR='yellow',MENU_ITEM_HEIGHT=40,MENU_X_OFFSET_FROM_PLAYER=0,MENU_Y_OFFSET_FROM_PLAYER_TOP_CENTER_SELECTED=-40,ROLLER_VISIBLE_COUNT=3,ROLLER_ITEM_VERTICAL_SPACING=1.2*MENU_ITEM_HEIGHT,ROLLER_DIMMED_SCALE=.7,ROLLER_DIMMED_ALPHA=.3,FRAME_SIZE=186,FRAME_OFFSET_X_FROM_MENU_TEXT=30,FRAME_OSCILLATION_SPEED=.05,FRAME_ROTATION_DEGREES=5;let frameOscillationTime=0;const PIXEL_FONT='Segoe UI, monospace',DEFAULT_FONT_SIZE_USERNAME=16,DEFAULT_FONT_SIZE_MENU=24,HAIR_SATURATION_MIN=0,HAIR_SATURATION_MAX=200,HAIR_BRIGHTNESS_MIN=40,HAIR_BRIGHTNESS_MAX=200,HAIR_HUE_MIN=0,HAIR_HUE_MAX=360,BEARD_SATURATION_MIN=0,BEARD_SATURATION_MAX=200,BEARD_BRIGHTNESS_MIN=40,BEARD_BRIGHTNESS_MAX=200,BEARD_HUE_MIN=0,BEARD_HUE_MAX=360;
@@ -837,7 +942,6 @@ function updateCamera() {
 
     cameraX = lerp(cameraX, targetCameraX, CAMERA_SMOOTHING_FACTOR);
     cameraY = lerp(cameraY, targetCameraY, 1);
-
     biomeManager.drawParallaxBackground(ctx, cameraX, visibleWorldWidth);
     if (currentRoom && currentRoom.gameData && currentRoom.gameData.biome) {
         const biomeName = currentRoom.gameData.biome;
@@ -934,8 +1038,15 @@ function drawPlayer(p, imageSet = characterImages) {
 
     const v = p.customizations || {};
     const playerClothes = v.clothes;
+    const playerPants = v.pants;
 
     t(imageSet.leg, backLegOffsetX, 0, legPivotInImageX, legPivotInImageY, e);
+    if (playerPants && playerPants !== 'none') {
+        const pantsLegImage = characterCustomImages.pants_leg[playerPants];
+        if (pantsLegImage && pantsLegImage.complete) {
+            t(pantsLegImage, backLegOffsetX, 0, legPivotInImageX, legPivotInImageY, e);
+        }
+    }
     t(imageSet.arm, backArmOffsetX, 0, originalArmPivotInImageX, originalArmPivotInImageY, c);
     
     if (playerClothes && "none" !== playerClothes) {
@@ -944,13 +1055,29 @@ function drawPlayer(p, imageSet = characterImages) {
     }
 
     t(imageSet.leg, frontLegOffsetX, 0, legPivotInImageX, legPivotInImageY, d);
+    if (playerPants && playerPants !== 'none') {
+        const pantsLegImage = characterCustomImages.pants_leg[playerPants];
+        if (pantsLegImage && pantsLegImage.complete) {
+            t(pantsLegImage, frontLegOffsetX, 0, legPivotInImageX, legPivotInImageY, d);
+        }
+    }
     ctx.drawImage(imageSet.body, o, q + a, playerSize, playerSize);
 
-    if (playerClothes && "none" !== playerClothes) {
-        const clothesImage = characterCustomImages.clothes[playerClothes];
-        if (clothesImage && clothesImage.complete) ctx.drawImage(clothesImage, o, q + a, playerSize, playerSize);
+    // 2. Narysuj na ciele górną część spodni.
+    if (playerPants && playerPants !== 'none') {
+        const pantsImage = characterCustomImages.pants[playerPants];
+        if (pantsImage && pantsImage.complete) {
+            ctx.drawImage(pantsImage, o, q + a, playerSize, playerSize);
+        }
     }
 
+    // 3. Narysuj na ciele (i na spodniach) koszulkę/ubranie.
+    if (playerClothes && "none" !== playerClothes) {
+        const clothesImage = characterCustomImages.clothes[playerClothes];
+        if (clothesImage && clothesImage.complete) {
+            ctx.drawImage(clothesImage, o, q + a, playerSize, playerSize);
+        }
+    }
     const u = headInitialOffsetY + a + g;
     t(imageSet.head, 0, u, headPivotInImageX, headPivotInImageY, f);
     t(imageSet.eye, LEFT_EYE_BASE_X_REL_HEAD_TL + r, u + EYE_BASE_Y_REL_HEAD_TL + s, eyePivotInImage, eyePivotInImage, 0, eyeSpriteSize, eyeSpriteSize);
@@ -968,12 +1095,6 @@ function drawPlayer(p, imageSet = characterImages) {
         }
     }
 
-    const w = v.hair;
-    if (w && "none" !== w) {
-        const x = characterCustomImages.hair[w];
-        x && x.complete && (ctx.save(), ctx.translate(o + headPivotInImageX, q + u + HAIR_VERTICAL_OFFSET + headPivotInImageY - HAIR_VERTICAL_OFFSET), ctx.rotate(f), drawFilteredCharacterPart(ctx, x, -headPivotInImageX, -(headPivotInImageY - HAIR_VERTICAL_OFFSET), playerSize, playerSize, v.hairSaturation, v.hairHue, v.hairBrightness), ctx.restore())
-    }
-    
     const y = v.beard;
     if (y && "none" !== y) {
         const z = characterCustomImages.beard[y];
@@ -985,6 +1106,14 @@ function drawPlayer(p, imageSet = characterImages) {
             ctx.restore();
         }
     }
+
+    const w = v.hair;
+    if (w && "none" !== w) {
+        const x = characterCustomImages.hair[w];
+        x && x.complete && (ctx.save(), ctx.translate(o + headPivotInImageX, q + u + HAIR_VERTICAL_OFFSET + headPivotInImageY - HAIR_VERTICAL_OFFSET), ctx.rotate(f), drawFilteredCharacterPart(ctx, x, -headPivotInImageX, -(headPivotInImageY - HAIR_VERTICAL_OFFSET), playerSize, playerSize, v.hairSaturation, v.hairHue, v.hairBrightness), ctx.restore())
+    }
+    
+
 
     const B = v.hat;
     if (B && "none" !== B) {
@@ -1825,9 +1954,10 @@ function gameLoop(currentTime) {
     ctx.save();
     ctx.scale(currentZoomLevel, currentZoomLevel);
     ctx.translate(-cameraX, -cameraY);
-
+    biomeManager.drawClouds(ctx, cameraX, cameraY);
+    
     biomeManager.drawParallaxBackground(ctx, cameraX, cameraY, DEDICATED_GAME_WIDTH / currentZoomLevel);
-
+            
     if (currentRoom?.gameData?.biome) {
         const { biome: b, groundLevel: g } = currentRoom.gameData;
         biomeManager.drawBuildings(ctx,g,cameraX,DEDICATED_GAME_WIDTH/currentZoomLevel);
@@ -1858,6 +1988,10 @@ function gameLoop(currentTime) {
         drawPierSupports(ctx);
         if (biomeManager.drawPiers) biomeManager.drawPiers(ctx);
         biomeManager.drawWater(ctx,b,cameraX);
+        
+        // === POCZĄTEK TWOJEJ POPRAWKI ===
+        // Dodaj tę jedną linię, aby narysować chmury na pierwszym planie
+
         // Usunęliśmy particleManager.draw(ctx); - teraz robi to fishingManager
     }
 
@@ -2226,6 +2360,13 @@ function handleDataFromServer(data) {
         }
         break;
     }
+     case 'hostClosing': {
+            showNotification('Host zamknął pokój.', 'warning');
+            // Natychmiastowo wywołaj funkcję powrotu do lobby,
+            // nie czekając na formalne zamknięcie połączenia.
+            leaveCurrentRoomUI();
+            break;
+        }
 
         case 'awardStarterItem': {
             const { itemName, targetSlot } = data.payload;
@@ -2394,19 +2535,69 @@ playersData.forEach(serverPlayer => {
 }
 
 leaveRoomBtn.addEventListener('click', () => {
-    const hostPeerId = hostConnection?.peer || (isHost ? peer?.id : null);
-    if (isHost) {
-        if (gameHostWorker) {
-            gameHostWorker.terminate();
-            gameHostWorker = null;
+    // Logika dla klienta (nie-hosta) opuszczającego pokój - pozostaje bez zmian
+    if (!isHost) {
+        if (hostConnection) {
+            hostConnection.close();
         }
-        Object.values(hostPeerConnections).forEach(conn => conn.close());
-        hostPeerConnections = {};
-        setTimeout(() => { if(peer && !peer.destroyed) peer.destroy(); peer = null; }, 500);
+        // Reszta jest obsługiwana przez event 'close' na połączeniu,
+        // który już poprawnie wywołuje leaveCurrentRoomUI().
+        // Nie ma potrzeby robić nic więcej.
+        return;
     }
-    if (!isHost && hostConnection) hostConnection.close();
-    if (hostPeerId) signalingSocket.emit('notify-leave', hostPeerId);
-    leaveCurrentRoomUI();
+
+    // --- NOWA, POPRAWIONA LOGIKA DLA HOSTA ZAMYKAJĄCEGO POKÓJ ---
+    if (isHost) {
+        console.log('[HOST-UI] Host zamyka pokój. Powiadamianie klientów...');
+
+        // 1. Stwórz wiadomość o zamknięciu pokoju.
+        const closingMessage = { type: 'hostClosing', payload: { reason: 'Host zamknął pokój.' } };
+
+        // 2. Wyślij wiadomość do wszystkich podłączonych graczy.
+        Object.values(hostPeerConnections).forEach(conn => {
+            if (conn && conn.open) {
+                try {
+                    conn.send(closingMessage);
+                } catch (e) {
+                    console.error("Błąd podczas wysyłania wiadomości o zamknięciu do klienta:", e);
+                }
+            }
+        });
+
+        // 3. Daj sieci krótką chwilę na wysłanie wiadomości, zanim zaczniesz wszystko niszczyć.
+        setTimeout(() => {
+            console.log('[HOST-UI] Zamykanie połączeń i usług.');
+
+            // 4. Teraz zamknij formalnie wszystkie połączenia.
+            Object.values(hostPeerConnections).forEach(conn => {
+                if (conn) conn.close();
+            });
+            hostPeerConnections = {};
+
+            // 5. Wyrejestruj się z serwera sygnałowego.
+            // Użycie 'notify-leave' jest OK, jeśli serwer wie, że ten peerId to host.
+            const hostPeerId = peer?.id;
+            if (hostPeerId) {
+                signalingSocket.emit('notify-leave', hostPeerId);
+            }
+
+            // 6. Zatrzymaj worker.
+            if (gameHostWorker) {
+                gameHostWorker.terminate();
+                gameHostWorker = null;
+            }
+
+            // 7. Zniszcz obiekt Peer hosta.
+            if (peer && !peer.destroyed) {
+                peer.destroy();
+                peer = null;
+            }
+
+            // 8. Zaktualizuj interfejs użytkownika.
+            leaveCurrentRoomUI();
+
+        }, 200); // 200ms opóźnienia powinno wystarczyć.
+    }
 });
 
 

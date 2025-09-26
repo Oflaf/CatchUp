@@ -18,6 +18,21 @@ class BiomeManager {
         this.background2Image = new Image();
         this.background2Loaded = false;
 
+        // ======================= POCZĄTEK ZMIAN DLA UNIKATOWEGO TŁA =======================
+        this.biomeTileBackgroundImages = {}; // Obiekt do przechowywania teł dla różnych biomów
+        this.tileBackgroundLoaded = false;   // Flaga ładowania dla bieżącego tła
+        // ======================= KONIEC ZMIAN DLA UNIKATOWEGO TŁA ========================
+
+        // ======================= POCZĄTEK NOWEGO KODU DLA CHMUR =======================
+        this.cloudImage = new Image();
+        this.cloudLoaded = false;
+        this.clouds = [];
+        
+        this.cloudImage.src = 'img/world/clouds.png';
+        this.cloudImage.onload = () => { this.cloudLoaded = true; };
+        this.cloudImage.onerror = () => { console.error('Failed to load clouds.png'); };
+        // ======================== KONIEC NOWEGO KODU DLA CHMUR ========================
+
         this.currentVillageType = 'none';
         this.currentVillageXPosition = null;
         this.placedBuildings = [];
@@ -70,6 +85,9 @@ class BiomeManager {
 
         this.biomeDefinitions = {
             jurassic: {
+                // ======================= POCZĄTEK ZMIAN DLA UNIKATOWEGO TŁA =======================
+                tileBackgroundPath: 'img/world/biome/jurassic/background_tile.png',
+                // ======================= KONIEC ZMIAN DLA UNIKATOWEGO TŁA ========================
                 backgroundPath: 'img/world/biome/jurassic/background.png',
                 background2Path: 'img/world/biome/jurassic/background2.png',
                 imgPath: 'img/world/biome/jurassic/ground.png',
@@ -121,6 +139,9 @@ class BiomeManager {
                 ]
             },
             grassland: {
+                // ======================= POCZĄTEK ZMIAN DLA UNIKATOWEGO TŁA =======================
+                tileBackgroundPath: 'img/world/biome/grassland/background_tile.png',
+                // ======================= KONIEC ZMIAN DLA UNIKATOWEGO TŁA ========================
                 backgroundPath: 'img/world/biome/grassland/background.png',
                 background2Path: 'img/world/biome/grassland/background2.png',
                 imgPath: 'img/world/biome/grassland/ground.png',
@@ -212,8 +233,124 @@ class BiomeManager {
         this.firstLayerTilesGrid = [];
         this.setBiome(this.currentBiomeName);
         this._generateFirstLayerTileGrid();
+        this._initializeClouds(); // Inicjalizacja chmur
     }
     
+    // ======================= POCZĄTEK NOWEGO KODU DLA CHMUR =======================
+    /**
+     * Inicjalizuje chmury, losując ich gęstość, pozycję, rozmiar, prędkość i wygląd.
+     */
+    _initializeClouds() {
+        this.clouds = [];
+        const isDense = Math.random() > 0.6; // 60% szans na gęste chmury
+        const cloudCount = isDense ? 
+            Math.floor(this.worldWidth / 60) :  // Gęsto (np. ~22 chmury dla świata 2000px)
+            Math.floor(this.worldWidth / 220); // Rzadko (np. ~8 chmur dla świata 2000px)
+
+        const SOURCE_WIDTH = 512;
+        const SOURCE_HEIGHT = 128;
+
+        for (let i = 0; i < cloudCount; i++) {
+            const scale = 0.5 + Math.random() * 0.8; // Niewielkie różnice w wielkości
+            const cloudWidth = SOURCE_WIDTH * scale;
+            
+            this.clouds.push({
+                // === POCZĄTEK ZMIANY ===
+                // Rozszerzamy obszar startowy chmur.
+                // Teraz generują się w zakresie od -szerokość_chmury do +szerokość_świata.
+                // Dzięki temu niektóre chmury zaczną poza lewą krawędzią ekranu.
+                x: Math.random() * (this.worldWidth + cloudWidth) - cloudWidth,
+                // === KONIEC ZMIANY ===
+                y: Math.random() * (this.gameHeight * 0.2), // Różne wysokości w górnej części ekranu
+                speedX: 5 + Math.random() * 15, // Minimalnie różna prędkość w prawo
+                scale: scale,
+                mirrored: Math.random() < 0.5, // 50% szans na odbicie lustrzane
+                spriteY: Math.random() < 0.5 ? 0 : SOURCE_HEIGHT, // Wybór jednej z dwóch sekcji obrazka
+                width: cloudWidth,
+                height: SOURCE_HEIGHT * scale,
+            });
+        }
+    }
+
+    /**
+     * Aktualizuje pozycję chmur w każdej klatce.
+     * Gdy chmura opuści prawą stronę świata, jest tworzona na nowo po lewej stronie,
+     * co daje efekt ciągłego tworzenia się nowych chmur i znikania starych.
+     * @param {number} deltaTime Czas od ostatniej klatki.
+     */
+    _updateClouds(deltaTime) {
+        if (!this.cloudLoaded) return;
+
+        const SOURCE_WIDTH = 512;
+        const SOURCE_HEIGHT = 128;
+
+        this.clouds.forEach(cloud => {
+            cloud.x += cloud.speedX * deltaTime;
+            
+            // Jeśli chmura wyjdzie całkowicie poza prawą krawędź świata...
+            if (cloud.x > this.worldWidth) {
+                const newScale = 0.3 + Math.random() * 1.1;
+                const newWidth = SOURCE_WIDTH * newScale;
+                
+                cloud.x = -newWidth; // Pozycja startowa daleko po lewej, poza ekranem
+                cloud.y = Math.random() * (this.gameHeight * 0.2); // Nowa losowa wysokość
+                cloud.speedX = 5 + Math.random() * 15; // Nowa losowa prędkość
+                cloud.scale = newScale;
+                cloud.mirrored = Math.random() < 0.5;
+                cloud.spriteY = Math.random() < 0.5 ? 0 : SOURCE_HEIGHT;
+                cloud.width = newWidth;
+                cloud.height = SOURCE_HEIGHT * newScale;
+            }
+        });
+    }
+
+    /**
+     * Rysuje warstwę chmur z efektem paralaksy.
+     * @param {CanvasRenderingContext2D} ctx Kontekst canvas.
+     * @param {number} cameraX Pozycja X kamery.
+     * @param {number} cameraY Pozycja Y kamery.
+     */
+    drawClouds(ctx, cameraX, cameraY) {
+        if (!this.cloudLoaded || this.clouds.length === 0) return;
+
+        const PARALLAX_FACTOR_X = -0.6; // Chmury poruszają się wolniej niż świat, ale szybciej niż tło
+        const PARALLAX_FACTOR_Y = -0.4; // Minimalny ruch pionowy
+
+        const parallaxX = cameraX * PARALLAX_FACTOR_X;
+        const parallaxY = cameraY * PARALLAX_FACTOR_Y;
+        
+        const SOURCE_WIDTH = 512;
+        const SOURCE_HEIGHT = 128;
+
+        this.clouds.forEach(cloud => {
+            const drawX = cloud.x - parallaxX;
+            const drawY = cloud.y - parallaxY;
+
+            ctx.save();
+            ctx.globalAlpha = 0.75; // Lekka przezroczystość
+            ctx.translate(drawX + cloud.width / 2, drawY + cloud.height / 2);
+            
+            if (cloud.mirrored) {
+                ctx.scale(-1, 1);
+            }
+            
+            ctx.drawImage(
+                this.cloudImage,
+                0,                // sx
+                cloud.spriteY,    // sy
+                SOURCE_WIDTH,     // sWidth
+                SOURCE_HEIGHT,    // sHeight
+                -cloud.width / 2, // dx
+                -cloud.height / 2,// dy
+                cloud.width,      // dWidth
+                cloud.height      // dHeight
+            );
+
+            ctx.restore();
+        });
+    }
+    // ======================== KONIEC NOWEGO KODU DLA CHMUR ========================
+
     _initializeFireplace(groundLevel) {
         if (this.fireplaceObject) return;
 
@@ -357,6 +494,9 @@ class BiomeManager {
         this.treesLoaded = false;
         this.backgroundLoaded = false;
         this.background2Loaded = false;
+        // ======================= POCZĄTEK ZMIAN DLA UNIKATOWEGO TŁA =======================
+        this.tileBackgroundLoaded = false;
+        // ======================= KONIEC ZMIAN DLA UNIKATOWEGO TŁA ========================
         this.placedPiers = [];
         if (this.currentBiomeDef.backgroundPath) {
             this.backgroundImage.onload = () => { this.backgroundLoaded = true; };
@@ -368,6 +508,22 @@ class BiomeManager {
             this.background2Image.onerror = () => { console.error(`Failed to load background2.png for ${newBiomeName}`); };
             this.background2Image.src = this.currentBiomeDef.background2Path;
         }
+
+        // ======================= POCZĄTEK ZMIAN DLA UNIKATOWEGO TŁA =======================
+        if (this.currentBiomeDef.tileBackgroundPath) {
+            // Sprawdź, czy obrazek dla tego biomu jest już załadowany
+            if (this.biomeTileBackgroundImages[newBiomeName] && this.biomeTileBackgroundImages[newBiomeName].complete) {
+                this.tileBackgroundLoaded = true;
+            } else {
+                const img = new Image();
+                img.onload = () => { this.tileBackgroundLoaded = true; };
+                img.onerror = () => { console.error(`Failed to load ${this.currentBiomeDef.tileBackgroundPath}`); };
+                img.src = this.currentBiomeDef.tileBackgroundPath;
+                this.biomeTileBackgroundImages[newBiomeName] = img;
+            }
+        }
+        // ======================= KONIEC ZMIAN DLA UNIKATOWEGO TŁA ========================
+
         this.waterPlantsImage.src = this.currentBiomeDef.waterPlantsPath;
         this.groundPlantsImage.src = this.currentBiomeDef.groundPlantsPath;
         this.treesImage.src = this.currentBiomeDef.treesPath;
@@ -542,14 +698,25 @@ class BiomeManager {
     }
 
     drawParallaxBackground(ctx, cameraX, cameraY, visibleWidth) {
+        const tileBackgroundHFactor = 0.25; // Niezwykle wolno
         const frontLayerHFactor = 0.08;
         const backLayerHFactor = 0.18;
-        const BG_WIDTH = 820*3.35;
+        const BG_WIDTH = 820 * 3.35;
 
         const verticalParallaxFactor = 0;
         const VERTICAL_OFFSET = 22;
 
         const parallaxY = cameraY * (1 - verticalParallaxFactor);
+
+        // ======================= POCZĄTEK ZMIAN DLA UNIKATOWEGO TŁA =======================
+        ctx.save();
+        ctx.translate(cameraX, cameraY);
+        const parallaxX_tile = cameraX * (1 - tileBackgroundHFactor);
+        ctx.translate(0, -parallaxY + VERTICAL_OFFSET);
+        const currentTileBgImage = this.biomeTileBackgroundImages[this.currentBiomeName];
+        this._drawTilingMirroredParallaxLayer(ctx, currentTileBgImage, this.tileBackgroundLoaded, parallaxX_tile, visibleWidth);
+        ctx.restore();
+        // ======================= KONIEC ZMIAN DLA UNIKATOWEGO TŁA ========================
 
         ctx.save();
         ctx.translate(cameraX, cameraY);
@@ -567,7 +734,7 @@ class BiomeManager {
     }
 
     _drawParallaxLayer(ctx, image, isLoaded, parallaxX, coverWidth) {
-        if (!isLoaded || !image.complete || image.naturalWidth === 0) return;
+        if (!isLoaded || !image || !image.complete || image.naturalWidth === 0) return;
 
         const BG_WIDTH = 820 * 3.35;
         const BG_HEIGHT = 256 * 3.35;
@@ -576,6 +743,35 @@ class BiomeManager {
 
         for (let currentX = startX; currentX < parallaxX + coverWidth; currentX += BG_WIDTH) {
             ctx.drawImage(image, currentX - parallaxX, 0, BG_WIDTH, BG_HEIGHT);
+        }
+    }
+
+    _drawTilingMirroredParallaxLayer(ctx, image, isLoaded, parallaxX, coverWidth) {
+        if (!isLoaded || !image || !image.complete || image.naturalWidth === 0) return;
+
+        const BG_HEIGHT = 256 * 2.85;
+        const scaleFactor = BG_HEIGHT / image.naturalHeight;
+        const TILE_WIDTH = image.naturalWidth * scaleFactor;
+        const TILE_HEIGHT = BG_HEIGHT;
+
+        const startTileIndex = Math.floor(parallaxX / TILE_WIDTH);
+        const startX = startTileIndex * TILE_WIDTH;
+        
+        let isMirrored = (startTileIndex % 2 !== 0);
+
+        for (let currentX = startX; currentX < parallaxX + coverWidth + TILE_WIDTH; currentX += TILE_WIDTH) {
+            const drawX = currentX - parallaxX;
+
+            if (isMirrored) {
+                ctx.save();
+                ctx.translate(drawX + TILE_WIDTH, 0);
+                ctx.scale(-1, 1);
+                ctx.drawImage(image, 0, 0, TILE_WIDTH, TILE_HEIGHT);
+                ctx.restore();
+            } else {
+                ctx.drawImage(image, drawX, 0, TILE_WIDTH, TILE_HEIGHT);
+            }
+            isMirrored = !isMirrored;
         }
     }
 
@@ -593,6 +789,7 @@ class BiomeManager {
         this._updateFireplaceAnimation(deltaTime);
         this._updateFireplaceParticles(deltaTime);
         this._updateLightEffect(deltaTime);
+        this._updateClouds(deltaTime); // Aktualizacja chmur
     }
 
     drawWater(ctx, biomeName, cameraX) {
