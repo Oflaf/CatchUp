@@ -89,6 +89,15 @@ io.on('connection', (socket) => {
         }
     });
 
+    socket.on('host-closing-room', (data) => {
+        if (data && data.peerId && activeHosts[data.peerId]) {
+            console.log(`[Socket.IO] Host ${activeHosts[data.peerId].name} (${data.peerId}) explicitly closed the room. Removing.`);
+            delete activeHosts[data.peerId];
+            // Poinformuj wszystkich pozostałych klientów o zaktualizowanej liście pokoi
+            io.emit('roomListUpdate', activeHosts);
+        }
+    });
+
     socket.on('disconnect', () => {
         console.log(`[Socket.IO] Rozłączono klienta sygnalizacyjnego: ${socket.id}`);
         const hostPeerId = Object.keys(activeHosts).find(
@@ -129,7 +138,6 @@ server.listen(PORT, () => {
     console.log(`INFO: Railway assigned port: ${process.env.PORT || 'undefined'}`);
 });
 
-// ... (reszta kodu bez zmian: process.on('SIGTERM'), etc.)
 process.on('SIGTERM', () => {
     console.log('Otrzymano sygnał SIGTERM. Zamykam serwer...');
     server.close(() => {
