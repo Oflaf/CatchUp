@@ -16,10 +16,24 @@ class InventoryManager {
         
         this.heldItem = null;
         this.heldItemOriginalSlot = null;
+        
+        // ======================= POCZĄTEK ZMIAN =======================
+        this.tradingManager = null; // Miejsce na referencję do TradingManagera
+        // ======================== KONIEC ZMIAN =========================
 
         this._initSlots();
         this.loadAssets();
     }
+    
+    // ======================= POCZĄTEK ZMIAN =======================
+    /**
+     * Łączy ten manager z managerem handlu.
+     * @param {TradingManager} manager - Instancja TradingManagera.
+     */
+    linkTradingManager(manager) {
+        this.tradingManager = manager;
+    }
+    // ======================== KONIEC ZMIAN =========================
 
     _initSlots() {
         this.slots = []; 
@@ -27,7 +41,7 @@ class InventoryManager {
         this.slots.push(this._createSlot('hook', 'hook'));
         this.slots.push(this._createSlot('bait', 'bait'));
         
-        for (let i = 0; i < 9; i++) {
+        for (let i = 0; i < 16; i++) {
             this.slots.push(this._createSlot(i, 'main'));
         }
     }
@@ -60,10 +74,11 @@ class InventoryManager {
     }
 
     toggle() {
+        if (this.tradingManager && this.tradingManager.isTradeWindowOpen) return;
+
         this.isOpen = !this.isOpen;
         if (!this.isOpen && this.heldItem) {
-            const originalSlot = this._getSlotById(this.heldItemOriginalSlot);
-            this._dropItem(originalSlot); 
+            this._returnHeldItem(); 
         }
     }
 
@@ -75,106 +90,154 @@ class InventoryManager {
         const freeSlot = this.slots.find(slot => slot.type === 'main' && slot.item === null);
         if (freeSlot) {
             freeSlot.item = itemData;
-            console.log(`Dodano ${itemData.name} do slotu ${freeSlot.id}`);
             return true;
         }
         console.warn("Główny ekwipunek jest pełny!");
         return false;
     }
     
-    // ======================= POCZĄTEK ZMIAN =======================
-    /**
-     * Umieszcza przedmiot w określonym slocie specjalnym (np. 'hook' lub 'bait').
-     * Jeśli slot jest zajęty, próbuje dodać przedmiot do głównego ekwipunku.
-     * @param {object} itemData - Pełny obiekt przedmiotu do dodania.
-     * @param {string} slotType - Typ slotu docelowego ('hook' lub 'bait').
-     * @returns {boolean} True, jeśli przedmiot został pomyślnie dodany.
-     */
     placeItemInSlot(itemData, slotType) {
         const targetSlot = this.slots.find(slot => slot.type === slotType);
-        
-        if (targetSlot) {
-            // Umieść przedmiot tylko wtedy, gdy slot jest pusty
-            if (targetSlot.item === null) {
-                targetSlot.item = itemData;
-                console.log(`Umieszczono ${itemData.name} w slocie ${slotType}.`);
-                return true;
-            }
+        if (targetSlot && targetSlot.item === null) {
+            targetSlot.item = itemData;
+            return true;
         }
-        
-        // Jeśli slot docelowy był zajęty lub nie znaleziono go, spróbuj dodać do ekwipunku
-        console.warn(`Slot ${slotType} jest zajęty. Próba dodania do głównego ekwipunku.`);
         return this.addItem(itemData);
     }
-    // ======================== KONIEC ZMIAN =========================
 
-    handleMouseDown() {
+   handleMouseDown() {
         if (!this.isOpen) return false;
 
         const hoveredSlot = this._getHoveredSlot();
 
         if (this.heldItem) {
             if (hoveredSlot) {
+                // Jeśli kursor jest nad slotem, upuść przedmiot do niego
                 this._dropItem(hoveredSlot);
             } else {
+                // ======================= POCZĄTEK POPRAWKI =======================
+                // Jeśli kursor jest poza slotami, zwróć przedmiot, aby go wyrzucić
                 const itemToDrop = this.heldItem;
                 this.heldItem = null;
                 this.heldItemOriginalSlot = null;
-                return itemToDrop; 
+                return itemToDrop; // Ta linia pozwala na wyrzucenie przedmiotu
+                // ======================== KONIEC POPRAWKI ========================
             }
-            return true;
+            return true; // Akcja została obsłużona
         } else if (hoveredSlot && hoveredSlot.item) {
+            // Jeśli kursor jest nad slotem z przedmiotem, podnieś go
             this._pickupItem(hoveredSlot);
-            return true;
+            return true; // Akcja została obsłużona
         }
 
-        return false;
+        return false; // Nie wykonano żadnej akcji
     }
     
     getBaitItem() {
-        const baitSlot = this.slots.find(slot => slot.type === 'bait');
-        return baitSlot ? baitSlot.item : null;
+        return this.slots.find(slot => slot.type === 'bait')?.item || null;
     }
     
     consumeBait() {
         const baitSlot = this.slots.find(slot => slot.type === 'bait');
-        if (baitSlot && baitSlot.item) {
-            baitSlot.item = null;
-        }
+        if (baitSlot) baitSlot.item = null;
     }
     
     getHookItem() {
-        const hookSlot = this.slots.find(slot => slot.type === 'hook');
-        return hookSlot ? hookSlot.item : null;
+        return this.slots.find(slot => slot.type === 'hook')?.item || null;
     }
 
     _getSlotById(id) {
         return this.slots.find(slot => slot.id === id);
     }
+    
+    _returnHeldItem() {
+        if (!this.heldItem || this.heldItemOriginalSlot === null) return;
+        let originalSlot = this._getSlotById(this.heldItemOriginalSlot) || this.tradingManager?.slots.find(s => s.id === this.heldItemOriginalSlot);
+        if (originalSlot) originalSlot.item = this.heldItem;
+        this.heldItem = null;
+        this.heldItemOriginalSlot = null;
+    }
 
-    _pickupItem(slot) {
+     _pickupItem(slot) {
+        // ======================= POCZĄTEK ZMIANY =======================
+        // Przechwyć próbę podniesienia przedmiotu z oferty NPC
+        if (slot.type === 'trade' && slot.id === 'npc_offer') {
+            if (slot.item) {
+                // Przedmiot jest w ofercie, więc finalizujemy wymianę
+                const receivedItem = slot.item;
+                
+                // Powiedz TradingManagerowi, żeby wyczyścił sloty
+                this.tradingManager.finalizeTrade();
+                
+                // Umieść otrzymany przedmiot w ręce gracza
+                this.heldItem = receivedItem;
+                this.heldItemOriginalSlot = null; // Ten przedmiot nie ma "domu", bo jest nowy
+            }
+            return; // Zakończ funkcję, aby nie wykonać domyślnej logiki podnoszenia
+        }
+        // ======================== KONIEC ZMIANY =========================
+
+        // Domyślna logika podnoszenia dla wszystkich innych slotów
         this.heldItem = slot.item;
         slot.item = null;
         this.heldItemOriginalSlot = slot.id;
     }
 
     _dropItem(targetSlot) {
-        if (!targetSlot) {
-            const originalSlot = this._getSlotById(this.heldItemOriginalSlot);
-            if(originalSlot) originalSlot.item = this.heldItem;
-        } else {
-            const originalSlot = this._getSlotById(this.heldItemOriginalSlot);
-            if (targetSlot.item) {
-                if(originalSlot) originalSlot.item = targetSlot.item;
-            } else { 
-                 if(originalSlot) originalSlot.item = null;
-            }
-            targetSlot.item = this.heldItem;
+        if (targetSlot.type === 'trade' && targetSlot.id === 'npc_offer') {
+            this._returnHeldItem();
+            return;
         }
+
+        // ======================= POCZĄTEK ZMIANY =======================
+        // Dodatkowa walidacja: nie można upuścić przedmiotu na ofertę gracza,
+        // jeśli już coś tam jest (zamiana nie ma sensu w tym slocie).
+        if (targetSlot.type === 'trade' && targetSlot.id === 'player_offer' && targetSlot.item) {
+            this._returnHeldItem();
+            return;
+        }
+        // ======================== KONIEC ZMIANY =========================
+
+        if (!targetSlot) {
+            this._returnHeldItem();
+            return;
+        }
+        
+        const originalSlot = this._getSlotById(this.heldItemOriginalSlot) || this.tradingManager?.slots.find(s => s.id === this.heldItemOriginalSlot);
+        if (targetSlot.item) {
+            if(originalSlot) originalSlot.item = targetSlot.item;
+        } else {
+            if(originalSlot) originalSlot.item = null;
+        }
+        targetSlot.item = this.heldItem;
+        
         this.heldItem = null;
         this.heldItemOriginalSlot = null;
     }
 
+    _dropItem(targetSlot) {
+        if (targetSlot.type === 'trade' && targetSlot.id === 'npc_offer') {
+            this._returnHeldItem();
+            return;
+        }
+        if (!targetSlot) {
+            this._returnHeldItem();
+            return;
+        }
+        
+        const originalSlot = this._getSlotById(this.heldItemOriginalSlot) || this.tradingManager?.slots.find(s => s.id === this.heldItemOriginalSlot);
+        if (targetSlot.item) {
+            if(originalSlot) originalSlot.item = targetSlot.item;
+        } else {
+            if(originalSlot) originalSlot.item = null;
+        }
+        targetSlot.item = this.heldItem;
+        
+        this.heldItem = null;
+        this.heldItemOriginalSlot = null;
+    }
+    
+    // ======================= POCZĄTEK ZMIAN =======================
     _getHoveredSlot() {
         for (const slot of this.slots) {
             const { x, y } = this._getSlotPosition(slot); 
@@ -183,34 +246,44 @@ class InventoryManager {
                 return slot;
             }
         }
+        
+        if (this.tradingManager && this.tradingManager.isTradeWindowOpen) {
+            const hoveredTradeSlot = this.tradingManager._getHoveredSlot();
+            if (hoveredTradeSlot) return hoveredTradeSlot;
+        }
+        
         return null;
     }
+    // ======================== KONIEC ZMIAN =========================
     
     _getSlotPosition(slot) {
         if (!this.origin) return { x: -1000, y: -1000 };
-
-        const gridCols = 3;
+        const gridCols = 4;
         const gridWidth = gridCols * this.SLOT_SIZE + (gridCols - 1) * this.GRID_GAP;
         
         if (slot.type === 'hook' || slot.type === 'bait') {
             const totalSpecialWidth = 2 * this.SLOT_SIZE + this.GRID_GAP;
             const startX = this.origin.x + (gridWidth - totalSpecialWidth) / 2;
             const y = this.origin.y - this.SLOT_SIZE - this.GRID_GAP * 2;
-            
-            if (slot.type === 'hook') {
-                return { x: startX, y: y };
-            } else { // bait
-                return { x: startX + this.SLOT_SIZE + this.GRID_GAP, y: y };
-            }
-        } else { // main
+            return { x: startX + (slot.type === 'bait' ? this.SLOT_SIZE + this.GRID_GAP : 0), y: y };
+        } else {
             const col = slot.id % gridCols;
             const row = Math.floor(slot.id / gridCols);
-            const x = this.origin.x + col * (this.SLOT_SIZE + this.GRID_GAP);
-            const y = this.origin.y + row * (this.SLOT_SIZE + this.GRID_GAP);
-            return { x, y };
+            return { x: this.origin.x + col * (this.SLOT_SIZE + this.GRID_GAP), y: this.origin.y + row * (this.SLOT_SIZE + this.GRID_GAP) };
         }
     }
-   _drawTooltip(ctx, slot, pixelFont) {
+
+    _drawTextWithOutline(ctx, text, x, y, fillStyle, outlineWidth = 2) {
+        ctx.strokeStyle = 'black';
+        ctx.lineWidth = outlineWidth;
+        ctx.lineJoin = 'round'; 
+        ctx.miterLimit = 2;
+        ctx.strokeText(text, x, y);
+        ctx.fillStyle = fillStyle;
+        ctx.fillText(text, x, y);
+    }
+    
+    _drawTooltip(ctx, slot, pixelFont) {
         if (!slot.item || !this.tierConfig || !this.tierNames) return;
 
         ctx.save();
@@ -221,10 +294,8 @@ class InventoryManager {
         const PADDING = 32;
         const NAME_FONT = `bold 17px ${pixelFont}`;
         const DESC_FONT = `16px ${pixelFont}`;
-        // ======================= POCZĄTEK ZMIAN =======================
-        const TIER_FONT = `14px ${pixelFont}`; // Taka sama wielkość, ale bez "bold"
-        const TIER_ALPHA = 0.8; // Ustawiamy poziom przezroczystości
-        // ======================== KONIEC ZMIAN =========================
+        const TIER_FONT = `14px ${pixelFont}`;
+        const TIER_ALPHA = 0.8;
         const LINE_HEIGHT = 20;
         const MARGIN_ABOVE_SLOT = 16;
         const GAP_BETWEEN_LINES = 6;
@@ -232,7 +303,7 @@ class InventoryManager {
         const ROCKING_SPEED = 2.5;
         const ROCKING_AMPLITUDE_DEGREES = 2.3;
 
-        // --- Obliczanie szerokości ---
+        // --- Obliczanie szerokości (potrzebne do centrowania) ---
         const tierName = this.tierNames[item.tier];
         const tierText = tierName ? ` (${tierName})` : '';
 
@@ -251,15 +322,19 @@ class InventoryManager {
         if (item.size) sizeText = `Size: ${item.size}cm`;
         const sizeWidth = sizeText ? ctx.measureText(sizeText).width : 0;
         
-        const tooltipWidth = Math.max(titleLineWidth, descWidth, sizeWidth) + PADDING * 2;
+        const tooltipWidth = Math.max(titleLineWidth, descWidth, sizeWidth);
         
-        let tooltipHeight = LINE_HEIGHT * 2 + PADDING + GAP_BETWEEN_LINES;
+        let tooltipHeight = LINE_HEIGHT * 2 + GAP_BETWEEN_LINES;
         if (sizeText) tooltipHeight += LINE_HEIGHT + GAP_BETWEEN_LINES;
         
         // --- Pozycja i rotacja ---
         const slotPos = this._getSlotPosition(slot);
         const x = slotPos.x + (this.SLOT_SIZE / 2) - (tooltipWidth / 2);
-        const y = slotPos.y - tooltipHeight - MARGIN_ABOVE_SLOT;
+        let y = slotPos.y - tooltipHeight - MARGIN_ABOVE_SLOT;
+        
+        // --- Korekta pozycji Y, aby tekst był poprawnie umiejscowiony ---
+        y += PADDING / 2;
+        
         const rotationAngle = Math.sin(Date.now() / 1000 * ROCKING_SPEED) * (ROCKING_AMPLITUDE_DEGREES * Math.PI / 180);
         const centerX = x + tooltipWidth / 2;
         const centerY = y + tooltipHeight / 2;
@@ -267,72 +342,60 @@ class InventoryManager {
         ctx.rotate(rotationAngle);
         ctx.translate(-centerX, -centerY);
 
-        // --- Rysowanie tła ---
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.29)';
-        ctx.fillRect(x, y, tooltipWidth, tooltipHeight);
-        ctx.strokeStyle = tierConfig.color;
-        ctx.lineWidth = 2;
-        ctx.strokeRect(x, y, tooltipWidth, tooltipHeight);
+        // --- Rysowanie tła (USUNIĘTE) ---
+        // ctx.fillStyle = 'rgba(0, 0, 0, 0.29)';
+        // ctx.fillRect(...);
+        // ctx.strokeStyle = tierConfig.color;
+        // ctx.strokeRect(...);
 
-        // --- Rysowanie tekstów ---
-        const textStartX = x + PADDING;
-        const textStartY = y + PADDING / 2;
-
-        // 1. Rysuj nazwę przedmiotu (pogrubiona, pełny kolor)
-        ctx.font = NAME_FONT;
-        ctx.fillStyle = tierConfig.color;
+        // --- Rysowanie tekstów z obramówką ---
+        const textStartX = x;
+        const textStartY = y;
+        
         ctx.textAlign = 'left';
         ctx.textBaseline = 'top';
-        ctx.fillText(item.name, textStartX, textStartY);
 
-        // 2. Rysuj nazwę tieru (normalna czcionka, kolor z alpha)
+        // 1. Rysuj nazwę przedmiotu
+        ctx.font = NAME_FONT;
+        this._drawTextWithOutline(ctx, item.name, textStartX, textStartY, tierConfig.color, 3);
+
+        // 2. Rysuj nazwę tieru
         if (tierText) {
             ctx.font = TIER_FONT;
-            // Tworzymy nowy kolor z zadaną przezroczystością
             const tierColorWithAlpha = tierConfig.color.replace(', 1)', `, ${TIER_ALPHA})`);
-            ctx.fillStyle = tierColorWithAlpha;
-            ctx.fillText(tierText, textStartX + itemNameWidth, textStartY);
+            this._drawTextWithOutline(ctx, tierText, textStartX + itemNameWidth, textStartY, tierColorWithAlpha, 3);
         }
 
         // 3. Rysuj opis
         ctx.font = DESC_FONT;
-        ctx.fillStyle = '#FFFFFF';
-        ctx.fillText(descText, textStartX, textStartY + LINE_HEIGHT + GAP_BETWEEN_LINES);
+        this._drawTextWithOutline(ctx, descText, textStartX, textStartY + LINE_HEIGHT + GAP_BETWEEN_LINES, '#FFFFFF', 2);
 
         // 4. Rysuj rozmiar (jeśli istnieje)
         if (sizeText) {
-            ctx.fillStyle = '#b3b3b3ff';
             const sizeY = textStartY + (LINE_HEIGHT + GAP_BETWEEN_LINES) * 2;
-            ctx.fillText(sizeText, textStartX, sizeY);
+            this._drawTextWithOutline(ctx, sizeText, textStartX, sizeY, '#b3b3b3ff', 2);
         }
 
         ctx.restore();
     }
+    // ======================== KONIEC ZMIAN =========================
 
 
     update(deltaTime) {
         if (!this.isOpen || !this.assetsLoaded) return;
-
-        const hoveredSlot = this._getHoveredSlot();
-        if (hoveredSlot && hoveredSlot.item) {
-            this._drawTooltip(ctx, hoveredSlot);
-        }
         this.slots.forEach(slot => {
             slot.rockingTimer += slot.rockingSpeed * deltaTime;
-            const isHovered = hoveredSlot && hoveredSlot.id === slot.id;
-
-            if (isHovered) {
-                slot.targetScale = 1.15;
-                slot.rotation = Math.sin(slot.rockingTimer * 2.5) * (6 * Math.PI / 180);
-            } else {
-                slot.targetScale = 1.0;
-                slot.rotation = Math.sin(slot.rockingTimer) * slot.rockingAmplitude;
-            }
+            const hoveredSlot = this._getHoveredSlot();
+            const isHovered = hoveredSlot && hoveredSlot.id === slot.id && hoveredSlot.type !== 'trade';
+            slot.targetScale = isHovered ? 1.15 : 1.0;
+            slot.rotation = isHovered 
+                ? Math.sin(slot.rockingTimer * 2.5) * (6 * Math.PI / 180) 
+                : Math.sin(slot.rockingTimer) * slot.rockingAmplitude;
             slot.scale = lerp(slot.scale, slot.targetScale, 0.2);
         });
     }
 
-    draw(ctx, pixelFont) { // <--- DODANY PARAMETR pixelFont
+    draw(ctx, pixelFont) {
         if (!this.isOpen || !this.assetsLoaded) {
             return;
         }
@@ -357,8 +420,7 @@ class InventoryManager {
                 const labelText = slot.type === 'hook' ? 'Hook' : 'Bait';
                 const textX = pos.x + this.SLOT_SIZE / 2;
                 const textY = pos.y - 8;
-
-                // Używamy przekazanej czcionki
+                
                 ctx.font = `18px ${pixelFont}`
                 ctx.textAlign = 'center';
                 ctx.textBaseline = 'bottom';
@@ -373,7 +435,6 @@ class InventoryManager {
 
         const hoveredSlot = this._getHoveredSlot();
         if (hoveredSlot && hoveredSlot.item) {
-            // Przekazujemy czcionkę do funkcji rysującej tooltip
             this._drawTooltip(ctx, hoveredSlot, pixelFont);
         }
 
@@ -383,32 +444,24 @@ class InventoryManager {
     }
 
     _drawItem(ctx, item, x, y) {
-    const ITEM_IMAGE_SIZE = this.SLOT_SIZE * 0.7;
-    const STAR_SIZE = 24;
-    
-    // Rysowanie obrazka przedmiotu (bez zmian)
-    if (item.image && item.image.complete) {
-        ctx.drawImage(item.image, x - ITEM_IMAGE_SIZE / 2, y - ITEM_IMAGE_SIZE / 2, ITEM_IMAGE_SIZE, ITEM_IMAGE_SIZE);
-    }
-
-    // ======================= POCZĄTEK ZMIAN =======================
-    // Sprawdź, czy przekazano konfigurację i czy przedmiot ma tier
-    if (this.tierConfig && this.starImages && item.tier && item.tier > 0) {
+        const ITEM_IMAGE_SIZE = this.SLOT_SIZE * 0.7;
+        const STAR_SIZE = 24;
         
-        // Pobierz konfigurację dla danego tieru
-        const tierConfig = this.tierConfig[item.tier];
+        if (item.image && item.image.complete) {
+            ctx.drawImage(item.image, x - ITEM_IMAGE_SIZE / 2, y - ITEM_IMAGE_SIZE / 2, ITEM_IMAGE_SIZE, ITEM_IMAGE_SIZE);
+        }
 
-        // Sprawdź, czy konfiguracja istnieje i czy ma przypisany obrazek gwiazdki
-        if (tierConfig && tierConfig.imageKey) {
-            const starImg = this.starImages[tierConfig.imageKey];
-            
-            // Jeśli obrazek gwiazdki istnieje i jest załadowany, narysuj go
-            if (starImg && starImg.complete) {
-                const starX = x + ITEM_IMAGE_SIZE / 2 - STAR_SIZE;
-                const starY = y + ITEM_IMAGE_SIZE / 2 - STAR_SIZE;
-                ctx.drawImage(starImg, starX, starY, STAR_SIZE, STAR_SIZE);
+        if (this.tierConfig && this.starImages && item.tier && item.tier > 0) {
+            const tierConfig = this.tierConfig[item.tier];
+            if (tierConfig && tierConfig.imageKey) {
+                const starImg = this.starImages[tierConfig.imageKey];
+                
+                if (starImg && starImg.complete) {
+                    const starX = x + ITEM_IMAGE_SIZE / 2 - STAR_SIZE;
+                    const starY = y + ITEM_IMAGE_SIZE / 2 - STAR_SIZE;
+                    ctx.drawImage(starImg, starX, starY, STAR_SIZE, STAR_SIZE);
+                }
             }
         }
     }
-    // ======================== KONIEC ZMIAN =========================
-}}
+}

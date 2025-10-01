@@ -5,7 +5,7 @@ function lerp(start, end, amt) {
 class ParticleManager {
     constructor() {
         this.particles = [];
-        this.GRAVITY = 150; // Grawitacja w pikselach na sekundę^2
+        this.GRAVITY = 150; // Gravity in pixels per second^2
     }
 
     update(deltaTime) {
@@ -125,47 +125,30 @@ class FishingManager {
     this.currentFish = null;
 }
 
-    // ======================= POCZĄTEK ZMIAN =======================
-    /**
-     * Obsługuje sytuację, gdy gracz pociągnie za wędkę (np. klikając) zbyt wcześnie,
-     * zanim ryba chwyci przynętę (w stanie `isWaitingForBite`).
-     * Powoduje to anulowanie łowienia i odtworzenie animacji ucieczki ryby.
-     * @param {string} biomeName - Nazwa aktualnego biomu, potrzebna do wylosowania ryby do animacji.
-     */
-
     abortMinigame() {
-        // Upewnij się, że minigra jest w toku.
         if (!this.isFishHooked || !this.currentFish) {
             return;
         }
-        // Uruchom istniejącą logikę animacji porażki.
         this._triggerFailAnimation();
     }
 
     handlePrematurePull(biomeName) {
         if (this.isWaitingForBite) {
-            // Natychmiast anuluj oczekiwanie na branie, ale nie resetuj wszystkiego innego
             clearTimeout(this.biteTimeoutId);
             this.biteTimeoutId = null;
             this.isWaitingForBite = false;
 
-            // Wylosuj rybę, która "uciekła", na potrzeby samej animacji
             const escapedFishData = this.getRandomCatch(biomeName, this.currentBait);
 
             if (escapedFishData) {
-                // Ustaw tę rybę jako aktualną, aby animacja mogła z niej skorzystać
                 this.currentFish = escapedFishData;
-                // Pokaż ramkę minigry, w której odbędzie się animacja
                 this.showFishFrame = true;
-                // Uruchom animację porażki
                 this._triggerFailAnimation();
             } else {
-                // Jeśli z jakiegoś powodu nie udało się wylosować ryby, po prostu zresetuj stan
                 this.failFishing();
             }
         }
     }
-    // ======================== KONIEC ZMIAN =========================
 
     createWaterSplash(x, y, particleCount, speedMultiplier) {
         this.particleManager.createWaterSplash(x, y + 10, particleCount, speedMultiplier);
@@ -182,20 +165,30 @@ class FishingManager {
         }
         this.currentBait = this.baitData[equippedBait.name];
         if (!this.currentBait) {
-            console.error(`Brak danych dla przynęty o nazwie: ${equippedBait.name}`);
+            console.error(`Missing data for bait named: ${equippedBait.name}`);
             this.cancelFishing();
             return;
         }
         this.currentHook = this.hookData[equippedHook.name];
         if (!this.currentHook) {
-            console.error(`Brak danych dla haczyka o nazwie: ${equippedHook.name}`);
+            console.error(`Missing data for hook named: ${equippedHook.name}`);
             this.cancelFishing();
             return;
         }
+        
         const waitTimeReduction = this.currentBait.waitTimeReduction || 0;
-        const baseWaitTime = 5000;
-        const randomWaitComponent = Math.max(0, 5000 - waitTimeReduction);
-        const totalWaitTime = baseWaitTime + Math.random() * randomWaitComponent;
+        
+        // Long base wait time
+        const baseMinWait = 15000;  // 15 seconds
+        const baseMaxWait = 25000; // 25 seconds
+        const baseWaitTime = baseMinWait + Math.random() * (baseMaxWait - baseMinWait);
+        
+        // The reduction is subtracted from the randomized base time.
+        // Math.max ensures the time never drops below a minimum of 2.5 seconds.
+        const totalWaitTime = Math.max(2500, baseWaitTime - waitTimeReduction);
+
+        console.log(`Bait: ${this.currentBait.name}, Time Reduction: ${waitTimeReduction / 1000}s, Final Wait Time: ${totalWaitTime / 1000}s`);
+
         this.biteTimeoutId = setTimeout(() => { this.startBite(); }, totalWaitTime);
     }
 
@@ -231,7 +224,14 @@ class FishingManager {
         this.fishVelocity = 0;
         this.fishTargetVelocity = 0;
         this.fishMoveTimer = 0;
-        this.catchProgressBarWidth = 0;
+        
+        if (this.fishFrameImage) {
+            const frameWidth = this.fishFrameImage.width * this.fishFrameScale;
+            this.catchProgressBarWidth = frameWidth * 0.35;
+        } else {
+            this.catchProgressBarWidth = 0;
+        }
+
         this.isCatchComplete = false;
         this.isFailAnimationPlaying = false; 
         this.escapedFish = null;
@@ -361,7 +361,7 @@ class FishingManager {
     this.failAnimationTimer += deltaTime;
 
     if (this.escapedFish) {
-        if (this.failAnimationTimer > 0.4) { // Fizyka zaczyna działać po migotaniu
+        if (this.failAnimationTimer > 0.4) {
             const GRAVITY = 800;
             this.escapedFish.velocityY += GRAVITY * deltaTime;
             this.escapedFish.y += this.escapedFish.velocityY * deltaTime;
@@ -401,14 +401,12 @@ class FishingManager {
 }}
 
     draw(ctx, player, bobberPosition, cameraX, currentZoom) {
-    // Rysowanie cząsteczek - bez zmian
     ctx.save();
     ctx.scale(currentZoom, currentZoom);
     ctx.translate(-cameraX, -cameraY);
     this.particleManager.draw(ctx);
     ctx.restore();
 
-    // Rysowanie animacji "STRIKE!" - bez zmian
     if (this.isBiting && this.strikeImage && this.strikeImage.complete && bobberPosition) {
         const PULSE_SPEED = 25, PULSE_AMPLITUDE = 0.4, BASE_SCALE = 1.2, ROCKING_SPEED = 10, MAX_ROCKING_ANGLE_DEG = 25;
         const scale = BASE_SCALE + Math.sin(this.strikeAnimationTime * PULSE_SPEED) * PULSE_AMPLITUDE;
@@ -423,7 +421,6 @@ class FishingManager {
         ctx.restore();
     }
 
-    // Rysowanie ramki minigry - TUTAJ WPROWADZAMY ZMIANY
     if ((this.showFishFrame || this.isFailAnimationPlaying) && this.fishFrameImage && this.fishFrameImage.complete && bobberPosition) {
         const frameWidth = this.fishFrameImage.width * this.fishFrameScale;
         const frameHeight = this.fishFrameImage.height * this.fishFrameScale;
@@ -433,15 +430,12 @@ class FishingManager {
         ctx.setTransform(1, 0, 0, 1, 0, 0);
         ctx.translate(x + frameWidth / 2, y + frameHeight / 2);
 
-        // === POCZĄTEK POPRAWKI: BUJANIE RAMKI ===
-        // Jeśli minigra jest aktywna (ale nie jest to animacja porażki), dodaj bujanie.
         if (this.isFishHooked && !this.isFailAnimationPlaying) {
-            const ROCKING_SPEED = 4; // Jak szybko ma się bujać
-            const MAX_ROCKING_ANGLE_DEG = 7; // Maksymalny kąt wychylenia w stopniach
+            const ROCKING_SPEED = 4;
+            const MAX_ROCKING_ANGLE_DEG = 7;
             const rockingAngle = Math.sin(Date.now() / 1000 * ROCKING_SPEED) * (MAX_ROCKING_ANGLE_DEG * Math.PI / 180);
             ctx.rotate(rockingAngle);
         }
-        // === KONIEC POPRAWKI ===
         
         const isFlickering = this.isFailAnimationPlaying && this.failAnimationTimer < 0.7;
         const showDuringFlicker = isFlickering ? (Math.floor(this.failAnimationTimer * 10) % 2 === 0) : true;
@@ -469,7 +463,11 @@ class FishingManager {
             if(showDuringFlicker) {
                 const fishImg = this.fishImages[this.currentFish.name];
                 if (fishImg && fishImg.complete) {
-                    const fishHeight = fishImg.height * 3, fishWidth = fishImg.width * 3;
+                    const BASE_MINIGAME_SCALE = 3;
+                    const finalScale = BASE_MINIGAME_SCALE * (this.currentFish.scale || 1); 
+                    const fishHeight = fishImg.height * finalScale;
+                    const fishWidth = fishImg.width * finalScale;
+
                     const fishX = this.fishPosition, fishY = 0;
                     const barWidth = 128 * (this.currentHook?.playerBarWidthModifier || 1.0);
                     const barLeftEdge = this.minigameBarPosition - (barWidth / 2);
@@ -520,17 +518,286 @@ class FishingManager {
 
      _initializeHookData() {
         this.hookData = {
-            'weedless': { name: 'weedless', tier: 1, description: 'Reduces the chance of losing the fish.', fishPowerModifier: 1, playerBarWidthModifier: 1, playerBarSpeedModifier: 1 },
-            'sharp': { name: 'sharp', tier: 3, description: 'A very sharp hook, makes fish more aggressive.', fishPowerModifier: 1.1, playerBarWidthModifier: 0.8, playerBarSpeedModifier: 1.25 },
+            'weedless': { name: 'weedless', tier: 0, description: 'Reduces the chance of losing the fish.', fishPowerModifier: 1.1, playerBarWidthModifier: 0.7, playerBarSpeedModifier: 1 },
+            'beaked': { name: 'beaked', tier: 1, description: 'makes the fish less combative.', fishPowerModifier: 0.38, playerBarWidthModifier: 0.65, playerBarSpeedModifier: 1.25 },
+            'double': { name: 'double', tier: 1, description: 'hooks deeper and prevents escape more effectively.', fishPowerModifier: 0.85, playerBarWidthModifier: 1.15, playerBarSpeedModifier: 0.75 },
+            'treble': { name: 'treble', tier: 2, description: 'ensures the strongest hook set and escape prevention.', fishPowerModifier: 0.72, playerBarWidthModifier: 1.32, playerBarSpeedModifier: 0.55 },
         };
     }
 
-     _initializeBaitData() {
-        this.baitData = {
-            'worm': { name: 'worm', tier: 1, description: 'A common worm. Loved by smaller fish.', chance: 65, fishChanceBonus: { 'roach': 1.2, 'perch': 1.2, 'crucian': 1.1 } },
-            'bloodworm': { name: 'bloodworm', tier: 2, description: 'A delicacy for larger, predatory fish.', chance: 25, waitTimeReduction: 3000, fishChanceBonus: { 'catfish': 1.8, 'carp': 1.4, 'roach': 0.5 } },
-        };
-    }
+_initializeBaitData() {
+    this.baitData = {
+        // ================== NATURAL BAITS ==================
+        'dung worm': {
+            name: 'dung worm',
+            tier: 1,
+            description: 'A small red worm favored by many fish.',
+            chance: 10,
+            waitTimeReduction: 2000, // Reduces wait time by 2s
+            fishChanceBonus: {
+                'roach': 22, 'great roach': 8, 'crucian': 24, 'great crucian': 6, 'carp': 0, 'great carp': 0,
+                'catfish': 0, 'great catfish': 0, 'olympic catfish': 0, 'perch': 14, 'great perch': 0,
+                'longear sunfish': 0, 'great longear sunfish': 0, 'rudd': 12, 'great rudd': 9,
+                'spined loach': 18, 'european chub': 0, 'bream': 0, 'great bream': 0, 'tench': 0,
+                'great tench': 0, 'common bleak': 26, 'piranha': 0, 'great piranha': 0,
+            }
+        },
+        'worm': {
+            name: 'worm',
+            tier: 0,
+            description: 'A common worm. Loved by smaller fish.',
+            chance: 65,
+            waitTimeReduction: 1000, // Reduces wait time by 1s
+            fishChanceBonus: {
+                'roach': 33, 'great roach': 0, 'crucian': 26, 'great crucian': 0, 'carp': 0, 'great carp': 0,
+                'catfish': 0, 'great catfish': 0, 'olympic catfish': 0, 'perch': 18, 'great perch': 0,
+                'longear sunfish': 0, 'great longear sunfish': 0, 'rudd': 42, 'great rudd': 0,
+                'spined loach': 18, 'european chub': 0, 'bream': 0, 'great bream': 0, 'tench': 0,
+                'great tench': 0, 'common bleak': 15, 'piranha': 0, 'great piranha': 0,
+            }
+        },
+        'bloodworm': {
+            name: 'bloodworm',
+            tier: 1,
+            description: 'A delicacy for larger, predatory fish.',
+            chance: 25,
+            waitTimeReduction: 7000, // Reduces wait time by 7s
+            fishChanceBonus: {
+                'roach': 30, 'great roach': 22, 'crucian': 270, 'great crucian': 0, 'carp': 0, 'great carp': 0,
+                'catfish': 7, 'great catfish': 0, 'olympic catfish': 0, 'perch': 197, 'great perch': 27,
+                'longear sunfish': 0, 'great longear sunfish': 0, 'rudd': 65, 'great rudd': 18,
+                'spined loach': 0, 'european chub': 0, 'bream': 0, 'great bream': 0, 'tench': 0,
+                'great tench': 0, 'common bleak': 0, 'piranha': 10, 'great piranha': 5,
+            }
+        },
+        'maggots': {
+            name: 'maggots',
+            tier: 0,
+            description: 'Maggots attract many small and medium fish.',
+            chance: 55,
+            waitTimeReduction: 1500, // Reduces wait time by 1.5s
+            fishChanceBonus: {
+                'roach': 66, 'great roach': 0, 'crucian': 44, 'great crucian': 0, 'carp': 0, 'great carp': 0,
+                'catfish': 0, 'great catfish': 0, 'olympic catfish': 0, 'perch': 49, 'great perch': 0,
+                'longear sunfish': 38, 'great longear sunfish': 0, 'rudd': 33, 'great rudd': 0,
+                'spined loach': 22, 'european chub': 0, 'bream': 0, 'great bream': 0, 'tench': 0,
+                'great tench': 0, 'common bleak': 35, 'piranha': 5, 'great piranha': 0,
+            }
+        },
+        'beetle larvae': {
+            name: 'beetle larvae',
+            tier: 1,
+            description: 'Fat beetle larvae. A tasty natural bait for many freshwater species.',
+            chance: 15,
+            waitTimeReduction: 5000, // Reduces wait time by 5s
+            fishChanceBonus: {
+                'roach': 0, 'great roach': 23, 'crucian': 0, 'great crucian': 44, 'carp': 0, 'great carp': 0,
+                'catfish': 18, 'great catfish': 0, 'olympic catfish': 0, 'perch': 0, 'great perch': 70,
+                'longear sunfish': 0, 'great longear sunfish': 40, 'rudd': 0, 'great rudd': 13,
+                'spined loach': 0, 'european chub': 0, 'bream': 19, 'great bream': 0, 'tench': 38,
+                'great tench': 0, 'common bleak': 0, 'piranha': 0, 'great piranha': 0,
+            }
+        },
+
+        // ================== LURES (WOBBLERS, JIGS, ETC.) ==================
+        'handmade jig': {
+            name: 'handmade jig',
+            waitTimeReduction: 8000, // Reduces wait time by 8s
+            tier: 1,
+            description: 'A handmade lure crafted from wood. Effective for experienced anglers.',
+            fishChanceBonus: {
+                'roach': 0, 'great roach': 44, 'crucian': 0, 'great crucian': 0, 'carp': 0, 'great carp': 0,
+                'catfish': 20, 'great catfish': 0, 'olympic catfish': 0, 'perch': 0, 'great perch': 14,
+                'longear sunfish': 50, 'great longear sunfish': 80, 'rudd': 0, 'great rudd': 64,
+                'spined loach': 0, 'european chub': 10, 'bream': 76, 'great bream': 20, 'tench': 62,
+                'great tench': 44, 'common bleak': 0, 'piranha': 15, 'great piranha': 5,
+            }
+        },
+        'red chubby wobbler': {
+            waitTimeReduction: 14000, // Reduces wait time by 14s
+            name: 'red chubby wobbler',
+            tier: 2,
+            description: 'A bright red wobbler with a chubby body, irresistible to aggressive predators.',
+            fishChanceBonus: {
+                'roach': 0, 'great roach': 0, 'crucian': 0, 'great crucian': 0, 'carp': 60, 'great carp': 76,
+                'catfish': 0, 'great catfish': 44, 'olympic catfish': 0, 'perch': 0, 'great perch': 12,
+                'longear sunfish': 0, 'great longear sunfish': 0, 'rudd': 0, 'great rudd': 60,
+                'spined loach': 0, 'european chub': 0, 'bream': 0, 'great bream': 36, 'tench': 40,
+                'great tench': 0, 'common bleak': 0, 'piranha': 18, 'great piranha': 12,
+            }
+        },
+        'wooden two-jointed wobbler': {
+            waitTimeReduction: 12000, // Reduces wait time by 12s
+            name: 'wooden two-jointed wobbler',
+            tier: 1,
+            description: 'A two-jointed wooden wobbler that swims with a realistic, snake-like motion.',
+            fishChanceBonus: {
+                'roach': 0, 'great roach': 12, 'crucian': 0, 'great crucian': 0, 'carp': 0, 'great carp': 0,
+                'catfish': 18, 'great catfish': 0, 'olympic catfish': 0, 'perch': 0, 'great perch': 96,
+                'longear sunfish': 0, 'great longear sunfish': 0, 'rudd': 0, 'great rudd': 0,
+                'spined loach': 0, 'european chub': 0, 'bream': 65, 'great bream': 0, 'tench': 0,
+                'great tench': 60, 'common bleak': 40, 'piranha': 80, 'great piranha': 40,
+            }
+        },
+        'green kavasaki wobbler': {
+            waitTimeReduction: 16000, // Reduces wait time by 16s
+            name: 'green kavasaki wobbler',
+            tier: 2,
+            description: 'A green Kamasaki-brand wobbler, reliable for catching various predatory fish.',
+            fishChanceBonus: {
+                'roach': 0, 'great roach': 0, 'crucian': 0, 'great crucian': 0, 'carp': 60, 'great carp': 48,
+                'catfish': 30, 'great catfish': 0, 'olympic catfish': 0, 'perch': 0, 'great perch': 15,
+                'longear sunfish': 0, 'great longear sunfish': 0, 'rudd': 0, 'great rudd': 0,
+                'spined loach': 0, 'european chub': 40, 'bream': 60, 'great bream': 44, 'tench': 30,
+                'great tench': 40, 'common bleak': 0, 'piranha': 16, 'great piranha': 10,
+            }
+        },
+        'buzzbait': {
+            waitTimeReduction: 11000, // Reduces wait time by 11s
+            name: 'buzzbait',
+            tier: 2,
+            description: 'A rotating surface lure made for topwater strikes.',
+            fishChanceBonus: {
+                'roach': 0, 'great roach': 10, 'crucian': 0, 'great crucian': 0, 'carp': 0, 'great carp': 0,
+                'catfish': 25, 'great catfish': 10, 'olympic catfish': 0, 'perch': 35, 'great perch': 20,
+                'longear sunfish': 40, 'great longear sunfish': 65, 'rudd': 20, 'great rudd': 35,
+                'spined loach': 0, 'european chub': 40, 'bream': 10, 'great bream': 5, 'tench': 0,
+                'great tench': 0, 'common bleak': 20, 'piranha': 40, 'great piranha': 20,
+            }
+        },
+        'high contrast wobbler': {
+            waitTimeReduction: 22000, // Reduces wait time by 22s
+            name: 'high contrast wobbler',
+            tier: 3,
+            description: 'A flashy wobbler with aggressive movement.',
+            fishChanceBonus: {
+                'roach': 0, 'great roach': 5, 'crucian': 0, 'great crucian': 0, 'carp': 20, 'great carp': 15,
+                'catfish': 25, 'great catfish': 15, 'olympic catfish': 0, 'perch': 45, 'great perch': 30,
+                'longear sunfish': 0, 'great longear sunfish': 0, 'rudd': 15, 'great rudd': 25,
+                'spined loach': 0, 'european chub': 55, 'bream': 15, 'great bream': 5, 'tench': 0,
+                'great tench': 0, 'common bleak': 5, 'piranha': 30, 'great piranha': 20,
+            }
+        },
+        'walker': {
+            waitTimeReduction: 9000, // Reduces wait time by 9s
+            name: 'walker',
+            tier: 2,
+            description: 'A surface lure made for side-to-side action.',
+            fishChanceBonus: {
+                'roach': 0, 'great roach': 5, 'crucian': 0, 'great crucian': 0, 'carp': 0, 'great carp': 0,
+                'catfish': 15, 'great catfish': 5, 'olympic catfish': 0, 'perch': 55, 'great perch': 30,
+                'longear sunfish': 35, 'great longear sunfish': 50, 'rudd': 25, 'great rudd': 35,
+                'spined loach': 0, 'european chub': 50, 'bream': 10, 'great bream': 0, 'tench': 0,
+                'great tench': 0, 'common bleak': 15, 'piranha': 25, 'great piranha': 15,
+            }
+        },
+        'soft lure painted with oil': {
+            waitTimeReduction: 6000, // Reduces wait time by 6s
+            name: 'soft lure painted with oil',
+            tier: 1,
+            description: 'A handmade lure carved from soft wood.',
+            fishChanceBonus: {
+                'roach': 10, 'great roach': 15, 'crucian': 5, 'great crucian': 10, 'carp': 30, 'great carp': 20,
+                'catfish': 20, 'great catfish': 10, 'olympic catfish': 0, 'perch': 25, 'great perch': 20,
+                'longear sunfish': 15, 'great longear sunfish': 25, 'rudd': 20, 'great rudd': 20,
+                'spined loach': 10, 'european chub': 25, 'bream': 20, 'great bream': 10, 'tench': 20,
+                'great tench': 15, 'common bleak': 15, 'piranha': 20, 'great piranha': 10,
+            }
+        },
+        'spoon': {
+            waitTimeReduction: 12000, // Reduces wait time by 12s
+            name: 'spoon',
+            tier: 2,
+            description: 'A shiny metal lure with wobbling action.',
+            fishChanceBonus: {
+                'roach': 0, 'great roach': 10, 'crucian': 0, 'great crucian': 0, 'carp': 10, 'great carp': 5,
+                'catfish': 15, 'great catfish': 2, 'olympic catfish': 0, 'perch': 50, 'great perch': 35,
+                'longear sunfish': 20, 'great longear sunfish': 30, 'rudd': 20, 'great rudd': 25,
+                'spined loach': 0, 'european chub': 40, 'bream': 20, 'great bream': 10, 'tench': 0,
+                'great tench': 0, 'common bleak': 10, 'piranha': 30, 'great piranha': 15,
+            }
+        },
+        
+        // ================== FISH-BAITS (GRASSLAND) ==================
+        
+        'roach': {
+            name: 'roach', tier: 0, description: 'A small, live fish. An excellent bait for predators.', chance: 0, waitTimeReduction: 4000,
+            fishChanceBonus: { 'great perch': 40, 'great rudd': 25, 'great tench': 15, 'bream': 20, 'catfish': 20, 'carp': 10, 'great european chub': 2, 'peacock bass': 15, 'piranha': 10, 'green oscar': 10 }
+        },
+        'crucian': {
+            name: 'crucian', tier: 0, description: 'A durable and nutritious meal for large, hungry fish.', chance: 0, waitTimeReduction: 5000,
+            fishChanceBonus: { 'great perch': 30, 'great rudd': 10, 'great tench': 40, 'bream': 30, 'catfish': 35, 'carp': 45, 'great european chub': 5, 'great peacock bass': 10, 'redtail catfish': 15, 'great payara': 5 }
+        },
+        'perch': {
+            name: 'perch', tier: 0, description: 'Being a small predator itself, it attracts bigger fish.', chance: 0, waitTimeReduction: 6000,
+            fishChanceBonus: { 'great perch': 50, 'great rudd': 30, 'great tench': 20, 'bream': 15, 'catfish': 30, 'carp': 5, 'great european chub': 3, 'great peacock bass': 20, 'payara': 15, 'tiger oscar': 10 }
+        },
+        'longear sunfish': {
+            name: 'longear sunfish', tier: 1, description: 'Its bright colors provoke predators to attack.', chance: 0, waitTimeReduction: 7000,
+            fishChanceBonus: { 'great perch': 45, 'great rudd': 40, 'bream': 10, 'catfish': 15, 'peacock bass': 40, 'tiger oscar': 25 }
+        },
+        'rudd': {
+            name: 'rudd', tier: 1, description: 'A shiny and active fish, great for medium-sized predators.', chance: 0, waitTimeReduction: 5000,
+            fishChanceBonus: { 'great perch': 35, 'great rudd': 50, 'bream': 25, 'catfish': 25, 'great european chub': 1, 'peacock bass': 25, 'payara': 15 }
+        },
+        'spined loach': {
+            name: 'spined loach', tier: 1, description: 'A small bottom-dweller, a delicacy for catfish and perch.', chance: 0, waitTimeReduction: 4000,
+            fishChanceBonus: { 'great perch': 20, 'catfish': 40, 'redtail catfish': 30 }
+        },
+        'common bleak': {
+            name: 'common bleak', tier: 0, description: 'A silvery shoaling fish, ideal for medium-sized predators.', chance: 0, waitTimeReduction: 4500,
+            fishChanceBonus: { 'great perch': 30, 'great rudd': 45, 'bream': 35, 'catfish': 20, 'piranha': 20, 'peacock bass': 15 }
+        },
+        
+        'great perch': {
+            name: 'great perch', tier: 1, description: 'A large perch, it poses a challenge and temptation for the biggest specimens.', chance: 0, waitTimeReduction: 10000,
+            fishChanceBonus: { 'great carp': 20, 'great catfish': 40, 'great bream': 10, 'great peacock bass': 35, 'great payara': 20, 'redtail catfish': 25 }
+        },
+        'great crucian': {
+            name: 'great crucian', tier: 1, description: 'A solid meal that no giant can resist.', chance: 0, waitTimeReduction: 9000,
+            fishChanceBonus: { 'great carp': 45, 'great catfish': 50, 'great bream': 30, 'great redtail catfish': 40 }
+        },
+        'great roach': {
+            name: 'great roach', tier: 1, description: 'A sizable roach, perfect for a large carp or catfish.', chance: 0, waitTimeReduction: 8000,
+            fishChanceBonus: { 'great carp': 35, 'great catfish': 30, 'great bream': 20, 'great redtail catfish': 30 }
+        },
+        'great rudd': {
+            name: 'great rudd', tier: 2, description: 'Its size and golden shine attract the largest predators.', chance: 0, waitTimeReduction: 11000,
+            fishChanceBonus: { 'great carp': 15, 'great catfish': 25, 'great bream': 40, 'great peacock bass': 25, 'great payara': 20 }
+        },
+
+        'bream': {
+            name: 'bream', tier: 1, description: 'Its deep body makes it an attractive target for the biggest predators.', chance: 0, waitTimeReduction: 7000,
+            fishChanceBonus: { 'great catfish': 20, 'olympic catfish': 0, 'great european chub': 18, 'great piranha': 30, 'redtail catfish': 15 }
+        },
+        'tench': {
+            name: 'tench', tier: 1, description: 'A tough, muscular fish that tempts powerful bottom-feeders.', chance: 0, waitTimeReduction: 7500,
+            fishChanceBonus: { 'great carp': 33, 'great catfish': 19, 'great tench': 30, 'great piranha': 20, 'great redtail catfish': 15 }
+        },
+         'piranha': {
+            name: 'piranha', tier: 0, description: 'The scent of its own kind drives other piranhas into a frenzy.', chance: 0, waitTimeReduction: 9000,
+            fishChanceBonus: { 'great piranha': 80, 'great payara': 15, 'great peacock bass': 10 }
+        },
+
+        // ================== FISH-BAITS (JURASSIC) ==================
+        'peacock bass': {
+            name: 'peacock bass', tier: 1, description: 'Its aggressive nature makes it an irresistible challenge for larger predators.', chance: 0, waitTimeReduction: 8500,
+            fishChanceBonus: { 'great peacock bass': 70, 'great payara': 25, 'great redtail catfish': 20, 'great catfish': 15 }
+        },
+        'pacu': {
+            name: 'pacu', tier: 0, description: 'A nutritious, fatty fish that attracts giant bottom-feeders.', chance: 0, waitTimeReduction: 6000,
+            fishChanceBonus: { 'redtail catfish': 40, 'great redtail catfish': 25, 'great peacock bass': 15, 'great catfish': 20, 'great carp': 10 }
+        },
+        'silver dollar fish': {
+            name: 'silver dollar fish', tier: 0, description: 'Its flashiness attracts visual hunters from all biomes.', chance: 0, waitTimeReduction: 4500,
+            fishChanceBonus: { 'piranha': 30, 'peacock bass': 20, 'green oscar': 15, 'tiger oscar': 10, 'perch': 25, 'rudd': 20, 'european chub': 15 }
+        },
+        'green oscar': {
+            name: 'green oscar', tier: 1, description: 'The presence of a rival Oscar triggers territorial aggression.', chance: 0, waitTimeReduction: 7000,
+            fishChanceBonus: { 'tiger oscar': 50, 'great peacock bass': 30, 'payara': 10 }
+        },
+    };
+}
 
     getRandomBait() {
         const availableBaits = Object.values(this.baitData);
@@ -640,90 +907,63 @@ class FishingManager {
     _initializeFishData() {
         this.fishData = {
             'grassland': {
-                'roach': {chance: 5, power: 22, minsize: 10, maxsize: 40, tier: 1, description: 'A common freshwater fish.'},
-                'crucian': {chance: 30, power: 28, minsize: 15, maxsize: 45, tier: 1, description: 'Often found in slow-moving waters.'},
-                'carp': {chance: 30, power: 31, minsize: 30, maxsize: 90, tier: 2, description: 'A large, strong fish.'},
-                'catfish': {chance: 20, power: 38, minsize: 30, maxsize: 100, tier: 4, description: 'A bottom-dweller with characteristic whiskers.'},
-                'perch': {chance: 50, power: 28, minsize: 10, maxsize: 60, tier: 1, description: 'A predatory fish with spiny fins.'},
-                'longear sunfish': {chance: 20, power: 34, minsize: 6, maxsize: 15, tier: 4, description: 'A colorful and small sunfish.'},
-                'rudd': {
-                    chance: 35,
-                    power: 20,
-                    minsize: 15,
-                    maxsize: 35,
-                    tier: 1,
-                    description: 'A small freshwater fish with red fins and golden sides.'
-                },
+                'roach': {chance: 80, power: 8, minsize: 9, maxsize: 19, scale: 0.9, tier: 0, description: 'A common freshwater fish.'},
+                'great roach': {chance: 15, power: 36, minsize: 21, maxsize: 48, scale: 1.15, tier: 1, description: 'A common freshwater fish.'},
 
-                'sand eel': {
-                    chance: 25,
-                    power: 12,
-                    minsize: 15,
-                    maxsize: 35,
-                    tier: 0,
-                    description: 'A slender marine fish that buries itself in the sand.'
-                },
+                'crucian': {chance: 40, power: 10, minsize: 13, maxsize: 26, scale: 0.85, tier: 0, description: 'Often found in slow-moving waters.'},
+                'great crucian': {chance: 15, power: 48, minsize: 28, maxsize: 52, scale: 1.05, tier: 1, description: 'Often found in slow-moving waters.'},
 
-                'spined loach': {
-                    chance: 40,
-                    power: 10,
-                    minsize: 8,
-                    maxsize: 12,
-                    tier: 0,
-                    description: 'A small bottom-dweller with barbels used to search for food.'
-                },
+                'carp': {chance: 15, power: 23, minsize: 28, maxsize: 52, scale: 0.95, tier: 1, description: 'A large, strong fish.'},
+                'great carp': {chance: 5, power: 62, minsize: 54, maxsize: 94, scale: 1.22, tier: 2, description: 'A large, strong fish.'},
 
-                'european chub': {
-                    chance: 30,
-                    power: 26,
-                    minsize: 25,
-                    maxsize: 60,
-                    tier: 2,
-                    description: 'A strong and adaptable river fish that feeds on almost anything.'
-                }
+                'catfish': {chance: 24, power: 38, minsize: 34, maxsize: 56, scale: 0.87, tier: 1, description: 'A bottom-dweller with characteristic whiskers.'},
+                'great catfish': {chance: 2, power: 72, minsize: 58, maxsize: 94, scale: 1.02, tier: 2, description: 'A bottom-dweller with characteristic whiskers.'},
+                'olympic catfish': {chance: 0.4, power: 94, minsize: 98, maxsize: 164, scale: 1.12, tier: 2, description: 'A bottom-dweller with characteristic whiskers.'},
+
+
+                'perch': {chance: 50, power: 14, minsize: 11, maxsize: 26, scale: 0.85, tier: 0, description: 'A predatory fish with spiny fins.'},
+                'great perch': {chance: 50, power: 45, minsize: 29, maxsize: 61, scale: 0.98, tier: 1, description: 'A predatory fish with spiny fins.'},
+                
+                'longear sunfish': {chance: 20, power: 14, minsize: 3, maxsize: 7, scale: 0.7, tier: 1, description: 'A colorful and small sunfish.'},
+                'great longear sunfish': {chance: 10, power: 34, minsize: 9, maxsize: 16, scale: 0.82, tier: 2, description: 'A colorful and small sunfish.'},
+
+                'rudd': {chance: 55, power: 18, minsize: 8, maxsize: 21, scale: 0.8, tier: 1, description: 'A small freshwater fish with red fins and golden sides.'},
+                'great rudd': {chance: 15, power: 38, minsize: 34, maxsize: 37, scale: 0.93, tier: 1, description: 'A small freshwater fish with red fins and golden sides.'},
+
+                
+                'spined loach': {chance: 70, power: 10, minsize: 4, maxsize: 12, scale: 0.7, tier: 0, description: 'A small bottom-dweller with barbels used to search for food.'},
+                
+                'european chub': {chance: 10, power: 26, minsize: 25, maxsize: 34, scale: 1, tier: 1, description: 'A strong and adaptable river fish that feeds on almost anything.'},
+                'great european chub': {chance: 7, power: 52, minsize: 37, maxsize: 64, scale: 1, tier: 2, description: 'A strong and adaptable river fish that feeds on almost anything.'},
+
+                'bream': {chance: 8, power: 36, minsize: 17, maxsize: 38, scale: 0.9, tier: 1, description: 'A flat-bodied freshwater fish that often swims in large schools.'},
+                'great bream': {chance: 2, power: 62, minsize: 43, maxsize: 81, scale: 1.12, tier: 2, description: 'A flat-bodied freshwater fish that often swims in large schools.'},
+
+                'tench': {chance: 18, power: 28, minsize: 17, maxsize: 31, scale: 0.9, tier: 1, description: 'A sturdy bottom-dwelling fish with olive-green coloring.'},
+                'great tench': {chance: 2, power: 51, minsize: 33, maxsize: 74, scale: 1.12, tier: 2, description: 'A sturdy bottom-dwelling fish with olive-green coloring.'},
+
+                'common bleak': {chance: 70, power: 24, minsize: 8, maxsize: 27, scale: 0.82, tier: 0, description: 'A small, silver shoaling fish found in rivers and lakes.'},
             },
             'jurassic': {
-                'roach': {chance: 40, power: 18, minsize: 15, maxsize: 40, tier: 0, description: 'A common freshwater fish.'},
-                'crucian': {chance: 30, power: 22, minsize: 15, maxsize: 45, tier: 2, description: 'Often found in slow-moving waters.'},
-                'carp': {chance: 30, power: 31, minsize: 30, maxsize: 90, tier: 3, description: 'A large, strong fish.'},
-                'catfish': {chance: 20, power: 38, minsize: 30, maxsize: 100, tier: 4, description: 'A bottom-dweller with characteristic whiskers.'},
-                'perch': {chance: 50, power: 28, minsize: 10, maxsize: 60, tier: 1, description: 'A predatory fish with spiny fins.'},
-                'longear sunfish': {chance: 20, power: 34, minsize: 6, maxsize: 15, tier: 4, description: 'A colorful and small sunfish.'},
-                'rudd': {
-                    chance: 35,
-                    power: 20,
-                    minsize: 15,
-                    maxsize: 35,
-                    tier: 1,
-                    description: 'A small freshwater fish with red fins and golden sides.'
-                },
+                'piranha': {chance: 30, power: 17, minsize: 16, maxsize: 36, scale: 0.9, tier: 0, description: 'A famous predatory fish from tropical rivers, often hunting in schools. '},
+                'great piranha': {chance: 15, power: 46, minsize: 40, maxsize: 54, scale: 1.06, tier: 1, description: 'A famous predatory fish from tropical rivers, often hunting in schools.'},
+                
+                'peacock bass': {chance: 35, power: 26, minsize: 28, maxsize: 53, scale: 0.92, tier: 1, description: 'Brightly colored predator, popular in sport fishing.'},
+                'great peacock bass': {chance: 13, power: 57, minsize: 57, maxsize: 106, scale: 1.12, tier: 2, description: 'Brightly colored predator, popular in sport fishing.'},
+                
+                'redtail catfish': {chance: 15, power: 62, minsize: 48, maxsize: 106, scale: 0.97, tier: 2, description: 'Large catfish with a striking red tail.'},
+                'great redtail catfish': {chance: 5, power: 82, minsize: 111, maxsize: 162, scale: 1.32, tier: 3, description: 'A massive catfish with a striking red tail.'},
 
-                'sand eel': {
-                    chance: 25,
-                    power: 12,
-                    minsize: 15,
-                    maxsize: 35,
-                    tier: 0,
-                    description: 'A slender marine fish that buries itself in the sand.'
-                },
+                'payara': {chance: 18, power: 62, minsize: 32, maxsize: 56, scale: 0.92, tier: 2, description: 'Known for its long fang-like teeth.'},
+                'great payara': {chance: 6, power: 86, minsize: 61, maxsize: 106, scale: 1.12, tier: 3, description: 'Known for its long fang-like teeth.'},
 
-                'spined loach': {
-                    chance: 40,
-                    power: 10,
-                    minsize: 8,
-                    maxsize: 12,
-                    tier: 0,
-                    description: 'A small bottom-dweller with barbels used to search for food.'
-                },
+                'pacu': {chance: 8, power: 12, minsize: 27, maxsize: 46, scale: 0.92, tier: 0, description: 'Looks like a piranha but eats mostly plants and fruits.'},
+                'great pacu': {chance: 4, power: 46, minsize: 51, maxsize: 96, scale: 1.14, tier: 1, description: 'Looks like a piranha but eats mostly plants and fruits.'},
 
-                'chub': {
-                    chance: 30,
-                    power: 26,
-                    minsize: 25,
-                    maxsize: 60,
-                    tier: 2,
-                    description: 'A strong and adaptable river fish that feeds on almost anything.'
-                }
+                'silver dollar fish': {chance: 50, power: 6, minsize: 4, maxsize: 17, scale: 0.87, tier: 0, description: 'Small, round, shiny schooling fish.'},
+
+                'green oscar': {chance: 30, power: 36, minsize: 29, maxsize: 46, scale: 0.93, tier: 0, description: 'Intelligent and colorful cichlid, often kept in aquariums.'},
+                'tiger oscar': {chance: 20, power: 47, minsize: 29, maxsize: 52, scale: 1.02, tier: 1, description: 'Intelligent and colorful cichlid, often kept in aquariums.'},
             }
         };
     }
@@ -733,26 +973,50 @@ class FishingManager {
     getRandomCatch(biomeName, currentBait) {
         const biomeFish = this.fishData[biomeName];
         if (!biomeFish) {
-            console.warn(`[FishingManager] Nie znaleziono danych dla biomu: ${biomeName}`);
+            console.warn(`[FishingManager] No fish data for biome: ${biomeName}`);
             return null;
         }
-        let availableFish = Object.entries(biomeFish).map(([name, data]) => ({ name, ...data }));
-        if (currentBait && currentBait.fishChanceBonus) {
-            availableFish = availableFish.map(fish => {
-                const bonus = currentBait.fishChanceBonus[fish.name];
-                if (bonus) {
-                    return { ...fish, chance: Math.max(0, fish.chance * bonus) };
-                }
-                return fish;
-            });
+        if (!currentBait) {
+            return null;
         }
-        if (availableFish.length === 0) return null;
+
+        let availableFish = Object.entries(biomeFish).map(([name, data]) => {
+            const bonus = currentBait.fishChanceBonus ? currentBait.fishChanceBonus[name] : undefined;
+            
+            // If the fish has a specific bonus defined for this bait
+            if (bonus !== undefined) {
+                return { ...data, name: name, chance: data.chance * bonus };
+            }
+            
+            // IMPORTANT: If no specific bonus, return the fish with its original base chance
+            // This allows baits like "worm" to catch fish in any biome that aren't on its bonus list.
+            return { ...data, name: name };
+        });
+
+        // Filter out any fish that now have a zero or negative chance.
+        availableFish = availableFish.filter(fish => fish.chance > 0);
+        
+        if (availableFish.length === 0) {
+            return null;
+        }
+
         const totalChanceWeight = availableFish.reduce((sum, fish) => sum + fish.chance, 0);
-        let randomPick = Math.random() * totalChanceWeight;
-        for (const fish of availableFish) {
-            if (randomPick < fish.chance) return fish; 
-            randomPick -= fish.chance;
+        if (totalChanceWeight <= 0) {
+            return null;
         }
+
+        let randomPick = Math.random() * totalChanceWeight;
+
+        for (const fishDef of availableFish) {
+            if (randomPick < fishDef.chance) {
+                const caughtFish = { ...fishDef };
+                const sizeCm = caughtFish.minsize + Math.random() * (caughtFish.maxsize - caughtFish.minsize);
+                caughtFish.size = Math.round(sizeCm);
+                return caughtFish;
+            }
+            randomPick -= fishDef.chance;
+        }
+
         return null;
     }
 }

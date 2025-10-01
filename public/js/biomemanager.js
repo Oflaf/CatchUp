@@ -74,6 +74,12 @@ class BiomeManager {
         this.campsiteImage = new Image();
         this.campsiteLoaded = false;
         this.campsiteObject = null;
+         this.playerIsNearCamp = false;
+
+         this.campsiteX = 0;
+        this.campsiteY = 0;
+        this.campsiteWidth = 0;
+        this.campsiteHeight = 0;
 
         this.campsiteImage.src = 'img/world/camp.png';
         this.campsiteImage.onload = () => { this.campsiteLoaded = true; };
@@ -231,11 +237,18 @@ class BiomeManager {
         this.WATER_PLANT_MAX_COUNT = Math.ceil(this.worldWidth / this.WATER_PLANT_SPAWN_INTERVAL) * 2;
         this.FRONT_WATER_PLANTS_OFFSET_Y = 50;
         this.firstLayerTilesGrid = [];
+        this.fishData = null;       // Obiekt z danymi ryb z fishing.js
+        this.fishImages = null;     // Obiekt z załadowanymi obrazami ryb
+        this.swimmingFish = [];     // Tablica aktywnych, pływających ryb
         this.setBiome(this.currentBiomeName);
         this._generateFirstLayerTileGrid();
         this._initializeClouds(); // Inicjalizacja chmur
     }
     
+
+    setPlayerProximity(isNear) { // <--- NOWOŚĆ
+        this.playerIsNearCamp = isNear;
+    }
     // ======================= POCZĄTEK NOWEGO KODU DLA CHMUR =======================
     /**
      * Inicjalizuje chmury, losując ich gęstość, pozycję, rozmiar, prędkość i wygląd.
@@ -368,20 +381,31 @@ class BiomeManager {
     }
 
     // === POCZĄTEK ZMIAN ===
-    _initializeCampsite(groundLevel) {
+    _initializeCampsite(groundLevel) { // <--- MODYFIKACJA
         if (this.campsiteObject) return;
 
         const CAMPSITE_SCALE = 3.5;
-        const SOURCE_WIDTH = 128;
-        const SOURCE_HEIGHT = 86;
+        // UWAGA: Użyj prawidłowych wymiarów źródłowych swojego obrazka camp.png
+        const SOURCE_WIDTH = 113; 
+        const SOURCE_HEIGHT = 80;
         
+        const campX = 600; // Ustaw pozycję X obozu
+        const campY = this.gameHeight - groundLevel; // y to spód obiektu, wyrównany z ziemią
+
         this.campsiteObject = {
-            x: 350, // Trochę na prawo od ogniska
-            y: this.gameHeight - groundLevel, // y to spód obiektu, wyrównany z ziemią
+            x: campX,
+            y: campY,
             scale: CAMPSITE_SCALE,
             width: SOURCE_WIDTH * CAMPSITE_SCALE,
             height: SOURCE_HEIGHT * CAMPSITE_SCALE,
         };
+
+        // <--- NOWOŚĆ: Ustawiamy publiczne właściwości dla detekcji kolizji.
+        // Pamiętaj, że `campsiteObject.y` to DÓŁ, więc Y dla kolizji to `y - height`.
+        this.campsiteX = campX;
+        this.campsiteY = campY - this.campsiteObject.height;
+        this.campsiteWidth = this.campsiteObject.width;
+        this.campsiteHeight = this.campsiteObject.height;
     }
     // === KONIEC ZMIAN ===
 
@@ -485,6 +509,186 @@ class BiomeManager {
         img.onerror = () => { this.biomeBuildingsImages[biomeName] = null; };
     }
 
+    setFishAssets(fishData, fishImages) {
+    this.fishData = fishData;
+    this.fishImages = fishImages;
+}
+
+/**
+ * Inicjalizuje ryby pływające w wodzie dla bieżącego biomu.
+ * Ta funkcja jest wywoływana przy zmianie biomu.
+ * @private
+ */
+
+_initializeSwimmingFish() {
+    this.swimmingFish = [];
+    if (!this.fishData || !this.fishImages || !this.fishData[this.currentBiomeName]) {
+        return;
+    }
+
+    const biomeFishData = this.fishData[this.currentBiomeName];
+    const fishNames = Object.keys(biomeFishData);
+    if (fishNames.length === 0) return;
+
+    const MAX_SWIMMING_FISH = 105;
+
+    for (let i = 0; i < MAX_SWIMMING_FISH; i++) {
+        const randomFishName = fishNames[Math.floor(Math.random() * fishNames.length)];
+        const fishInfo = biomeFishData[randomFishName];
+        const image = this.fishImages[randomFishName];
+
+        if (!image || !image.complete) continue;
+
+        this.swimmingFish.push({
+            name: randomFishName,
+            image: image,
+            x: Math.random() * this.worldWidth,
+            y: this.WATER_TOP_Y_WORLD + 50 + Math.random() * (this.gameHeight - this.WATER_TOP_Y_WORLD + 40),
+            scale: fishInfo.scale * (1.8 + Math.random() * 0.3),
+            speed: 40 + Math.random() * 60,
+            targetSpeed: 40 + Math.random() * 60,
+            direction: Math.random() < 0.5 ? 1 : -1,
+            decisionTimer: 2 + Math.random() * 8,
+        lerpFactor: 0.03,
+        rockingTime: Math.random() * Math.PI * 2,
+        // ==== NOWE WŁAŚCIWOŚCI ====
+        isFleeing: false,
+        fleeTimer: 0
+        });
+    }
+}
+
+ scareFishAt(splashX, splashY_ignored) {
+        const SCARE_RADIUS = 250;
+        const SCARE_RADIUS_SQUARED = SCARE_RADIUS * SCARE_RADIUS;
+        const FLEE_SPEED = 350;
+        const FLEE_DURATION = 1.5;
+
+        // ==================== KLUCZOWA POPRAWKA ====================
+        // Zakłócenie (plusk) zawsze dzieje się na powierzchni wody.
+        // Używamy przekazanego splashX, ale nadpisujemy Y na stałą wartość tafli wody.
+        const effectiveSplashY = this.WATER_TOP_Y_WORLD;
+        // =========================================================
+
+        this.swimmingFish.forEach(fish => {
+            if (fish.isFleeing) return;
+
+            // Oblicz dystans od punktu plusku na POWIERZCHNI wody
+            const dx = fish.x - splashX;
+            const dy = fish.y - effectiveSplashY; // <-- Używamy poprawionej wartości Y
+            const distanceSquared = dx * dx + dy * dy;
+
+            if (distanceSquared < SCARE_RADIUS_SQUARED) {
+                fish.isFleeing = true;
+                fish.fleeTimer = FLEE_DURATION;
+                fish.targetSpeed = FLEE_SPEED;
+
+                // Jeśli plusk jest po lewej stronie ryby (dx > 0), ryba ucieka w prawo.
+                // Jeśli plusk jest po prawej stronie ryby (dx < 0), ryba ucieka w lewo.
+                if (dx > 0) {
+                    fish.direction = 1; // Uciekaj w prawo
+                } else {
+                    fish.direction = -1; // Uciekaj w lewo
+                }
+            }
+        });
+    }
+/**
+ * Aktualizuje pozycję i zachowanie każdej ryby.
+ * @param {number} deltaTime Czas od ostatniej klatki.
+ * @private
+ */
+_updateSwimmingFish(deltaTime) {
+    this.swimmingFish.forEach(fish => {
+        // ==== NOWA LOGIKA STANU UCIECZKI ====
+        if (fish.isFleeing) {
+            fish.fleeTimer -= deltaTime;
+            if (fish.fleeTimer <= 0) {
+                // Koniec ucieczki, powrót do normalnego zachowania
+                fish.isFleeing = false;
+                fish.targetSpeed = 80 + Math.random() * 100; // Ustaw nową, normalną prędkość
+                fish.decisionTimer = 1 + Math.random() * 4; // Szybciej podejmij nową decyzję
+            }
+        }
+        // ===================================
+
+        fish.speed = fish.speed * (1 - fish.lerpFactor) + fish.targetSpeed * fish.lerpFactor;
+        fish.x += fish.speed * fish.direction * deltaTime;
+        fish.rockingTime += deltaTime;
+
+        // ==== MODYFIKACJA: Zwykłe decyzje tylko gdy ryba nie ucieka ====
+        if (!fish.isFleeing) {
+            fish.decisionTimer -= deltaTime;
+            if (fish.decisionTimer <= 0) {
+                fish.decisionTimer = 3 + Math.random() * 10;
+                fish.targetSpeed = 20 + Math.random() * 80;
+                if (Math.random() < 0.4) {
+                    fish.direction *= -1;
+                }
+            }
+        }
+        // ===============================================================
+        
+        const fishWidth = fish.image.naturalWidth * fish.scale;
+        if (fish.direction === 1 && fish.x > this.worldWidth + fishWidth) {
+            fish.x = -fishWidth;
+        } else if (fish.direction === -1 && fish.x < -fishWidth) {
+            fish.x = this.worldWidth + fishWidth;
+        }
+    });
+}
+/**
+ * Rysuje wszystkie aktywne ryby na ekranie.
+ * @param {CanvasRenderingContext2D} ctx Kontekst canvas.
+ */
+
+drawSwimmingFish(ctx) {
+    // Podstawowy kąt korekcyjny dla grafiki ryby
+    const baseRotation = 45 * (Math.PI / 180);
+
+    // ======== NOWE STAŁE DLA EFEKTU KOŁYSANIA ========
+    const MAX_ROCKING_ANGLE_DEG = 3; // Maksymalne wychylenie to 3 stopnie
+    const MAX_ROCKING_ANGLE_RAD = MAX_ROCKING_ANGLE_DEG * (Math.PI / 180);
+    const MAX_FISH_SPEED_FOR_ANIM = 100; // Prędkość, przy której kołysanie jest najsilniejsze
+    // ==================================================
+
+    this.swimmingFish.forEach(fish => {
+        const fishWidth = fish.image.naturalWidth * fish.scale;
+        const fishHeight = fish.image.naturalHeight * fish.scale;
+        
+        ctx.save();
+        ctx.globalAlpha = 0.75; 
+        ctx.translate(fish.x, fish.y);
+        ctx.scale(fish.direction, 1);
+        
+        // ======== NOWA LOGIKA ROTACJI ========
+        // Oblicz, jak bardzo ryba powinna się kołysać na podstawie jej aktualnej prędkości
+        const speedRatio = Math.min(fish.speed / MAX_FISH_SPEED_FOR_ANIM, 1.0);
+        const currentMaxRock = MAX_ROCKING_ANGLE_RAD * speedRatio;
+
+        // Częstotliwość (szybkość) kołysania również zależy od prędkości
+        const rockingFrequency = 2 + (speedRatio * 8); // Od 2 (wolno) do 10 (szybko)
+
+        // Oblicz aktualny kąt kołysania za pomocą fali sinusoidalnej
+        const rockingAngle = Math.sin(fish.rockingTime * rockingFrequency) * currentMaxRock;
+
+        // Połącz podstawowy kąt korekcyjny z dynamicznym kątem kołysania
+        const totalRotation = baseRotation + rockingAngle;
+        ctx.rotate(totalRotation);
+        // =====================================
+        
+        ctx.drawImage(
+            fish.image,
+            -fishWidth / 2,
+            -fishHeight / 2,
+            fishWidth,
+            fishHeight
+        );
+
+        ctx.restore();
+    });
+}
+
     setBiome(newBiomeName) {
         if (!this.biomeDefinitions[newBiomeName]) { return; }
         this.currentBiomeName = newBiomeName;
@@ -494,9 +698,7 @@ class BiomeManager {
         this.treesLoaded = false;
         this.backgroundLoaded = false;
         this.background2Loaded = false;
-        // ======================= POCZĄTEK ZMIAN DLA UNIKATOWEGO TŁA =======================
         this.tileBackgroundLoaded = false;
-        // ======================= KONIEC ZMIAN DLA UNIKATOWEGO TŁA ========================
         this.placedPiers = [];
         if (this.currentBiomeDef.backgroundPath) {
             this.backgroundImage.onload = () => { this.backgroundLoaded = true; };
@@ -509,9 +711,7 @@ class BiomeManager {
             this.background2Image.src = this.currentBiomeDef.background2Path;
         }
 
-        // ======================= POCZĄTEK ZMIAN DLA UNIKATOWEGO TŁA =======================
         if (this.currentBiomeDef.tileBackgroundPath) {
-            // Sprawdź, czy obrazek dla tego biomu jest już załadowany
             if (this.biomeTileBackgroundImages[newBiomeName] && this.biomeTileBackgroundImages[newBiomeName].complete) {
                 this.tileBackgroundLoaded = true;
             } else {
@@ -522,7 +722,6 @@ class BiomeManager {
                 this.biomeTileBackgroundImages[newBiomeName] = img;
             }
         }
-        // ======================= KONIEC ZMIAN DLA UNIKATOWEGO TŁA ========================
 
         this.waterPlantsImage.src = this.currentBiomeDef.waterPlantsPath;
         this.groundPlantsImage.src = this.currentBiomeDef.groundPlantsPath;
@@ -535,6 +734,11 @@ class BiomeManager {
         this.backgroundWaterPlants = this.waterPlantDefinitions.filter(p => p.layer === 'background');
         this.initializeWaterPlants();
         this._generateFirstLayerTileGrid();
+
+        // ====================== TUTAJ JEST POPRAWKA ======================
+        // Po każdej zmianie biomu, musimy zainicjalizować ryby na nowo.
+        this._initializeSwimmingFish();
+        // ===============================================================
     }
 
     setVillageData(villageType, villageXPosition, placedBuildingsData) {
@@ -789,7 +993,8 @@ class BiomeManager {
         this._updateFireplaceAnimation(deltaTime);
         this._updateFireplaceParticles(deltaTime);
         this._updateLightEffect(deltaTime);
-        this._updateClouds(deltaTime); // Aktualizacja chmur
+        this._updateSwimmingFish(deltaTime);
+        this._updateClouds(deltaTime);
     }
 
     drawWater(ctx, biomeName, cameraX) {
@@ -1006,12 +1211,28 @@ class BiomeManager {
         const drawY = y - height; // Obliczamy górną krawędź do rysowania
 
         ctx.drawImage(
-            this.campsiteImage,
-            0, 0,
-            113, 80, // Wymiary źródłowe obrazka
-            x-320, drawY,
-            width, height
-        );
+                this.campsiteImage,
+                x, drawY,
+                width, height
+            );
+        
+        // Krok 2: Jeśli gracz jest blisko, narysuj na wierzchu poświatę
+        if (this.playerIsNearCamp) {
+            ctx.save();
+            // Tryb 'lighter' powoduje, że kolory są dodawane, co tworzy efekt rozjaśnienia.
+            // Jest to znacznie wydajniejsze niż filtry CSS.
+            ctx.globalCompositeOperation = 'lighter';
+            ctx.globalAlpha = 0.35; // Ustaw subtelną przezroczystość dla poświaty
+
+            // Narysuj ten sam obrazek ponownie w tym samym miejscu
+            ctx.drawImage(
+                this.campsiteImage,
+                x, drawY,
+                width, height
+            );
+            
+            ctx.restore(); // Przywróć normalny tryb rysowania i alpha
+        }
     }
     // === KONIEC ZMIAN ===
 

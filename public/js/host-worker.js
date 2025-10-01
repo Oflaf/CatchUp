@@ -21,7 +21,7 @@ const DEDICATED_GAME_HEIGHT = 1080;
 const PLAYER_SIZE = 128;
 const GRAVITY = 1.6;
 const JUMP_STRENGTH = -25;
-const PLAYER_WALK_SPEED = 11;
+const PLAYER_WALK_SPEED = 8.8;
 const DECELERATION_FACTOR = 0.8;
 const MIN_VELOCITY_FOR_WALK_ANIMATION = 0.5;
 const GAME_TICK_RATE = 1000 / 60;
@@ -117,6 +117,9 @@ function getRandomBait() {
     const baitData = {
         'worm': { chance: 65, name: 'worm' },
         'bloodworm': { chance: 25, name: 'bloodworm' },
+        'maggots': { chance: 55, name: 'maggots' },
+        'beetle larvae': { chance: 15, name: 'beetle larvae' },
+        'dung worm': { chance: 10, name: 'dung worm' },
     };
     const availableBaits = Object.values(baitData);
     if (availableBaits.length === 0) return null;
@@ -480,14 +483,13 @@ class GameHost {
     
     this.room.players[peerId] = {
         id: peerId, x: 50, y: initialY, color: initialPlayerData.color, username: initialPlayerData.username,
+        selectedFlag: initialPlayerData.selectedFlag || 'pl', // <-- DODANA TA LINIA
         customizations: { ...initialPlayerData.customizations }, isJumping: false, velocityY: 0, 
         direction: 1, velocityX: 0, hasLineCast: false, floatWorldX: null, floatWorldY: null, 
         floatVelocityX: 0, floatVelocityY: 0, lineAnchorWorldX: null, lineAnchorWorldY: null, 
         rodTipWorldX: null, rodTipWorldY: null,
-        // ======================= POCZĄTEK ZMIAN =======================
         meActionText: null, 
         meActionExpiry: null
-        // ======================== KONIEC ZMIAN =========================
     };
         this.room.playerInputs[peerId] = { keys: {} };
         
@@ -704,10 +706,11 @@ class GameHost {
                 break;
             }
             case 'fishCaught': {
-    const { fishName, size, tier } = actionData.payload;
-    
+    // ======================= POCZĄTEK ZMIAN =======================
+    // Dodajemy 'scale' do destrukturyzacji
+    const { fishName, size, tier, scale } = actionData.payload;
+    // ======================== KONIEC ZMIAN =========================
 
-    // 1. Rozgłoś informację o animacji lecącej ryby do gracza (to już było)
     this.broadcast({
         type: 'fishCaughtBroadcast',
         payload: {
@@ -715,13 +718,13 @@ class GameHost {
             fishName: fishName,
             size: size,
             tier: tier,
-            // Przekazujemy aktualną pozycję spławika gracza, aby animacja zaczęła się we właściwym miejscu
+            // ======================= POCZĄTEK ZMIAN =======================
+            scale: scale, // <-- Przekazujemy 'scale' dalej
+            // ======================== KONIEC ZMIAN =========================
             startPos: { x: player.floatWorldX, y: player.floatWorldY }
         }
     });
 
-    // 2. <<< NOWA CZĘŚĆ >>>
-    // Rozgłoś osobną informację do czatu dla wszystkich graczy
     this.broadcast({
         type: 'fishCaughtNotification',
         payload: {
@@ -955,3 +958,4 @@ self.onmessage = function(event) {
             break;
     }
 };
+

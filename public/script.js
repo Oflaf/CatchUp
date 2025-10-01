@@ -92,6 +92,8 @@ let hostConnection;
 let hostPingTimeout = null; // Interwał sprawdzający, czy host żyje
 const HOST_TIMEOUT_LIMIT = 15000; // 15 sekund - limit dla gościa
 let lastPingTime = 0; // Czas ostatniego pingu od hosta
+let isPlayerInCampZone = false;
+let showCampPrompt = false;
 
 let gameHostWorker = null; 
 let hostPeerConnections = {};
@@ -101,7 +103,7 @@ let worldItems = [];
 let hostRoomConfiguration = null;
 let invX = 0, invY = 0;
 let splashCreatedForPlayers = new Set();
-
+let closestNpc = null; // <--- DODAJ TĘ LINIĘ
 
 const tutorial = {
     state: 1, 
@@ -121,7 +123,8 @@ const tutorialImagePaths = {
     info2: 'img/ui/info2.png',
     info3: 'img/ui/info3.png',
     info4: 'img/ui/info4.png',
-    info5: 'img/ui/info5.png'
+    info5: 'img/ui/info5.png',
+    info6: 'img/ui/info6.png'
 };
 const tutorialImages = {};
 
@@ -241,6 +244,252 @@ class StarManager {
 }
 
 const starManager = new StarManager();
+const flagImageCache = {}; // <-- NOWA ZMIENNA
+let isFlagListOpen = false; // <-- NOWA ZMIENNA
+
+// UWAGA: To jest skrócona lista dla przykładu. Możesz ją rozszerzyć o wszystkie 254 kody krajów.
+const COUNTRIES = [
+    { code: 'af', name: 'Afghanistan' },
+    { code: 'ax', name: 'Åland Islands' },
+    { code: 'al', name: 'Albania' },
+    { code: 'dz', name: 'Algeria' },
+    { code: 'as', name: 'American Samoa' },
+    { code: 'ad', name: 'Andorra' },
+    { code: 'ao', name: 'Angola' },
+    { code: 'ai', name: 'Anguilla' },
+    { code: 'ag', name: 'Antigua and Barbuda' },
+    { code: 'ar', name: 'Argentina' },
+    { code: 'am', name: 'Armenia' },
+    { code: 'aw', name: 'Aruba' },
+    { code: 'au', name: 'Australia' },
+    { code: 'at', name: 'Austria' },
+    { code: 'az', name: 'Azerbaijan' },
+    { code: 'bs', name: 'Bahamas' },
+    { code: 'bh', name: 'Bahrain' },
+    { code: 'bd', name: 'Bangladesh' },
+    { code: 'bb', name: 'Barbados' },
+    { code: 'by', name: 'Belarus' },
+    { code: 'be', name: 'Belgium' },
+    { code: 'bz', name: 'Belize' },
+    { code: 'bj', name: 'Benin' },
+    { code: 'bm', name: 'Bermuda' },
+    { code: 'bt', name: 'Bhutan' },
+    { code: 'bo', name: 'Bolivia' },
+    { code: 'bq', name: 'Bonaire' },
+    { code: 'ba', name: 'Bosnia and Herzegovina' },
+    { code: 'bw', name: 'Botswana' },
+    { code: 'br', name: 'Brazil' },
+    { code: 'bn', name: 'Brunei Darussalam' },
+    { code: 'bg', name: 'Bulgaria' },
+    { code: 'bf', name: 'Burkina Faso' },
+    { code: 'bi', name: 'Burundi' },
+    { code: 'cv', name: 'Cabo Verde' },
+    { code: 'kh', name: 'Cambodia' },
+    { code: 'cm', name: 'Cameroon' },
+    { code: 'ca', name: 'Canada' },
+    { code: 'ky', name: 'Cayman Islands' },
+    { code: 'cf', name: 'Central African Republic' },
+    { code: 'td', name: 'Chad' },
+    { code: 'cl', name: 'Chile' },
+    { code: 'cn', name: 'China' },
+    { code: 'cx', name: 'Christmas Island' },
+    { code: 'cc', name: 'Cocos (Keeling) Islands' },
+    { code: 'co', name: 'Colombia' },
+    { code: 'km', name: 'Comoros' },
+    { code: 'cg', name: 'Congo' },
+    { code: 'cd', name: 'Congo (DRC)' },
+    { code: 'ck', name: 'Cook Islands' },
+    { code: 'cr', name: 'Costa Rica' },
+    { code: 'ci', name: 'Côte d\'Ivoire' },
+    { code: 'hr', name: 'Croatia' },
+    { code: 'cu', name: 'Cuba' },
+    { code: 'cw', name: 'Curaçao' },
+    { code: 'cy', name: 'Cyprus' },
+    { code: 'cz', name: 'Czechia' },
+    { code: 'dk', name: 'Denmark' },
+    { code: 'dj', name: 'Djibouti' },
+    { code: 'dm', name: 'Dominica' },
+    { code: 'do', name: 'Dominican Republic' },
+    { code: 'ec', name: 'Ecuador' },
+    { code: 'eg', name: 'Egypt' },
+    { code: 'sv', name: 'El Salvador' },
+    { code: 'gq', name: 'Equatorial Guinea' },
+    { code: 'er', name: 'Eritrea' },
+    { code: 'ee', name: 'Estonia' },
+    { code: 'sz', name: 'Eswatini' },
+    { code: 'et', name: 'Ethiopia' },
+    { code: 'fk', name: 'Falkland Islands' },
+    { code: 'fo', name: 'Faroe Islands' },
+    { code: 'fj', name: 'Fiji' },
+    { code: 'fi', name: 'Finland' },
+    { code: 'fr', name: 'France' },
+    { code: 'gf', name: 'French Guiana' },
+    { code: 'pf', name: 'French Polynesia' },
+    { code: 'ga', name: 'Gabon' },
+    { code: 'gm', name: 'Gambia' },
+    { code: 'ge', name: 'Georgia' },
+    { code: 'de', name: 'Germany' },
+    { code: 'gh', name: 'Ghana' },
+    { code: 'gi', name: 'Gibraltar' },
+    { code: 'gr', name: 'Greece' },
+    { code: 'gl', name: 'Greenland' },
+    { code: 'gd', name: 'Grenada' },
+    { code: 'gp', name: 'Guadeloupe' },
+    { code: 'gu', name: 'Guam' },
+    { code: 'gt', name: 'Guatemala' },
+    { code: 'gg', name: 'Guernsey' },
+    { code: 'gn', name: 'Guinea' },
+    { code: 'gw', name: 'Guinea-Bissau' },
+    { code: 'gy', name: 'Guyana' },
+    { code: 'ht', name: 'Haiti' },
+    { code: 'va', name: 'Holy See' },
+    { code: 'hn', name: 'Honduras' },
+    { code: 'hk', name: 'Hong Kong' },
+    { code: 'hu', name: 'Hungary' },
+    { code: 'is', name: 'Iceland' },
+    { code: 'in', name: 'India' },
+    { code: 'id', name: 'Indonesia' },
+    { code: 'ir', name: 'Iran' },
+    { code: 'iq', name: 'Iraq' },
+    { code: 'ie', name: 'Ireland' },
+    { code: 'im', name: 'Isle of Man' },
+    { code: 'il', name: 'Israel' },
+    { code: 'it', name: 'Italy' },
+    { code: 'jm', name: 'Jamaica' },
+    { code: 'jp', name: 'Japan' },
+    { code: 'je', name: 'Jersey' },
+    { code: 'jo', name: 'Jordan' },
+    { code: 'kz', name: 'Kazakhstan' },
+    { code: 'ke', name: 'Kenya' },
+    { code: 'ki', name: 'Kiribati' },
+    { code: 'kp', name: 'North Korea' },
+    { code: 'kr', name: 'South Korea' },
+    { code: 'kw', name: 'Kuwait' },
+    { code: 'kg', name: 'Kyrgyzstan' },
+    { code: 'la', name: 'Laos' },
+    { code: 'lv', name: 'Latvia' },
+    { code: 'lb', name: 'Lebanon' },
+    { code: 'ls', name: 'Lesotho' },
+    { code: 'lr', name: 'Liberia' },
+    { code: 'ly', name: 'Libya' },
+    { code: 'li', name: 'Liechtenstein' },
+    { code: 'lt', name: 'Lithuania' },
+    { code: 'lu', name: 'Luxembourg' },
+    { code: 'mo', name: 'Macao' },
+    { code: 'mg', name: 'Madagascar' },
+    { code: 'mw', name: 'Malawi' },
+    { code: 'my', name: 'Malaysia' },
+    { code: 'mv', name: 'Maldives' },
+    { code: 'ml', name: 'Mali' },
+    { code: 'mt', name: 'Malta' },
+    { code: 'mh', name: 'Marshall Islands' },
+    { code: 'mq', name: 'Martinique' },
+    { code: 'mr', name: 'Mauritania' },
+    { code: 'mu', name: 'Mauritius' },
+    { code: 'yt', name: 'Mayotte' },
+    { code: 'mx', name: 'Mexico' },
+    { code: 'fm', name: 'Micronesia' },
+    { code: 'md', name: 'Moldova' },
+    { code: 'mc', name: 'Monaco' },
+    { code: 'mn', name: 'Mongolia' },
+    { code: 'me', name: 'Montenegro' },
+    { code: 'ms', name: 'Montserrat' },
+    { code: 'ma', name: 'Morocco' },
+    { code: 'mz', name: 'Mozambique' },
+    { code: 'mm', name: 'Myanmar' },
+    { code: 'na', name: 'Namibia' },
+    { code: 'nr', name: 'Nauru' },
+    { code: 'np', name: 'Nepal' },
+    { code: 'nl', name: 'Netherlands' },
+    { code: 'nc', name: 'New Caledonia' },
+    { code: 'nz', name: 'New Zealand' },
+    { code: 'ni', name: 'Nicaragua' },
+    { code: 'ne', name: 'Niger' },
+    { code: 'ng', name: 'Nigeria' },
+    { code: 'nu', name: 'Niue' },
+    { code: 'nf', name: 'Norfolk Island' },
+    { code: 'mk', name: 'North Macedonia' },
+    { code: 'mp', name: 'Northern Mariana Islands' },
+    { code: 'no', name: 'Norway' },
+    { code: 'om', name: 'Oman' },
+    { code: 'pk', name: 'Pakistan' },
+    { code: 'pw', name: 'Palau' },
+    { code: 'ps', name: 'Palestine' },
+    { code: 'pa', name: 'Panama' },
+    { code: 'pg', name: 'Papua New Guinea' },
+    { code: 'py', name: 'Paraguay' },
+    { code: 'pe', name: 'Peru' },
+    { code: 'ph', name: 'Philippines' },
+    { code: 'pl', name: 'Poland' },
+    { code: 'pt', name: 'Portugal' },
+    { code: 'pr', name: 'Puerto Rico' },
+    { code: 'qa', name: 'Qatar' },
+    { code: 're', name: 'Réunion' },
+    { code: 'ro', name: 'Romania' },
+    { code: 'ru', name: 'Russia' },
+    { code: 'rw', name: 'Rwanda' },
+    { code: 'bl', name: 'Saint Barthélemy' },
+    { code: 'sh', name: 'Saint Helena' },
+    { code: 'kn', name: 'Saint Kitts and Nevis' },
+    { code: 'lc', name: 'Saint Lucia' },
+    { code: 'mf', name: 'Saint Martin' },
+    { code: 'pm', name: 'Saint Pierre and Miquelon' },
+    { code: 'vc', name: 'Saint Vincent and the Grenadines' },
+    { code: 'ws', name: 'Samoa' },
+    { code: 'sm', name: 'San Marino' },
+    { code: 'st', name: 'Sao Tome and Principe' },
+    { code: 'sa', name: 'Saudi Arabia' },
+    { code: 'sn', name: 'Senegal' },
+    { code: 'rs', name: 'Serbia' },
+    { code: 'sc', name: 'Seychelles' },
+    { code: 'sl', name: 'Sierra Leone' },
+    { code: 'sg', name: 'Singapore' },
+    { code: 'sx', name: 'Sint Maarten' },
+    { code: 'sk', name: 'Slovakia' },
+    { code: 'si', name: 'Slovenia' },
+    { code: 'sb', name: 'Solomon Islands' },
+    { code: 'so', name: 'Somalia' },
+    { code: 'za', name: 'South Africa' },
+    { code: 'ss', name: 'South Sudan' },
+    { code: 'es', name: 'Spain' },
+    { code: 'lk', name: 'Sri Lanka' },
+    { code: 'sd', name: 'Sudan' },
+    { code: 'sr', name: 'Suriname' },
+    { code: 'se', name: 'Sweden' },
+    { code: 'ch', name: 'Switzerland' },
+    { code: 'sy', name: 'Syria' },
+    { code: 'tw', name: 'Taiwan' },
+    { code: 'tj', name: 'Tajikistan' },
+    { code: 'tz', name: 'Tanzania' },
+    { code: 'th', name: 'Thailand' },
+    { code: 'tl', name: 'Timor-Leste' },
+    { code: 'tg', name: 'Togo' },
+    { code: 'tk', name: 'Tokelau' },
+    { code: 'to', name: 'Tonga' },
+    { code: 'tt', name: 'Trinidad and Tobago' },
+    { code: 'tn', name: 'Tunisia' },
+    { code: 'tr', name: 'Turkey' },
+    { code: 'tm', name: 'Turkmenistan' },
+    { code: 'tc', name: 'Turks and Caicos Islands' },
+    { code: 'tv', name: 'Tuvalu' },
+    { code: 'ug', name: 'Uganda' },
+    { code: 'ua', name: 'Ukraine' },
+    { code: 'ae', name: 'United Arab Emirates' },
+    { code: 'gb', name: 'United Kingdom' },
+    { code: 'us', name: 'United States' },
+    { code: 'uy', name: 'Uruguay' },
+    { code: 'uz', name: 'Uzbekistan' },
+    { code: 'vu', name: 'Vanuatu' },
+    { code: 've', name: 'Venezuela' },
+    { code: 'vn', name: 'Viet Nam' },
+    { code: 'vg', name: 'Virgin Islands (British)' },
+    { code: 'vi', name: 'Virgin Islands (U.S.)' },
+    { code: 'wf', name: 'Wallis and Futuna' },
+    { code: 'eh', name: 'Western Sahara' },
+    { code: 'ye', name: 'Yemen' },
+    { code: 'zm', name: 'Zambia' },
+    { code: 'zw', name: 'Zimbabwe' },
+];
 
 // ====================================================================
 // === SEKCJA NPC: Nowa klasa do zarządzania NPC ===
@@ -254,6 +503,7 @@ class NPCManager {
         this.currentBiome = null;
         this.drawPlayer = drawPlayerFunc;
         this.villageBounds = { minX: 0, maxX: 0 };
+        this.INTERACTION_RADIUS = 150; // <--- NOWOŚĆ: Promień interakcji
     }
 
     loadCurrentBiomeAssets(biomeName, callback) {
@@ -328,6 +578,7 @@ class NPCManager {
                     velocityY: 0,
                     state: 'idle',
                     stateTimer: Math.random() * 7 + 2,
+                    isInteracting: false, // <--- NOWOŚĆ: Stan interakcji
                     customizations: { hat: 'none', hair: randomHair, accessories: 'none', beard: 'none', clothes: 'none', pants: 'none', shoes: 'none', rightHandItem: ITEM_NONE, hairHue: 150, hairBrightness: randomBrightness, hairSaturation: 100, beardHue: 0, beardBrightness: 100, beardSaturation: 100 }
                 };
                 this.npcs.push(npc);
@@ -339,7 +590,18 @@ class NPCManager {
     update(deltaTime) {
         if (!this.areAssetsLoaded || this.npcs.length === 0) return;
         const PLAYER_WALK_SPEED = 5;
+
         this.npcs.forEach(npc => {
+            // Jeśli gracz jest w interakcji, NPC stoi w miejscu w trybie idle.
+            if (npc.isInteracting) {
+                npc.isWalking = false;
+                npc.isIdle = true;
+                npc.velocityX = 0;
+                npc.idleAnimationFrame = (npc.idleAnimationFrame + 1) % IDLE_ANIM_CYCLE_LENGTH;
+                return; // Przerwij dalsze przetwarzanie dla tego NPC
+            }
+
+            // Normalna logika ruchu, gdy nie ma interakcji
             npc.stateTimer -= deltaTime;
             if (npc.stateTimer <= 0) {
                 if (npc.state === 'idle') {
@@ -444,7 +706,7 @@ const JUMP_LEG_WAVE_ANGLE = JUMP_LEG_WAVE_DEGREES * (Math.PI / 180);
 const JUMP_ARM_WAVE_ANGLE = JUMP_ARM_WAVE_DEGREES * (Math.PI / 180);
 let currentZoomLevel = 1.0;
 const MIN_ZOOM = 0.76;
-const MAX_ZOOM = 1.8;
+const MAX_ZOOM = 1.9;
 const ZOOM_SENSITIVITY = 0.1;
 const ITEM_NONE = 'none';
 const ITEM_ROD = 'rod';
@@ -468,14 +730,34 @@ const characterImagePaths = { leg: 'img/character/leg.png', body: 'img/character
 const customizationUIPaths = { frame: 'img/ui/frame.png' };
 const fishingUIPaths = { strike: 'img/ui/strike.png', fishframe: 'img/ui/fishframe.png' };
 const baitImagePaths = {
+    //robaki
     'worm': 'img/bait/worm.png',
+    'beetle larvae': 'img/bait/beetle larvae.png',
+    'dung worm': 'img/bait/dung worm.png',
+    'maggots': 'img/bait/maggots.png',
     'bloodworm': 'img/bait/bloodworm.png',
+    
+    //lure i wobbler
+    'handmade jig': 'img/bait/handmade jig.png',
+    'red chubby wobbler': 'img/bait/red chubby wobbler.png',
+    'wooden two-jointed wobbler': 'img/bait/wooden two-jointed wobbler.png',
+    'green kavasaki wobbler': 'img/bait/green kavasaki wobbler.png',
+    'high contrast wobbler': 'img/bait/high contrast wobbler.png',
+    'walker': 'img/bait/walker.png',
+    'spoon': 'img/bait/spoon.png',
+    'soft lure painted with oil': 'img/bait/soft lure painted with oil.png',
+    'buzzbait': 'img/bait/buzzbait.png',
+
 };
 // ======================= POCZĄTEK ZMIAN =======================
 const hookImagePaths = {
     'weedless': 'img/hook/weedless.png',
-    'sharp': 'img/hook/sharp.png',
+    'beaked': 'img/hook/beaked.png',
+    'double': 'img/hook/double.png',
+    'treble': 'img/hook/treble.png',
 };
+
+
 // ======================== KONIEC ZMIAN =========================
 
 const characterImages = {};
@@ -529,7 +811,9 @@ hair: {
     '"Emo"': 'img/character/custom/hair/type21.png',
     'Dandere': 'img/character/custom/hair/type22.png',
     'Smart Bangs': 'img/character/custom/hair/type23.png',
-    'Richie': 'img/character/custom/hair/type24.png',
+    'Ponytail': 'img/character/custom/hair/type25.png',
+    'Pigtails': 'img/character/custom/hair/type24.png',
+    'Richie': 'img/character/custom/hair/type26.png',
 },
 accessories: {
     'librarian glasses': 'img/character/custom/accessories/type1.png',
@@ -603,6 +887,7 @@ shoes: {
 let localPlayer = { 
     id: null, 
     username: 'Player' + Math.floor(Math.random()*1000), 
+    selectedFlag: 'pl', // <-- DODANA WŁAŚCIWOŚĆ Z DOMYŚLNĄ FLAGĄ
     danglingBobber: { x: 0, y: 0, oldX: 0, oldY: 0, initialized: false }, 
     color: '#' + Math.floor(Math.random()*16777215).toString(16).padStart(6,'0'), 
     x: 50, 
@@ -680,7 +965,7 @@ let isCustomizationMenuOpen = false;
 const customizationCategories = [ 'hat', 'hair', 'accessories', 'beard', 'clothes', 'pants', 'shoes' ];
 let selectedCategoryIndex = 0;
 let localPlayerCustomizations = { hat: 'none', hair: 'none', accessories: 'none', beard: 'none', clothes: 'none', pants: 'none', shoes: 'none', rightHandItem: ITEM_NONE, hairSaturation: 100, hairHue: 0, hairBrightness: 100, beardSaturation: 100, beardHue: 0, beardBrightness: 100 };
-const customizationOptions = { hat: ['none', 'red cap', 'blue cap', 'special', 'street cap', 'pink cap', 'black cap', 'oldschool cap', 'blue straight cap', 'green straight cap', 'kiddo cap', 'red seasonal', 'green seasonal', 'flat cap','cowboy hat', 'adventure hat', 'straw hat', 'lake hat', 'fedora'], hair: ['none', 'Curly', 'Curly Short', 'Short', 'Plodder', '"Cool Kid"', 'inmate', 'maniac', 'alopecia', 'Mrs. Robinson', 'Bob', 'Mod', 'U.S Army', 'Afro', 'Tuber Afro', 'Greasy Grunge', 'Mohawk', 'Messy Bun', 'Juliet', 'I`m a Star', 'Short Twist', '"Emo"', "Dandere", "Smart Bangs", 'Richie'], accessories: ['none', 'librarian glasses', 'mole glasses', 'square glasses', 'black glasses', 'red glasses', '"cool" glasses', 'sunglasses', 'windsor glasses', 'eye patch'], beard: ['none', 'goatee', 'overgrown goatee', 'mustache', 'overgrown mustache', 'charlie?', 'unshaven', 'sailor'], clothes: ['none', 'white t-shirt', 'black t-shirt', 'hawaii shirt', 'red hoodie', 'blue hoodie', 'skull t-shirt', 'red plaid vest', 'dark blue soccer shirt', 'green soccer shirt', 'light soccer shirt', 'denim vest', 'coquette dress'], pants: ['none', 'blue jeans', 'ripped jeans', 'black jeans', 'black skirt', 'black bell bottom jeans', 'blue bell bottom jeans'], shoes: ['none', 'shoes1'] };
+const customizationOptions = { hat: ['none', 'red cap', 'blue cap', 'special', 'street cap', 'pink cap', 'black cap', 'oldschool cap', 'blue straight cap', 'green straight cap', 'kiddo cap', 'red seasonal', 'green seasonal', 'flat cap','cowboy hat', 'adventure hat', 'straw hat', 'lake hat', 'fedora'], hair: ['none', 'Curly', 'Curly Short', 'Short', 'Plodder', '"Cool Kid"', 'inmate', 'maniac', 'alopecia', 'Mrs. Robinson', 'Bob', 'Mod', 'U.S Army', 'Afro', 'Tuber Afro', 'Greasy Grunge', 'Mohawk', 'Messy Bun', 'Juliet', 'I`m a Star', 'Short Twist', '"Emo"', "Dandere", "Smart Bangs", 'Ponytail','Richie', 'Pigtails'], accessories: ['none', 'librarian glasses', 'mole glasses', 'square glasses', 'black glasses', 'red glasses', '"cool" glasses', 'sunglasses', 'windsor glasses', 'eye patch'], beard: ['none', 'goatee', 'overgrown goatee', 'mustache', 'overgrown mustache', 'charlie?', 'unshaven', 'sailor'], clothes: ['none', 'white t-shirt', 'black t-shirt', 'hawaii shirt', 'red hoodie', 'blue hoodie', 'skull t-shirt', 'red plaid vest', 'dark blue soccer shirt', 'green soccer shirt', 'light soccer shirt', 'denim vest', 'coquette dress'], pants: ['none', 'blue jeans', 'ripped jeans', 'black jeans', 'black skirt', 'black bell bottom jeans', 'blue bell bottom jeans'], shoes: ['none', 'shoes1'] };
 let currentCustomizationOptionIndices = { hat: 0, hair: 0, accessories: 0, beard: 0, clothes: 0, pants: 0, shoes: 0 };
 
 const MENU_WIDTH=150,MENU_TEXT_COLOR='white',MENU_HIGHLIGHT_COLOR='yellow',MENU_ITEM_HEIGHT=40,MENU_X_OFFSET_FROM_PLAYER=0,MENU_Y_OFFSET_FROM_PLAYER_TOP_CENTER_SELECTED=-40,ROLLER_VISIBLE_COUNT=3,ROLLER_ITEM_VERTICAL_SPACING=1.2*MENU_ITEM_HEIGHT,ROLLER_DIMMED_SCALE=.7,ROLLER_DIMMED_ALPHA=.3,FRAME_SIZE=186,FRAME_OFFSET_X_FROM_MENU_TEXT=30,FRAME_OSCILLATION_SPEED=.05,FRAME_ROTATION_DEGREES=5;let frameOscillationTime=0;const PIXEL_FONT='Segoe UI, monospace',DEFAULT_FONT_SIZE_USERNAME=16,DEFAULT_FONT_SIZE_MENU=24,HAIR_SATURATION_MIN=0,HAIR_SATURATION_MAX=200,HAIR_BRIGHTNESS_MIN=40,HAIR_BRIGHTNESS_MAX=200,HAIR_HUE_MIN=0,HAIR_HUE_MAX=360,BEARD_SATURATION_MIN=0,BEARD_SATURATION_MAX=200,BEARD_BRIGHTNESS_MIN=40,BEARD_BRIGHTNESS_MAX=200,BEARD_HUE_MIN=0,BEARD_HUE_MAX=360;
@@ -688,6 +973,9 @@ let customizationMenuState = 'category';
 let selectedColorPropertyIndex = 0;
 const colorProperties = ['brightness', 'saturation', 'hue'];
 let lastTime = 0;
+let campPromptAlpha = 0;
+let npcPromptAlpha = 0; // <--- DODAJ TĘ LINIĘ
+const PROMPT_FADE_SPEED = 4;
 
 // ======================= WKLEJ TUTAJ =======================
 const FISH_TIER_CONFIG = {
@@ -713,7 +1001,13 @@ const TIER_NAMES = {
 
 const inventoryManager = new InventoryManager();
 const fishingManager = new FishingManager();
+// ======================= POCZĄTEK ZMIANY =======================
+// Przekazujemy teraz OBA managery, aby TradingManager miał dostęp do danych o przedmiotach
+const tradingManager = new TradingManager(inventoryManager, fishingManager);
+// ======================== KONIEC ZMIANY =========================
 
+// Teraz, gdy oba managery istnieją, możemy je ze sobą połączyć
+inventoryManager.linkTradingManager(tradingManager);
 // ======================= POCZĄTEK ZMIAN =======================
 // Przekaż potrzebne obiekty konfiguracyjne do obu managerów
 fishingManager.tierConfig = FISH_TIER_CONFIG;
@@ -736,6 +1030,145 @@ const FISH_DISPLAY_DURATION = 4000;
 // ====================================================================
 // === SEKCJA 2: FUNKCJE RYSOWANIA (z modyfikacjami) ===
 // ====================================================================
+
+function drawCampPrompt() {
+    // Optymalizacja: jeśli komunikat jest w pełni przezroczysty, nie wykonuj reszty funkcji
+    if (campPromptAlpha <= 0) return;
+
+    const image = tutorialImages['info6'];
+    if (!image || !image.complete) return;
+
+    // --- Definicje stylów i treści ---
+    const textBefore = "Press ";
+    const textAfter = " to go to the next location";
+    const PROMPT_FONT_SIZE = 16;
+    const PROMPT_FONT_FAMILY = `'Segoe UI', sans-serif`;
+    const PROMPT_TEXT_COLOR = 'white';
+    const PROMPT_OUTLINE_COLOR = 'black';
+    const PROMPT_OUTLINE_WIDTH = 4;
+    const SPACING = -24;
+
+    // --- Obliczenia wymiarów i pozycji ---
+    const playerScreenX = (localPlayer.x - cameraX + playerSize / 2) * currentZoomLevel;
+    const playerScreenY = (localPlayer.y - cameraY) * currentZoomLevel;
+    const drawHeight = PROMPT_FONT_SIZE * 6.5;
+    const drawWidth = (image.width / image.height) * drawHeight;
+    ctx.font = `bold ${PROMPT_FONT_SIZE}px ${PROMPT_FONT_FAMILY}`;
+    const textBeforeWidth = ctx.measureText(textBefore).width;
+    const textAfterWidth = ctx.measureText(textAfter).width;
+    const totalWidth = textBeforeWidth + drawWidth + textAfterWidth + SPACING * 2;
+    const promptY = playerScreenY + TUTORIAL_Y_OFFSET - drawHeight;
+    
+    // --- Animacje bujania ---
+    const time = Date.now() / 1000;
+    const mainRockingAngle = Math.sin(time * (TUTORIAL_ROCKING_SPEED * 0.5)) * ((TUTORIAL_ROCKING_ANGLE_DEGREES * 0.4) * Math.PI / 180);
+    const imageRockingAngle = Math.sin(time * (TUTORIAL_ROCKING_SPEED * 1.2)) * ((TUTORIAL_ROCKING_ANGLE_DEGREES * 0.8) * Math.PI / 180);
+    
+    // --- Rysowanie ---
+    ctx.save();
+    
+    // === GŁÓWNA ZMIANA: Zastosowanie efektu fade-in/out ===
+    ctx.globalAlpha = campPromptAlpha;
+
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.translate(playerScreenX, promptY + drawHeight / 2);
+    ctx.rotate(mainRockingAngle);
+
+    // Ustawienia tekstu
+    ctx.font = `bold ${PROMPT_FONT_SIZE}px ${PROMPT_FONT_FAMILY}`;
+    ctx.strokeStyle = PROMPT_OUTLINE_COLOR;
+    ctx.lineWidth = PROMPT_OUTLINE_WIDTH;
+    ctx.fillStyle = PROMPT_TEXT_COLOR;
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'middle';
+
+    let currentX = -totalWidth / 2;
+
+    // Rysowanie tekstu przed obrazkiem
+    ctx.strokeText(textBefore, currentX, 0);
+    ctx.fillText(textBefore, currentX, 0);
+    currentX += textBeforeWidth + SPACING;
+
+    // Rysowanie obrazka z jego osobnym bujaniem
+    ctx.save();
+    ctx.translate(currentX + drawWidth / 2, 0); 
+    ctx.rotate(imageRockingAngle);
+    ctx.drawImage(image, -drawWidth / 2, -drawHeight / 2, drawWidth, drawHeight);
+    ctx.restore(); 
+
+    currentX += drawWidth + SPACING;
+
+    // Rysowanie tekstu po obrazku
+    ctx.strokeText(textAfter, currentX, 0);
+    ctx.fillText(textAfter, currentX, 0);
+
+    ctx.restore();
+}
+
+function drawNpcTradePrompt() {
+    if (npcPromptAlpha <= 0) return;
+
+    const image = tutorialImages['info6'];
+    if (!image || !image.complete) return;
+
+    const textBefore = "press ";
+    const textAfter = " to trade"; // <--- ZMIENIONY TEKST
+    const PROMPT_FONT_SIZE = 16;
+    const PROMPT_FONT_FAMILY = `'Segoe UI', sans-serif`;
+    const PROMPT_TEXT_COLOR = 'white';
+    const PROMPT_OUTLINE_COLOR = 'black';
+    const PROMPT_OUTLINE_WIDTH = 4;
+    const SPACING = -24;
+
+    const playerScreenX = (localPlayer.x - cameraX + playerSize / 2) * currentZoomLevel;
+    const playerScreenY = (localPlayer.y - cameraY) * currentZoomLevel;
+    const drawHeight = PROMPT_FONT_SIZE * 6.5;
+    const drawWidth = (image.width / image.height) * drawHeight;
+    ctx.font = `bold ${PROMPT_FONT_SIZE}px ${PROMPT_FONT_FAMILY}`;
+    const textBeforeWidth = ctx.measureText(textBefore).width;
+    const textAfterWidth = ctx.measureText(textAfter).width;
+    const totalWidth = textBeforeWidth + drawWidth + textAfterWidth + SPACING * 2;
+    const promptY = playerScreenY + TUTORIAL_Y_OFFSET - drawHeight;
+    
+    const time = Date.now() / 1000;
+    const mainRockingAngle = Math.sin(time * (TUTORIAL_ROCKING_SPEED * 0.5)) * ((TUTORIAL_ROCKING_ANGLE_DEGREES * 0.4) * Math.PI / 180);
+    const imageRockingAngle = Math.sin(time * (TUTORIAL_ROCKING_SPEED * 1.2)) * ((TUTORIAL_ROCKING_ANGLE_DEGREES * 0.8) * Math.PI / 180);
+    
+    ctx.save();
+    ctx.globalAlpha = npcPromptAlpha; // <--- UŻYWA NOWEJ ZMIENNEJ
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.translate(playerScreenX, promptY + drawHeight / 2);
+    ctx.rotate(mainRockingAngle);
+
+    ctx.font = `bold ${PROMPT_FONT_SIZE}px ${PROMPT_FONT_FAMILY}`;
+    ctx.strokeStyle = PROMPT_OUTLINE_COLOR;
+    ctx.lineWidth = PROMPT_OUTLINE_WIDTH;
+    ctx.fillStyle = PROMPT_TEXT_COLOR;
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'middle';
+
+    let currentX = -totalWidth / 2;
+
+    ctx.strokeText(textBefore, currentX, 0);
+    ctx.fillText(textBefore, currentX, 0);
+    currentX += textBeforeWidth + SPACING;
+
+    ctx.save();
+    ctx.translate(currentX + drawWidth / 2, 0); 
+    ctx.rotate(imageRockingAngle);
+    ctx.drawImage(image, -drawWidth / 2, -drawHeight / 2, drawWidth, drawHeight);
+    ctx.restore(); 
+
+    currentX += drawWidth + SPACING;
+
+    ctx.strokeText(textAfter, currentX, 0);
+    ctx.fillText(textAfter, currentX, 0);
+
+    ctx.restore();
+}
+
+
+
 const npcManager = new NPCManager(drawPlayer);
 
 function loadImages(callback) {
@@ -921,6 +1354,8 @@ function applyCycleColorBalance() {
 }
 
 
+
+
 function updateCamera() {
     const playerWorldCenterX = localPlayer.x + playerSize / 2;
     const playerWorldCenterY = localPlayer.y + playerSize / 2;
@@ -997,6 +1432,14 @@ function drawPlayer(p, imageSet = characterImages) {
         return;
     }
     ctx.save();
+
+    // ======================= POCZĄTEK ZMIANY =======================
+    // Efekt wizualny (podświetlenie) jest teraz kontrolowany przez nową flagę.
+    if (p.isHighlighted === true) {
+        ctx.filter = 'brightness(1.6)';
+    }
+    // ======================== KONIEC ZMIANY ========================
+
     let a = 0, b = 0, c = 0, d = 0, e = 0, f = 0, g = 0, h = 0;
     const i = (Number(p.animationFrame || 0) % animationCycleLength) / animationCycleLength,
         j = (Number(p.idleAnimationFrame || 0) % IDLE_ANIM_CYCLE_LENGTH) / IDLE_ANIM_CYCLE_LENGTH,
@@ -1063,7 +1506,6 @@ function drawPlayer(p, imageSet = characterImages) {
     }
     ctx.drawImage(imageSet.body, o, q + a, playerSize, playerSize);
 
-    // 2. Narysuj na ciele górną część spodni.
     if (playerPants && playerPants !== 'none') {
         const pantsImage = characterCustomImages.pants[playerPants];
         if (pantsImage && pantsImage.complete) {
@@ -1071,7 +1513,6 @@ function drawPlayer(p, imageSet = characterImages) {
         }
     }
 
-    // 3. Narysuj na ciele (i na spodniach) koszulkę/ubranie.
     if (playerClothes && "none" !== playerClothes) {
         const clothesImage = characterCustomImages.clothes[playerClothes];
         if (clothesImage && clothesImage.complete) {
@@ -1113,8 +1554,6 @@ function drawPlayer(p, imageSet = characterImages) {
         x && x.complete && (ctx.save(), ctx.translate(o + headPivotInImageX, q + u + HAIR_VERTICAL_OFFSET + headPivotInImageY - HAIR_VERTICAL_OFFSET), ctx.rotate(f), drawFilteredCharacterPart(ctx, x, -headPivotInImageX, -(headPivotInImageY - HAIR_VERTICAL_OFFSET), playerSize, playerSize, v.hairSaturation, v.hairHue, v.hairBrightness), ctx.restore())
     }
     
-
-
     const B = v.hat;
     if (B && "none" !== B) {
         const C = characterCustomImages.hat[B];
@@ -1139,12 +1578,67 @@ function drawPlayer(p, imageSet = characterImages) {
     if (p.username) {
         const ROD_TIP_OFFSET_X = playerSize * 1.07; 
         const ROD_TIP_OFFSET_Y = -playerSize * 0.32;
-        p.customizations && p.customizations.rightHandItem === ITEM_ROD ? (p.rodTipWorldX = p.x + playerSize / 2 + (frontArmOffsetX + originalArmPivotInImageX - playerSize / 2) * p.direction + (ROD_TIP_OFFSET_X * Math.cos(b) - ROD_TIP_OFFSET_Y * Math.sin(b)) * p.direction, p.rodTipWorldY = p.y + playerSize / 2 + (0 + originalArmPivotInImageY - playerSize / 2) + (ROD_TIP_OFFSET_X * Math.sin(b) + ROD_TIP_OFFSET_Y * Math.cos(b)), p.id === localPlayer.id && (localPlayer.rodTipWorldX = p.rodTipWorldX, localPlayer.rodTipWorldY = p.rodTipWorldY)) : (p.rodTipWorldX = null, p.rodTipWorldY = null, p.id === localPlayer.id && (localPlayer.rodTipWorldX = null, localPlayer.rodTipWorldY = null)), ctx.fillStyle = "white", ctx.font = `${DEFAULT_FONT_SIZE_USERNAME}px ${PIXEL_FONT}`, ctx.textAlign = "center", ctx.fillText(p.username || p.id.substring(0, 5), p.x + playerSize / 2, p.y - 10 + a)
-    if (p.meActionText && Date.now() < p.meActionExpiry) {
-            ctx.fillStyle = "#C77CFF"; // Fioletowy kolor
+        if (p.customizations && p.customizations.rightHandItem === ITEM_ROD) {
+            p.rodTipWorldX = p.x + playerSize / 2 + (frontArmOffsetX + originalArmPivotInImageX - playerSize / 2) * p.direction + (ROD_TIP_OFFSET_X * Math.cos(b) - ROD_TIP_OFFSET_Y * Math.sin(b)) * p.direction;
+            p.rodTipWorldY = p.y + playerSize / 2 + (0 + originalArmPivotInImageY - playerSize / 2) + (ROD_TIP_OFFSET_X * Math.sin(b) + ROD_TIP_OFFSET_Y * Math.cos(b));
+            if (p.id === localPlayer.id) {
+                localPlayer.rodTipWorldX = p.rodTipWorldX;
+                localPlayer.rodTipWorldY = p.rodTipWorldY;
+            }
+        } else {
+            p.rodTipWorldX = null;
+            p.rodTipWorldY = null;
+            if (p.id === localPlayer.id) {
+                localPlayer.rodTipWorldX = null;
+                localPlayer.rodTipWorldY = null;
+            }
+        }
+        
+        ctx.font = `${DEFAULT_FONT_SIZE_USERNAME}px ${PIXEL_FONT}`;
+        const usernameText = p.username || p.id.substring(0, 5);
+        const usernameMetrics = ctx.measureText(usernameText);
+        const usernameWidth = usernameMetrics.width;
+        
+        const flagWidth = 24;
+        const flagHeight = 18;
+        const flagPadding = 5;
+        
+        const totalWidth = usernameWidth + flagPadding + flagWidth;
+        const playerCenterX = p.x + playerSize / 2;
+        
+        const startX = playerCenterX - totalWidth / 2;
+        const usernameY = p.y - 14 + a;
+
+        if (p.selectedFlag) {
+            let flagImg = flagImageCache[p.selectedFlag];
+            if (!flagImg) {
+                flagImg = new Image();
+                flagImg.src = `https://flagcdn.com/160x120/${p.selectedFlag.toLowerCase()}.png`;
+                flagImageCache[p.selectedFlag] = flagImg;
+            }
+
+            if (flagImg.complete && flagImg.naturalWidth > 0) {
+                const flagY = usernameY - flagHeight / 2 - 5;
+                ctx.drawImage(flagImg, startX, flagY, flagWidth, flagHeight);
+            }
+        }
+        
+        ctx.strokeStyle = 'black';
+        ctx.lineWidth = 3; 
+        ctx.fillStyle = "white";
+        ctx.textAlign = "left";
+        const textX = startX + flagWidth + flagPadding;
+        ctx.strokeText(usernameText, textX, usernameY); 
+        ctx.fillText(usernameText, textX, usernameY);
+    
+        if (p.meActionText && Date.now() < p.meActionExpiry) {
+            ctx.fillStyle = "#C77CFF";
             ctx.font = `italic ${DEFAULT_FONT_SIZE_USERNAME}px ${PIXEL_FONT}`;
-            // Rysuj tekst nieco wyżej niż nick gracza
-            ctx.fillText(`* ${p.meActionText} *`, p.x + playerSize / 2, p.y - 30 + a);
+            ctx.textAlign = "center";
+            const meText = `* ${p.meActionText} *`;
+            const meTextY = p.y - 36 + a;
+            ctx.strokeText(meText, playerCenterX, meTextY);
+            ctx.fillText(meText, playerCenterX, meTextY);
         }
     }
 }
@@ -1457,8 +1951,12 @@ function updateAndDrawCaughtFishAnimations() {
             const fishImg = allItemImages[anim.fishName];
 
             if (fishImg && fishImg.complete) {
-                const fishWidth = fishImg.width * 2.1;
-                const fishHeight = fishImg.height * 2.1;
+                // ======================= POCZĄTEK ZMIAN =======================
+                const BASE_ANIMATION_SCALE = 2.1;
+                const finalScale = BASE_ANIMATION_SCALE * (anim.scale || 1); // Używamy 'anim.scale'
+                const fishWidth = fishImg.width * finalScale;
+                const fishHeight = fishImg.height * finalScale;
+                // ======================== KONIEC ZMIAN =========================
                 ctx.drawImage(fishImg, currentPos.x - fishWidth / 2, currentPos.y - fishHeight / 2, fishWidth, fishHeight);
             }
         } else {
@@ -1467,8 +1965,12 @@ function updateAndDrawCaughtFishAnimations() {
             const fishImg = allItemImages[anim.fishName];
 
             if (fishImg && fishImg.complete) {
-                const fishWidth = fishImg.width * 2.1;
-                const fishHeight = fishImg.height * 2.1;
+                // ======================= POCZĄTEK ZMIAN =======================
+                const BASE_ANIMATION_SCALE = 2.1;
+                const finalScale = BASE_ANIMATION_SCALE * (anim.scale || 1); // Używamy 'anim.scale' również tutaj
+                const fishWidth = fishImg.width * finalScale;
+                const fishHeight = fishImg.height * finalScale;
+                // ======================== KONIEC ZMIAN =========================
                 ctx.drawImage(fishImg, currentPos.x - fishWidth / 2, currentPos.y - fishHeight / 2, fishWidth, fishHeight);
             }
 
@@ -1519,6 +2021,10 @@ function updateAndDrawCaughtFishAnimations() {
     }
     ctx.restore();
 }
+
+// ... reszta kodu ...
+
+
 
 // ====================================================================
 // === SEKCJA 3: LOGIKA SIECIOWA (z modyfikacjami) ===
@@ -1836,6 +2342,90 @@ function gameLoop(currentTime) {
         return;
     }
 
+     if (currentRoom && currentRoom.gameData) {
+        const playerRect = { x: localPlayer.x, y: localPlayer.y, width: playerSize, height: playerSize };
+        const playerCenterX = localPlayer.x + playerSize / 2;
+
+        const campRect = {
+            x: biomeManager.campsiteX || 0,
+            y: biomeManager.campsiteY || 0,
+            width: biomeManager.campsiteWidth || 256,
+            height: biomeManager.campsiteHeight || 256
+        };
+        isPlayerInCampZone = (playerRect.x < campRect.x + campRect.width &&
+                              playerRect.x + playerRect.width > campRect.x &&
+                              playerRect.y < campRect.y + campRect.height &&
+                              playerRect.y + playerRect.height > campRect.y);
+        
+        // =================================================================
+        // === POCZĄTEK ZMIAN: UJEDNOLICONA LOGIKA AKTYWNEJ INTERAKCJI ===
+        // =================================================================
+        let activeInteraction = { type: 'none', distance: Infinity };
+
+        // Krok 1: Sprawdź obóz
+        if (isPlayerInCampZone && tutorial.state === 'finished') {
+            const campCenterX = campRect.x + campRect.width / 2;
+            activeInteraction = {
+                type: 'camp',
+                distance: Math.abs(playerCenterX - campCenterX)
+            };
+        }
+
+        // Krok 2: Znajdź najbliższego NPC
+        
+        // WAŻNA POPRAWKA: Resetujemy globalną zmienną bez `let`, aby nie tworzyć nowej lokalnej.
+        closestNpc = null; 
+        let isPlayerStillNearTradingNpc = false;
+
+        npcManager.npcs.forEach(npc => {
+            const npcCenterX = npc.x + playerSize / 2;
+            const distance = Math.abs(playerCenterX - npcCenterX);
+
+            if (tradingManager.isTradeWindowOpen && tradingManager.activeNpc?.id === npc.id && distance < npcManager.INTERACTION_RADIUS) {
+                isPlayerStillNearTradingNpc = true;
+            }
+
+            if (distance < npcManager.INTERACTION_RADIUS && distance < activeInteraction.distance) {
+                activeInteraction = { type: 'npc', distance: distance };
+                closestNpc = npc; // Tutaj przypisujemy do globalnej zmiennej
+            }
+        });
+
+        // Automatyczne zamykanie handlu
+        if (tradingManager.isTradeWindowOpen && !isPlayerStillNearTradingNpc) {
+            tradingManager.stopTrading();
+        }
+
+        // Krok 3: Ustaw stany podświetlenia i interakcji dla wszystkich NPC
+        npcManager.npcs.forEach(npc => {
+            npc.isHighlighted = (npc === closestNpc);
+            npc.isInteracting = (tradingManager.isTradeWindowOpen && tradingManager.activeNpc?.id === npc.id);
+        });
+
+        // Krok 4: Ustaw komunikaty
+        showCampPrompt = (activeInteraction.type === 'camp');
+        let showNpcTradePrompt = (activeInteraction.type === 'npc');
+
+        if (biomeManager.setPlayerProximity) {
+            biomeManager.setPlayerProximity(showCampPrompt);
+        }
+        
+        if (showCampPrompt) {
+            campPromptAlpha = Math.min(1, campPromptAlpha + PROMPT_FADE_SPEED * deltaTime);
+        } else {
+            campPromptAlpha = Math.max(0, campPromptAlpha - PROMPT_FADE_SPEED * deltaTime);
+        }
+
+        if (showNpcTradePrompt && !tradingManager.isTradeWindowOpen) {
+            npcPromptAlpha = Math.min(1, npcPromptAlpha + PROMPT_FADE_SPEED * deltaTime);
+        } else {
+            npcPromptAlpha = Math.max(0, npcPromptAlpha - PROMPT_FADE_SPEED * deltaTime);
+        }
+        // ===============================================================
+        // === KONIEC ZMIAN: UJEDNOLICONA LOGIKA AKTYWNEJ INTERAKCJI ===
+        // ===============================================================
+    }
+
     if (insectsInRoom.length > 0 && currentRoom.gameData) {
         const worldWidth = currentRoom.gameData.worldWidth || 0;
         insectsInRoom.forEach(insect => {
@@ -1894,12 +2484,13 @@ function gameLoop(currentTime) {
     const playerCenterScreenX = (localPlayer.x + playerSize / 2 - cameraX) * currentZoomLevel;
     const playerCenterScreenY = (localPlayer.y + playerSize / 2 - cameraY) * currentZoomLevel;
 
-    const inventoryWidth = 3 * inventoryManager.SLOT_SIZE + 2 * inventoryManager.GRID_GAP;
-    const inventoryHeight = 3 * inventoryManager.SLOT_SIZE + 2 * inventoryManager.GRID_GAP;
+    // Zmieniono z 3 na 4 sloty i z 2 na 3 przerwy w obliczeniach
+    const inventoryWidth = 4 * inventoryManager.SLOT_SIZE + 3 * inventoryManager.GRID_GAP;
+    const inventoryHeight = 4 * inventoryManager.SLOT_SIZE + 3 * inventoryManager.GRID_GAP;
 
     // Ustaw pozycję ekwipunku względem stabilnego środka gracza, a nie jego lewego górnego rogu.
     // Odejmujemy szerokość ekwipunku i dodatkowy margines, aby umieścić go po lewej stronie gracza.
-    invX = playerCenterScreenX - inventoryWidth - 60; 
+    invX = playerCenterScreenX - inventoryWidth - 140; 
     if (invX < 10) invX = 10; // Upewnij się, że ekwipunek nie wychodzi poza lewą krawędź ekranu.
 
     // Wyśrodkowujemy ekwipunek w pionie względem środka gracza.
@@ -1910,7 +2501,7 @@ function gameLoop(currentTime) {
     const inventoryOrigin = { x: invX, y: invY };
     inventoryManager.origin = inventoryOrigin;
     // ======================== KONIEC ZMIAN ========================
-    
+    tradingManager.update(deltaTime);
     inventoryManager.update(deltaTime);
     if (localPlayer.isCasting) {
         localPlayer.fishingBarTime += FISHING_SLIDER_SPEED;
@@ -1984,10 +2575,15 @@ function gameLoop(currentTime) {
         biomeManager.drawForegroundPlants(ctx);
 
         drawInsects();
+                
         biomeManager.drawForegroundBiomeGround(ctx,b,g);
+        biomeManager.drawSwimmingFish(ctx);
         drawPierSupports(ctx);
+        
         if (biomeManager.drawPiers) biomeManager.drawPiers(ctx);
+        
         biomeManager.drawWater(ctx,b,cameraX);
+
         
         // === POCZĄTEK TWOJEJ POPRAWKI ===
         // Dodaj tę jedną linię, aby narysować chmury na pierwszym planie
@@ -2002,10 +2598,13 @@ function gameLoop(currentTime) {
     drawDanglingBobber(ctx, localPlayer);
     
     drawTutorialHelper();
+    drawCampPrompt();
+    drawNpcTradePrompt(); // <--- DODAJ TĘ LINIĘ
     if(isCustomizationMenuOpen) drawCustomizationMenu();
     if(localPlayer.isCasting) drawFishingBar(localPlayer);
     
     inventoryManager.draw(ctx, PIXEL_FONT);
+    tradingManager.draw(ctx);
 
 // ======================= POCZĄTEK KODU DEBUGUJĄCEGO =======================
 ctx.save();
@@ -2044,42 +2643,66 @@ const MAX_PLAYERS_PER_ROOM = 4;
 
 // --- GŁÓWNA FUNKCJA MATCHMAKINGU ---
 
-joinGameBtn.addEventListener('click', () => {
-    joinGameBtn.disabled = true;
-    optionsBtn.disabled = true;
-    
-    // === POCZĄTEK ZMIAN ===
+function transitionToNewRoom() {
+    // Pokaż ekran ładowania, aby ukryć grę
     loadingManager.show(() => {
-        // Ekran jest już widoczny, rozpoczynamy proces łączenia
-        menuStatus.textContent = 'Initializing network...';
-        loadingManager.updateProgress(10);
+        // Krok 1: Użyj naszej nowej, scentralizowanej funkcji do posprzątania wszystkiego
+        console.log('[TRANSITION] Cleaning up current room state...');
+        leaveCurrentRoomUI();
 
-        initializePeer((peerId) => {
-            if (!peerId) {
-                showNotification("Network error: Could not initialize.", 'error');
-                resetMenuUI();
-                loadingManager.hide(); // Ukryj ekran w razie błędu
-                return;
-            }
-            localPlayer.id = peerId;
-            loadingManager.updateProgress(30);
-
-            menuStatus.textContent = 'Searching for an available game...';
-            
-            const joinableRooms = Object.values(availableRooms)
-                .filter(room => room.playerCount < MAX_PLAYERS_PER_ROOM);
-
-            if (joinableRooms.length > 0) {
-                tryToJoinRooms(joinableRooms);
-            } else {
-                menuStatus.textContent = 'No available games found. Creating a new one...';
-                loadingManager.updateProgress(50);
-                createNewRoom();
-            }
-        });
+        // Krok 2: Uruchom logikę szukania nowego pokoju.
+        // Dajemy małe opóźnienie, aby dać czas na pełne zniszczenie starego obiektu Peer
+        // i uniknąć potencjalnych wyścigów z serwerem brokera.
+        setTimeout(() => {
+             console.log('[TRANSITION] Starting new matchmaking process...');
+             initiateMatchmakingProcess(true);
+        }, 250);
     });
-    // === KONIEC ZMIAN ===
-});
+}
+
+function initiateMatchmakingProcess(isTransition = false) {
+    if (!isTransition) {
+        // Jeśli to standardowe kliknięcie w menu, zablokuj przyciski i pokaż ekran ładowania
+        joinGameBtn.disabled = true;
+        optionsBtn.disabled = true;
+        loadingManager.show(() => startNetworkHandshake());
+    } else {
+        // Jeśli to przejście, ekran ładowania jest już widoczny, więc od razu startujemy
+        startNetworkHandshake();
+    }
+}
+
+function startNetworkHandshake() {
+    menuStatus.textContent = 'Initializing network...';
+    loadingManager.updateProgress(10);
+
+    initializePeer((peerId) => {
+        if (!peerId) {
+            showNotification("Network error: Could not initialize.", 'error');
+            resetMenuUI();
+            loadingManager.hide();
+            return;
+        }
+        localPlayer.id = peerId;
+        loadingManager.updateProgress(30);
+
+        menuStatus.textContent = 'Searching for an available game...';
+        
+        const joinableRooms = Object.values(availableRooms)
+            .filter(room => room.playerCount < MAX_PLAYERS_PER_ROOM);
+
+        if (joinableRooms.length > 0) {
+            tryToJoinRooms(joinableRooms);
+        } else {
+            menuStatus.textContent = 'No available games found. Creating a new one...';
+            loadingManager.updateProgress(50);
+            createNewRoom();
+        }
+    });
+}
+
+// Stary event listener jest teraz uproszczony do wywołania naszej nowej funkcji
+joinGameBtn.addEventListener('click', () => initiateMatchmakingProcess(false));
 
 function tryToJoinRooms(rooms) {
     let roomIndex = 0;
@@ -2152,52 +2775,83 @@ function tryToJoinRooms(rooms) {
 function createNewRoom() {
     isHost = true;
     
-    console.log(`[HOST-UI] Tworzenie nowego pokoju z Peer ID: ${localPlayer.id}. Uruchamianie workera...`);
+    console.log(`[HOST-UI] Creating a new room with Peer ID: ${localPlayer.id}. Starting worker...`);
     gameHostWorker = new Worker('js/host-worker.js');
     
     gameHostWorker.onmessage = (event) => {
         const { type, peerId: targetPeerId, message } = event.data;
+        // Host nasłuchuje na wiadomości od workera...
         if (type === 'broadcast' || (type === 'sendTo' && targetPeerId === localPlayer.id)) {
             handleDataFromServer(message);
         }
+        // ...i przekazuje je do odpowiednich klientów
         if (type === 'broadcast') {
             Object.values(hostPeerConnections).forEach(conn => conn.send(message));
         } else if (type === 'sendTo' && targetPeerId !== localPlayer.id) {
             const conn = hostPeerConnections[targetPeerId];
-            if (conn) conn.send(message);
+            if (conn) {
+                 // Sprawdzamy, czy połączenie na pewno jest otwarte przed wysłaniem
+                 if (conn.open) {
+                    conn.send(message);
+                 } else {
+                    console.warn(`[HOST-UI] Tried to send message to a non-open connection: ${targetPeerId}`);
+                 }
+            }
         }
     };
 
     const roomName = `Game of ${localPlayer.username}`;
+    // Informujemy worker, aby zainicjalizował stan gry
     gameHostWorker.postMessage({ type: 'start', payload: { id: localPlayer.id, username: localPlayer.username, color: localPlayer.color, customizations: localPlayer.customizations } });
 
+    // Rejestrujemy się jako host na serwerze sygnałowym
     signalingSocket.emit('register-host', { peerId: localPlayer.id, name: roomName });
 
+    // === POCZĄTEK KLUCZOWEJ ZMIANY ===
     peer.on('connection', (conn) => {
-        console.log(`[HOST-UI] Nowe połączenie od klienta: ${conn.peer}`);
-        hostPeerConnections[conn.peer] = conn;
+        console.log(`[HOST-UI] Incoming connection request from: ${conn.peer}`);
+
+        // Czekaj na PEŁNE otwarcie połączenia, zanim cokolwiek zrobisz!
         conn.on('open', () => {
+            console.log(`[HOST-UI] Connection with ${conn.peer} is now open and ready!`);
+            
+            // 1. Dopiero TERAZ dodaj połączenie do listy aktywnych
+            hostPeerConnections[conn.peer] = conn;
+
+            // 2. Obsługuj dane przychodzące od tego klienta
             conn.on('data', (data) => {
+                // Gdy gracz poprosi o dołączenie, przekaż jego dane do workera
                 if (data.type === 'requestJoin') {
                     gameHostWorker.postMessage({ type: 'addPlayer', payload: { peerId: conn.peer, initialPlayerData: data.payload } });
                 } else {
+                    // Inne dane (input, akcje) również przekaż do workera
                     gameHostWorker.postMessage({ type: data.type, payload: { ...data.payload, peerId: conn.peer } });
                 }
             });
+
+            // 3. Obsłuż rozłączenie klienta
+            conn.on('close', () => {
+                console.log(`[HOST-UI] Connection with ${conn.peer} closed.`);
+                delete hostPeerConnections[conn.peer];
+                gameHostWorker.postMessage({ type: 'removePlayer', payload: { peerId: conn.peer } });
+                signalingSocket.emit('notify-leave', localPlayer.id);
+            });
         });
-        conn.on('close', () => {
-            delete hostPeerConnections[conn.peer];
-            gameHostWorker.postMessage({ type: 'removePlayer', payload: { peerId: conn.peer } });
-            signalingSocket.emit('notify-leave', localPlayer.id);
+        
+        conn.on('error', (err) => {
+            console.error(`[HOST-UI] Connection error with ${conn.peer}:`, err);
         });
     });
+    // === KONIEC KLUCZOWEJ ZMIANY ===
     
+    // Ustawiamy "fałszywe" połączenie dla hosta, aby mógł komunikować się z workerem
     hostConnection = {
         send: (data) => gameHostWorker.postMessage({ type: data.type, payload: { ...data.payload, peerId: localPlayer.id } })
     };
     
+    // Dodajemy samego hosta do gry (z opóźnieniem, aby worker był gotowy)
     setTimeout(() => {
-        console.log('[HOST-UI] Dodawanie hosta jako gracza...');
+        console.log('[HOST-UI] Adding host as a player...');
         gameHostWorker.postMessage({ type: 'addPlayer', payload: { peerId: localPlayer.id, initialPlayerData: localPlayer } });
     }, 100);
 }
@@ -2246,7 +2900,6 @@ function initializePeer(callback) {
     });
     peer.on('error', (err) => {
         console.error("MAIN PEER OBJECT ERROR: ", err);
-        showNotification(`A fatal PeerJS error occurred: ${err.type}`, 'error');
         resetMenuUI();
     });
     peer.on('disconnected', () => {
@@ -2535,101 +3188,112 @@ playersData.forEach(serverPlayer => {
 }
 
 leaveRoomBtn.addEventListener('click', () => {
-    // Logika dla klienta (nie-hosta) opuszczającego pokój - pozostaje bez zmian
+    // Logika dla gościa pozostaje prosta - po prostu czyści swój stan.
     if (!isHost) {
-        if (hostConnection) {
-            hostConnection.close();
-        }
-        // Reszta jest obsługiwana przez event 'close' na połączeniu,
-        // który już poprawnie wywołuje leaveCurrentRoomUI().
-        // Nie ma potrzeby robić nic więcej.
+        leaveCurrentRoomUI();
         return;
     }
 
-    // --- NOWA, POPRAWIONA LOGIKA DLA HOSTA ZAMYKAJĄCEGO POKÓJ ---
+    // Logika dla hosta zamykającego pokój
     if (isHost) {
-        console.log('[HOST-UI] Host zamyka pokój. Powiadamianie klientów...');
+        console.log('[HOST-UI] Host is closing the room. Notifying clients...');
 
-        // 1. Stwórz wiadomość o zamknięciu pokoju.
-        const closingMessage = { type: 'hostClosing', payload: { reason: 'Host zamknął pokój.' } };
-
-        // 2. Wyślij wiadomość do wszystkich podłączonych graczy.
+        // 1. Opcjonalnie: Wyślij wiadomość do podłączonych graczy, że pokój jest zamykany
+        const closingMessage = { type: 'hostClosing', payload: {} };
         Object.values(hostPeerConnections).forEach(conn => {
             if (conn && conn.open) {
                 try {
                     conn.send(closingMessage);
                 } catch (e) {
-                    console.error("Błąd podczas wysyłania wiadomości o zamknięciu do klienta:", e);
+                    console.error("Error sending closing message to client:", e);
                 }
             }
         });
 
-        // 3. Daj sieci krótką chwilę na wysłanie wiadomości, zanim zaczniesz wszystko niszczyć.
+        // 2. Daj sieci krótką chwilę na wysłanie wiadomości
         setTimeout(() => {
-            console.log('[HOST-UI] Zamykanie połączeń i usług.');
-
-            // 4. Teraz zamknij formalnie wszystkie połączenia.
-            Object.values(hostPeerConnections).forEach(conn => {
-                if (conn) conn.close();
-            });
-            hostPeerConnections = {};
-
-            // 5. Wyrejestruj się z serwera sygnałowego.
-            // Użycie 'notify-leave' jest OK, jeśli serwer wie, że ten peerId to host.
-            const hostPeerId = peer?.id;
-            if (hostPeerId) {
-                signalingSocket.emit('notify-leave', hostPeerId);
+            // === KLUCZOWA ZMIANA: WYŚLIJ NOWY EVENT DO SERWERA SYGNALIZACYJNEGO ===
+            // Robimy to PRZED zniszczeniem obiektu peer, gdy jego ID jest jeszcze ważne.
+            if (peer?.id) {
+                console.log(`[HOST-UI] Emitting 'host-closing-room' to signaling server for peerId: ${peer.id}`);
+                signalingSocket.emit('host-closing-room', { peerId: peer.id });
             }
-
-            // 6. Zatrzymaj worker.
-            if (gameHostWorker) {
-                gameHostWorker.terminate();
-                gameHostWorker = null;
-            }
-
-            // 7. Zniszcz obiekt Peer hosta.
-            if (peer && !peer.destroyed) {
-                peer.destroy();
-                peer = null;
-            }
-
-            // 8. Zaktualizuj interfejs użytkownika.
+            
+            // 4. Użyj naszej scentralizowanej funkcji do posprzątania całej reszty (w tym peer.destroy())
             leaveCurrentRoomUI();
-
-        }, 200); // 200ms opóźnienia powinno wystarczyć.
+        }, 200);
     }
 });
 
 
 
 function leaveCurrentRoomUI() {
-    gameContainerDiv.style.display='none'; lobbyDiv.style.display='block';
-    currentRoom=null; playersInRoom={}; insectsInRoom=[];
-    pierSupportData = [];
-    npcManager.clear();
-    isHost=false; hostConnection=null; 
-    
-    if (gameHostWorker) {
-        gameHostWorker.terminate();
-        gameHostWorker = null;
-    }
-    hostPeerConnections = {};
+    console.log("Leaving room. Initiating full cleanup...");
+    gameContainerDiv.style.display = 'none';
+    lobbyDiv.style.display = 'block';
 
-    createRoomBtn.disabled = false;
-    newRoomNameInput.disabled = false;
-    currentWorldWidth=DEDICATED_GAME_WIDTH * 2; biomeManager.worldWidth=currentWorldWidth; biomeManager.setBiome('jurassic');
-    keys={}; cameraX=0; cameraY=0; isCustomizationMenuOpen=false;
-if (hostPingTimeout) {
+    if (hostPingTimeout) {
         clearInterval(hostPingTimeout);
         hostPingTimeout = null;
     }
+
+    // Zamknij połączenie P2P z hostem (TYLKO jeśli jesteśmy gościem)
+    if (!isHost && hostConnection && typeof hostConnection.close === 'function') {
+        hostConnection.close();
+    }
+    hostConnection = null;
+
+    // === POCZĄTEK KLUCZOWEJ POPRAWKI ===
+    // Jeśli byliśmy hostem, najpierw zamknij wszystkie połączenia z klientami
+    if (isHost) {
+        Object.values(hostPeerConnections).forEach(conn => conn.close());
+        hostPeerConnections = {};
+    }
     
-    console.log('You left the room, returned to the lobby.');
-    showNotification('You left the room and returned to the lobby.', 'warning');
+    // Zatrzymaj i usuń worker (jeśli byliśmy hostem)
+    if (gameHostWorker) {
+        gameHostWorker.terminate();
+        gameHostWorker = null; // Ustaw na null OD RAZU po terminacji
+    }
+
+    // Usuń WSZYSTKIE listenery z obiektu peer, aby uniknąć wywołań "zombie"
+    if (peer) {
+        peer.off('connection');
+        peer.off('open');
+        peer.off('error');
+        peer.off('disconnected');
+        peer.off('close');
+    }
+    // === KONIEC KLUCZOWEJ POPRAWKI ===
+
+    // Zniszcz obiekt PeerJS, aby uzyskać nowe, czyste ID przy następnym połączeniu
+    if (peer && !peer.destroyed) {
+        peer.destroy();
+    }
+    peer = null;
+
+    // Resetuj stan gry
+    isHost = false;
+    currentRoom = null;
+    playersInRoom = {};
+    insectsInRoom = [];
+    pierSupportData = [];
+    worldItems = [];
+    npcManager.clear();
+
+    // Resetuj UI i stan lokalny
+    resetMenuUI();
+    currentWorldWidth = DEDICATED_GAME_WIDTH * 2;
+    biomeManager.worldWidth = currentWorldWidth;
+    biomeManager.setBiome('jurassic');
+    keys = {};
+    cameraX = 0;
+    cameraY = 0;
+    isCustomizationMenuOpen = false;
     chatManager.hide();
-
-
     
+    console.log('Cleanup complete. Returned to lobby.');
+    showNotification('You left the room.', 'warning');
 }
 
 
@@ -2669,20 +3333,48 @@ function getMousePosOnCanvas(canvas, evt) {
 document.addEventListener('keydown', (event) => {
     if (!currentRoom) return;
 
-    // === POCZĄTEK NOWEGO KODU ===
-    // Jeśli pole czatu jest aktywne, ignoruj wszystkie inne skróty klawiszowe w grze
     if (chatManager && chatManager.isFocused) {
         return;
     }
+    
+    if (event.code === 'KeyF' && tutorial.state === 'finished') {
+        // Używamy globalnej zmiennej `closestNpc`, która jest aktualizowana w gameLoop
+        if (closestNpc) {
+            event.preventDefault();
+            
+            // ======================= POCZĄTEK ZMIANY =======================
+            // Stare wywołanie:
+            // tradingManager.toggleTrading(closestNpc);
+            
+            // Nowe wywołanie z przekazaniem nazwy biomu:
+            tradingManager.toggleTrading(closestNpc, biomeManager.currentBiomeName);
+            // ======================== KONIEC ZMIANY =========================
+            
+            return;
+        }
 
-    if (event.code === 'Escape' && isCustomizationMenuOpen) {
+        // Jeśli nie ma aktywnego NPC, sprawdź obóz
+        if (isPlayerInCampZone && !isCustomizationMenuOpen) {
+            if (loadingManager.isVisible) return; 
+            
+            event.preventDefault();
+            transitionToNewRoom();
+            return;
+        }
+    }
+
+    if (event.code === 'Escape') {
         event.preventDefault();
-        isCustomizationMenuOpen = false;
-        inventoryManager.isOpen = false;
+        if (tradingManager.isTradeWindowOpen) {
+            tradingManager.stopTrading();
+        } else if (isCustomizationMenuOpen) {
+            isCustomizationMenuOpen = false;
+            inventoryManager.isOpen = false;
+        }
         return;
     }
 
-    if (event.code === 'KeyE' && !fishingManager.isFishHooked) {
+    if (event.code === 'KeyE' && !fishingManager.isFishHooked && !tradingManager.isTradeWindowOpen) {
         event.preventDefault();
 
         if (tutorial.state === 5) {
@@ -2868,21 +3560,21 @@ canvas.addEventListener('mouseup', (event) => {
         return;
     }
 
-    // SCENARIUSZ 1: ZAKOŃCZONO MINIGRĘ I ZŁOWIONO RYBĘ (najwyższy priorytet)
     if (fishingManager.isCatchComplete) {
         const fish = fishingManager.currentFish;
         if (fish) {
-            const size = fish.minsize + Math.random() * (fish.maxsize - fish.minsize);
-            const finalSize = Math.round(size);
-
+            // ======================= POCZĄTEK ZMIAN =======================
+            // DODAJEMY 'scale' do wysyłanych danych
             sendPlayerAction('fishCaught', {
                 fishName: fish.name,
-                size: finalSize,
+                size: fish.size,
+                scale: fish.scale, // <-- TA LINIA JEST NOWA
                 tier: fish.tier || 0
             });
+            // ======================== KONIEC ZMIAN =========================
 
             const fullFishObject = createFullItemObject(fish.name);
-            fullFishObject.size = finalSize;
+            fullFishObject.size = fish.size;
             inventoryManager.addItem(fullFishObject);
 
             fishingManager.cleanUpAfterCatch();
@@ -2891,10 +3583,16 @@ canvas.addEventListener('mouseup', (event) => {
         return;
     }
 
-    // SCENARIUSZ 2: GRACZ JEST W TRAKCIE USTALANIA MOCY RZUTU
     if (localPlayer.isCasting) {
         localPlayer.isCasting = false;
         const angle = Math.atan2(localPlayer.currentMouseY - localPlayer.rodTipWorldY, localPlayer.currentMouseX - localPlayer.rodTipWorldX);
+        const CAST_SPEED_MULTIPLIER = 1200; // Dopasuj tę wartość, aby symulacja była zbliżona do logiki serwera
+        const distance = localPlayer.castingPower * CAST_SPEED_MULTIPLIER;
+        const simulatedFloatX = localPlayer.rodTipWorldX + Math.cos(angle) * distance;
+        const simulatedFloatY = localPlayer.rodTipWorldY + Math.sin(angle) * distance;
+        
+        // Poinformuj BiomeManager o plusku
+        biomeManager.scareFishAt(simulatedFloatX, simulatedFloatY);
         sendPlayerAction('castFishingLine', {
             power: localPlayer.castingPower,
             angle: angle,
@@ -2905,19 +3603,12 @@ canvas.addEventListener('mouseup', (event) => {
         return;
     }
 
-    // SCENARIUSZ 3: ŻYŁKA JEST W WODZIE
     if (localPlayer.hasLineCast) {
-        // ======================= POCZĄTEK ZMIAN =======================
-        // NOWA LOGIKA: Jeśli minigra jest aktywna, kliknięcie lewym przyciskiem ją przerywa i uruchamia animację ucieczki.
         if (fishingManager.isFishHooked) {
             fishingManager.abortMinigame();
             event.preventDefault();
-            return; // Ważne, aby zakończyć tutaj i nie wykonywać dalszego kodu.
+            return;
         }
-        // ======================== KONIEC ZMIAN =========================
-
-        // STARA/POPRAWNA LOGIKA: Jeśli NIE ma brania (ani minigry), zwiń żyłkę.
-        // Obejmuje to zarówno stan oczekiwania na branie, jak i moment po przegapieniu brania.
         if (!fishingManager.isBiting) {
             sendPlayerAction('reelInFishingLine');
             event.preventDefault();
@@ -2951,6 +3642,7 @@ loadImages(() => {
     fishingManager.fishFrameImage = fishingUIImages.fishframe;
     fishingManager.fishImages = allItemImages;
     fishingManager.baitImages = allItemImages;
+    biomeManager.setFishAssets(fishingManager.getFishData(), allItemImages);
 
     fishingManager.onFishingResetCallback = () => sendPlayerAction('reelInFishingLine');
 
@@ -2963,4 +3655,61 @@ loadImages(() => {
 
 // Inicjalizacja Chatu
 const chatManager = new ChatManager();
+setupFlagSelection();
 
+function setupFlagSelection() {
+    const selectedFlagImg = document.getElementById('selectedFlagImg');
+    const flagListContainer = document.getElementById('flagListContainer');
+
+    if (!selectedFlagImg || !flagListContainer) {
+        console.error('Required flag elements not found in HTML.');
+        return;
+    }
+
+    // Wypełnij listę flagami
+    COUNTRIES.forEach(country => {
+        const flagImg = document.createElement('img');
+        flagImg.src = `https://flagcdn.com/24x18/${country.code.toLowerCase()}.png`;
+        flagImg.srcset = `https://flagcdn.com/48x36/${country.code.toLowerCase()}.png 2x, https://flagcdn.com/72x54/${country.code.toLowerCase()}.png 3x`;
+        flagImg.width = 24;
+        flagImg.height = 18;
+        flagImg.alt = country.name;
+        flagImg.dataset.code = country.code.toLowerCase();
+
+        flagImg.addEventListener('click', () => {
+            const newCode = flagImg.dataset.code;
+            localPlayer.selectedFlag = newCode;
+
+            selectedFlagImg.src = `https://flagcdn.com/24x18/${newCode}.png`;
+            selectedFlagImg.srcset = `https://flagcdn.com/48x36/${newCode}.png 2x, https://flagcdn.com/72x54/${newCode}.png 3x`;
+            selectedFlagImg.alt = country.name;
+
+            // Ukryj listę przez usunięcie klasy .visible
+            isFlagListOpen = false;
+            flagListContainer.classList.remove('visible');
+        });
+
+        flagListContainer.appendChild(flagImg);
+    });
+
+    // Pokaż/ukryj listę po kliknięciu
+    selectedFlagImg.addEventListener('click', (event) => {
+        event.stopPropagation();
+        isFlagListOpen = !isFlagListOpen;
+        // Użyj classList.toggle do przełączania widoczności
+        flagListContainer.classList.toggle('visible', isFlagListOpen);
+    });
+
+    // Zamknij listę po kliknięciu poza nią
+    window.addEventListener('click', () => {
+        if (isFlagListOpen) {
+            isFlagListOpen = false;
+            flagListContainer.classList.remove('visible');
+        }
+    });
+
+    // Zapobiegaj zamykaniu listy po kliknięciu wewnątrz niej
+    flagListContainer.addEventListener('click', (event) => {
+        event.stopPropagation();
+    });
+}

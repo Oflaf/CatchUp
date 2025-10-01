@@ -21,14 +21,26 @@
     <canvas id="menuCanvas"></canvas>
 
     <div id="lobby">
-        <p>Your Name: <input type="text" id="usernameInput" maxlength="16" autocomplete="off"></p>
-        
-        <div class="main-menu">
-            <button id="joinGameBtn">Join the Game</button>
-            <button id="optionsBtn" disabled>Options</button>
+    <!-- ZMODYFIKOWANA STRUKTURA -->
+    <div class="player-input-container">
+        <p>Your Name:</p>
+        <div class="input-with-flag">
+            <!-- 1. Zmieniona kolejność: Input jest teraz PIERWSZY -->
+            <input type="text" id="usernameInput" maxlength="16" autocomplete="off">
+            <!-- 2. Flaga jest DRUGA, więc pojawi się po prawej stronie -->
+            <img src="https://flagcdn.com/24x18/pl.png"
+                 srcset="https://flagcdn.com/48x36/pl.png 2x, https://flagcdn.com/72x54/pl.png 3x"
+                 width="24" height="18" alt="Poland" id="selectedFlagImg" class="selected-flag">
         </div>
-        <p id="menuStatus" class="menu-status"></p>
     </div>
+    <div id="flagListContainer" class="flag-list-container"></div>
+    
+    <div class="main-menu">
+        <button id="joinGameBtn">Join the Game</button>
+        <button id="optionsBtn" disabled>Options</button>
+    </div>
+    <p id="menuStatus" class="menu-status"></p>
+</div>
 
     <div id="gameContainer" style="display: none; position: relative;">
         <button id="leaveRoomBtn">Leave</button>
@@ -46,6 +58,7 @@
     <script src="js/menuworld.js"></script>
     <script src="js/cycle.js"></script>
     <script src="js/inventory.js"></script> 
+    <script src="js/trading.js"></script>
     <script src="js/fishing.js"></script>
     <script src="js/chat.js"></script> 
     <script src="script.js"></script>

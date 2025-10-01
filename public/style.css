@@ -70,13 +70,12 @@ body {
 }
 
 #lobby p {
-    margin: 0 0 25px 0;
     color: #ccc;
     font-size: 1.1em;
 }
 
+
 #myUsername {
-    font-weight: bold;
     color: #fff;
 }
 
@@ -215,10 +214,98 @@ body {
     font-weight: bold;
 }
 
+.player-input-container {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    margin-bottom: 20px;
+}
+
+/* --- DODANA REGULACJA --- */
+.player-input-container p {
+    margin: 0; /* Zeruje domyślne marginesy akapitu, co rozwiązuje problem przesunięcia */
+}
+
+/* Przeźroczyste tło dla kontenera inputu */
+.input-with-flag {
+    display: flex;
+    align-items: center;
+    background-color: transparent; /* WAŻNE */
+    border-radius: 4px;
+    padding: 2px 5px;
+    gap: 8px;
+}
+
+/* Upewnij się, że sam input jest też przezroczysty */
+.input-with-flag input {
+    border: none;
+    outline: none;
+    padding: 8px 12px;
+    font-size: 1.1em;
+    background-color: transparent; /* WAŻNE */
+    text-align: center;
+}
+
+.selected-flag {
+    cursor: pointer;
+}
+
+/* Nowy, przezroczysty styl dla listy flag z animacją */
+.flag-list-container {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 320px;
+    height: 250px;
+    overflow-y: auto;
+    
+    /* Efekty wizualne */
+    background-color: rgba(10, 10, 10, 0.719);
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(7px);
+    
+    border-radius: 8px;
+    z-index: 10000;
+    padding: 5px;
+
+    box-sizing: border-box;
+    
+    /* Ustawienia animacji */
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    transition: opacity 0.3s ease, visibility 0.8s ease;
+}
+
+/* Klasa .visible, która aktywuje animację pojawienia się */
+.flag-list-container.visible {
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+}
+
+/* Ukrycie paska przewijania */
+.flag-list-container::-webkit-scrollbar { display: none; }
+.flag-list-container { -ms-overflow-style: none; scrollbar-width: none; }
+
+
+.flag-list-container img {
+    cursor: pointer;
+    margin: 2px;
+    border: 1px solid transparent;
+    border-radius: 2px;
+    transition: border-color 0.2s;
+}
+
+.flag-list-container img:hover {
+    border-color: #00aaff;
+}
+
 #usernameInput {
     padding: 8px 12px;
     font-size: 1.1em;
-    font-weight: bold;
     color: #fff;
     background-color: rgba(0, 0, 0, 0);
     border: 0px solid #555;

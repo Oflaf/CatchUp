@@ -10,6 +10,7 @@ class ChatManager {
         this.visiblePassiveMessages = [];
         this.maxPassiveMessages = 8;
         this.passiveMessageTimeout = 14000;
+        this.canSendMessage = true; // <-- DODAJ TĘ LINIĘ
 
         // NOWOŚĆ: Przechowuje historię wysłanych wiadomości.
         this.sentMessages = [];
@@ -20,7 +21,6 @@ class ChatManager {
         this._addEventListeners();
         this._updateUI();
     }
-
     show() {
         this.isVisible = true;
         this.chatContainer.style.display = 'flex';
@@ -249,7 +249,23 @@ class ChatManager {
 
     _sendMessage() {
         const messageText = this.chatInput.value.trim();
+
+        // Sprawdź, czy gracz może wysłać wiadomość
+        if (!this.canSendMessage) {
+            // Użyj istniejącego systemu powiadomień z script.js
+            if (typeof window.showNotification === 'function') {
+                window.showNotification("Slow down!", 'warning');
+            }
+            return; // Zatrzymaj funkcję, jeśli cooldown jest aktywny
+        }
+
         if (messageText) {
+            // Ustaw cooldown natychmiast po wysłaniu wiadomości
+            this.canSendMessage = false;
+            setTimeout(() => {
+                this.canSendMessage = true;
+            }, 2000); // 3000 milisekund = 3 sekundy
+
             this.sentMessages.push(messageText);
             if (this.sentMessages.length > 50) {
                 this.sentMessages.shift();
