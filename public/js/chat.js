@@ -292,7 +292,12 @@ class ChatManager {
                 }
             } else {
                 if (typeof window.sendPlayerAction === 'function') {
+                    // ======================= POCZĄTEK ZMIAN =======================
+                    // Istniejąca akcja, która wysyła wiadomość do okna czatu
                     window.sendPlayerAction('sendChatMessage', { message: messageText });
+                    // Nowa akcja, która wysyła wiadomość do wyświetlenia nad głową
+                    window.sendPlayerAction('sendOverheadMessage', { message: messageText });
+                    // ======================== KONIEC ZMIAN =========================
                 }
             }
             this.chatInput.value = '';

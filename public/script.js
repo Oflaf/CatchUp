@@ -94,8 +94,9 @@ const HOST_TIMEOUT_LIMIT = 15000; // 15 sekund - limit dla gościa
 let lastPingTime = 0; // Czas ostatniego pingu od hosta
 let isPlayerInCampZone = false;
 let showCampPrompt = false;
+let timedTutorialsQueue = []; // <-- DODAJ TĘ LINIĘ
 
-let gameHostWorker = null; 
+let gameHostWorker = null;
 let hostPeerConnections = {};
 
 let availableRooms = {};
@@ -124,7 +125,9 @@ const tutorialImagePaths = {
     info3: 'img/ui/info3.png',
     info4: 'img/ui/info4.png',
     info5: 'img/ui/info5.png',
-    info6: 'img/ui/info6.png'
+    info6: 'img/ui/info6.png',
+    info7: 'img/ui/info7.png', // <-- DODANA LINIA
+    info8: 'img/ui/info8.png'  // <-- DODANA LINIA
 };
 const tutorialImages = {};
 
@@ -902,6 +905,9 @@ let localPlayer = {
     velocityX: 0, 
     currentMouseX: undefined, 
     currentMouseY: undefined, 
+    chatMessageText: null, 
+    chatMessageExpiry: null ,
+
     // --- POCZĄTEK POPRAWKI ---
     customizations: { 
         hat: 'none', 
@@ -976,6 +982,7 @@ let lastTime = 0;
 let campPromptAlpha = 0;
 let npcPromptAlpha = 0; // <--- DODAJ TĘ LINIĘ
 const PROMPT_FADE_SPEED = 4;
+let wasPlayerOnGround = true; // <-- NOWA ZMIENNA
 
 // ======================= WKLEJ TUTAJ =======================
 const FISH_TIER_CONFIG = {
@@ -1002,8 +1009,8 @@ const TIER_NAMES = {
 const inventoryManager = new InventoryManager();
 const fishingManager = new FishingManager();
 // ======================= POCZĄTEK ZMIANY =======================
-// Przekazujemy teraz OBA managery, aby TradingManager miał dostęp do danych o przedmiotach
 const tradingManager = new TradingManager(inventoryManager, fishingManager);
+const soundManager = new SoundManager(); // <-- NOWA LINIA
 // ======================== KONIEC ZMIANY =========================
 
 // Teraz, gdy oba managery istnieją, możemy je ze sobą połączyć
@@ -1030,6 +1037,57 @@ const FISH_DISPLAY_DURATION = 4000;
 // ====================================================================
 // === SEKCJA 2: FUNKCJE RYSOWANIA (z modyfikacjami) ===
 // ====================================================================
+
+function drawTimedTutorials() {
+    if (timedTutorialsQueue.length === 0 || !localPlayer.hasLineCast) return;
+
+    const now = Date.now();
+    const bobberScreenX = (localPlayer.floatWorldX - cameraX) * currentZoomLevel;
+    const bobberScreenY = (localPlayer.floatWorldY - cameraY) * currentZoomLevel;
+
+    // Usuń przestarzałe samouczki z kolejki
+    timedTutorialsQueue = timedTutorialsQueue.filter(tut => now < tut.endTime);
+
+    timedTutorialsQueue.forEach(tut => {
+        const image = tutorialImages[tut.key];
+        if (!image || !image.complete) return;
+
+        const elapsed = now - tut.startTime;
+        if (elapsed < 0) return; // Jeszcze nie czas na wyświetlenie
+
+        let alpha = 0;
+        const FADE_DURATION = 500; // Czas trwania fade-in i fade-out
+
+        if (elapsed < FADE_DURATION) {
+            alpha = elapsed / FADE_DURATION; // Fade in
+        } else if (elapsed > tut.duration - FADE_DURATION) {
+            const fadeOutElapsed = elapsed - (tut.duration - FADE_DURATION);
+            alpha = 1 - (fadeOutElapsed / FADE_DURATION); // Fade out
+        } else {
+            alpha = 1; // W pełni widoczny
+        }
+
+        alpha = Math.max(0, Math.min(1, alpha));
+        if (alpha <= 0) return;
+
+        const drawWidth = image.width * TUTORIAL_IMAGE_SCALE;
+        const drawHeight = image.height * TUTORIAL_IMAGE_SCALE;
+        
+        // Pozycja: nieco nad i na lewo od spławika
+        const x = bobberScreenX - drawWidth;
+        const y = bobberScreenY - drawHeight;
+
+        const rockingAngle = Math.sin(Date.now() / 1000 * TUTORIAL_ROCKING_SPEED) * (TUTORIAL_ROCKING_ANGLE_DEGREES * Math.PI / 180);
+        
+        ctx.save();
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
+        ctx.globalAlpha = alpha;
+        ctx.translate(x + drawWidth / 2 -22, y + drawHeight / 2 +65);
+        ctx.rotate(rockingAngle);
+        ctx.drawImage(image, -drawWidth / 2, -drawHeight / 2, drawWidth, drawHeight);
+        ctx.restore();
+    });
+}
 
 function drawCampPrompt() {
     // Optymalizacja: jeśli komunikat jest w pełni przezroczysty, nie wykonuj reszty funkcji
@@ -1640,8 +1698,25 @@ function drawPlayer(p, imageSet = characterImages) {
             ctx.strokeText(meText, playerCenterX, meTextY);
             ctx.fillText(meText, playerCenterX, meTextY);
         }
+
+        if (p.chatMessageText && Date.now() < p.chatMessageExpiry) {
+            ctx.fillStyle = "white";
+            ctx.font = `${DEFAULT_FONT_SIZE_USERNAME}px ${PIXEL_FONT}`;
+            ctx.textAlign = "center";
+            
+            const chatText = p.chatMessageText;
+            // Umieść tekst czatu nad głową. Jeśli jest też komenda /me, umieść go jeszcze wyżej.
+            const chatTextY = (p.meActionText && Date.now() < p.meActionExpiry) ? p.y - 58 + a : p.y - 36 + a;
+            
+            ctx.strokeStyle = 'black';
+            ctx.lineWidth = 3;
+            ctx.strokeText(chatText, playerCenterX, chatTextY);
+            ctx.fillText(chatText, playerCenterX, chatTextY);
+        }
     }
 }
+
+
 function drawCustomizationMenu() {
     const ROLLER_X_OFFSET_FROM_PLAYER = playerSize * currentZoomLevel * 1.5;
     const ROLLER_Y_OFFSET = -playerSize * currentZoomLevel * 0.5;
@@ -2022,7 +2097,6 @@ function updateAndDrawCaughtFishAnimations() {
     ctx.restore();
 }
 
-// ... reszta kodu ...
 
 
 
@@ -2452,6 +2526,11 @@ function gameLoop(currentTime) {
         p.meActionText = null;
         p.meActionExpiry = null;
     }
+
+     if (p.chatMessageText && Date.now() >= p.chatMessageExpiry) {
+                p.chatMessageText = null;
+                p.chatMessageExpiry = null;
+            }
             const isStationaryHorizontal = Math.abs(p.velocityX || 0) < MIN_VELOCITY_FOR_WALK_ANIMATION;
             p.isIdle = !p.isWalking && !p.isJumping && isStationaryHorizontal && isOnGround;
             if (p.isWalking) {
@@ -2477,6 +2556,7 @@ function gameLoop(currentTime) {
     sendPlayerInput();
     updateLocalPlayerMovement();
     reconcilePlayerPosition();
+    updatePlayerAudio(); // <--- DODAJ TĘ LINIĘ TUTAJ
     updateCamera();
     
 
@@ -2510,11 +2590,30 @@ function gameLoop(currentTime) {
     }
     
     if (localPlayer.hasLineCast && !previousHasLineCast) {
-        fishingManager.startFishing(
-            inventoryManager.getBaitItem(),
-            inventoryManager.getHookItem()
-        );
-    }
+    fishingManager.startFishing(
+        inventoryManager.getBaitItem(),
+        inventoryManager.getHookItem()
+    );
+
+    // =======================================================
+    // === POCZĄTEK ZMIAN: SEKWENCJA SAMOUCZKA WĘDKOWANIA ===
+    // =======================================================
+    const now = Date.now();
+    const firstInfo7Start = now + 1000;
+    const firstInfo7Duration = 4000; // 2s fade in, 2s fade out
+    const pause = 2000;
+    const secondInfo7Start = firstInfo7Start + firstInfo7Duration + pause;
+    const info1Start = secondInfo7Start + firstInfo7Duration;
+
+    timedTutorialsQueue = [
+        { key: 'info7', startTime: firstInfo7Start, duration: 4000, endTime: firstInfo7Start + 4000 },
+        { key: 'info8', startTime: secondInfo7Start, duration: 4000, endTime: secondInfo7Start + 4000 },
+        { key: 'info1', startTime: info1Start, duration: 4000, endTime: info1Start + 4000 }
+    ];
+    // =======================================================
+    // === KONIEC ZMIAN: SEKWENCJA SAMOUCZKA WĘDKOWANIA ===
+    // =======================================================
+}
     
     if (!localPlayer.hasLineCast && previousHasLineCast) {
         fishingManager.cancelFishing();
@@ -2599,7 +2698,8 @@ function gameLoop(currentTime) {
     
     drawTutorialHelper();
     drawCampPrompt();
-    drawNpcTradePrompt(); // <--- DODAJ TĘ LINIĘ
+    drawNpcTradePrompt();
+    drawTimedTutorials(); // <-- DODAJ TĘ LINIĘ
     if(isCustomizationMenuOpen) drawCustomizationMenu();
     if(localPlayer.isCasting) drawFishingBar(localPlayer);
     
@@ -2702,8 +2802,10 @@ function startNetworkHandshake() {
 }
 
 // Stary event listener jest teraz uproszczony do wywołania naszej nowej funkcji
-joinGameBtn.addEventListener('click', () => initiateMatchmakingProcess(false));
-
+joinGameBtn.addEventListener('click', () => {
+    soundManager.play('menuClick'); // <-- NOWA LINIA
+    initiateMatchmakingProcess(false)
+});
 function tryToJoinRooms(rooms) {
     let roomIndex = 0;
     
@@ -3069,6 +3171,17 @@ function handleDataFromServer(data) {
             break;
         }
 
+         case 'overheadMessageBroadcast': {
+            const { peerId, message } = data.payload;
+            const player = playersInRoom[peerId];
+            if (player) {
+                player.chatMessageText = message;
+                // Wiadomość będzie widoczna przez 5 sekund
+                player.chatMessageExpiry = Date.now() + 5000;
+            }
+            break;
+        }
+
         case 'chatMessageBroadcast': {
         const { username, message } = data.payload;
         chatManager.addMessage(username, message);
@@ -3102,6 +3215,7 @@ function handleDataFromServer(data) {
                 if (!inventoryManager.addItem(fullItemObject)) {
                     showNotification('Inventory full!', 'warning');
                 } else {
+                    soundManager.play('info'); // <-- DODANA LINIA
                     showNotification(`Picked up: ${itemData.name}`, 'success');
                 }
             }
@@ -3135,26 +3249,45 @@ function handleDataFromServer(data) {
         case 'gameStateUpdate': {
     const { players: playersData, worldItems: worldItemsData } = data.payload;
 
-    
-playersData.forEach(serverPlayer => {
-    const clientPlayer = playersInRoom[serverPlayer.id];
-    if (serverPlayer.hasLineCast && clientPlayer) {
-        const isBobberMoving = Math.abs(serverPlayer.floatWorldX - clientPlayer.floatWorldX) > 0.1 || Math.abs(serverPlayer.floatWorldY - clientPlayer.floatWorldY) > 0.1;
-        const isBobberOnWater = serverPlayer.floatWorldY >= (biomeManager.WATER_TOP_Y_WORLD - 15);
-        if (isBobberMoving && isBobberOnWater) {
-            // TUTAJ TWORZONY JEST ROZPRYSK WODY
-            fishingManager.createWaterSplash(serverPlayer.floatWorldX, serverPlayer.floatWorldY, 5, 0.5);
-        }
-    }
-});
     // Aktualizuj dane graczy, ale zachowaj stan /me
     playersData.forEach(serverPlayer => {
         const clientPlayer = playersInRoom[serverPlayer.id];
         
         if (clientPlayer) {
+            // === POCZĄTEK FINALNEJ POPRAWKI ===
+            if (serverPlayer.hasLineCast) {
+                const isBobberOnWater = serverPlayer.floatWorldY >= (biomeManager.WATER_TOP_Y_WORLD - 15);
+                const wasBobberOnWater = clientPlayer.wasBobberOnWater || false;
+
+                // --- Logika DŹWIĘKU (jednorazowa) ---
+                // Odtwarzamy dźwięk tylko w momencie, gdy spławik ląduje na wodzie.
+                if (isBobberOnWater && !wasBobberOnWater) {
+                    soundManager.play('waterSplash');
+                }
+
+                // --- Logika ANIMACJI (ciągła, gdy spławik się rusza) ---
+                // Przywracamy oryginalną logikę animacji, która była zależna od ruchu.
+                const isBobberMoving = Math.abs(serverPlayer.floatWorldX - clientPlayer.floatWorldX) > 0.1 || Math.abs(serverPlayer.floatWorldY - clientPlayer.floatWorldY) > 0.1;
+                if (isBobberOnWater && isBobberMoving) {
+                    fishingManager.createWaterSplash(serverPlayer.floatWorldX, serverPlayer.floatWorldY, 5, 0.5);
+                }
+                
+                // Zapisz stan na potrzeby następnej klatki (kluczowe dla dźwięku)
+                clientPlayer.wasBobberOnWater = isBobberOnWater;
+            } else {
+                // Resetuj flagę, gdy wędka jest zwinięta
+                clientPlayer.wasBobberOnWater = false;
+            }
+            // === KONIEC FINALNEJ POPRAWKI ===
+
             // Zachowaj aktualny stan /me, który jest zarządzany tylko po stronie klienta
             const meText = clientPlayer.meActionText;
             const meExpiry = clientPlayer.meActionExpiry;
+            // ======================= POCZĄTEK ZMIAN =======================
+            const chatText = clientPlayer.chatMessageText;
+            const chatExpiry = clientPlayer.chatMessageExpiry;
+            // ======================== KONIEC ZMIAN =========================
+
 
             // Zaktualizuj gracza danymi z serwera
             Object.assign(clientPlayer, serverPlayer);
@@ -3162,6 +3295,10 @@ playersData.forEach(serverPlayer => {
             // Przywróć stan /me, nadpisując ewentualne `null` z serwera
             clientPlayer.meActionText = meText;
             clientPlayer.meActionExpiry = meExpiry;
+            // ======================= POCZĄTEK ZMIAN =======================
+            clientPlayer.chatMessageText = chatText;
+            clientPlayer.chatMessageExpiry = chatExpiry;
+            // ======================== KONIEC ZMIAN =========================
         } else {
             // Jeśli gracz jest nowy, po prostu go dodaj
             playersInRoom[serverPlayer.id] = serverPlayer;
@@ -3187,7 +3324,9 @@ playersData.forEach(serverPlayer => {
     }
 }
 
+
 leaveRoomBtn.addEventListener('click', () => {
+    soundManager.play('menuClick'); // <-- NOWA LINIA
     // Logika dla gościa pozostaje prosta - po prostu czyści swój stan.
     if (!isHost) {
         leaveCurrentRoomUI();
@@ -3333,31 +3472,59 @@ function getMousePosOnCanvas(canvas, evt) {
 document.addEventListener('keydown', (event) => {
     if (!currentRoom) return;
 
+
     if (chatManager && chatManager.isFocused) {
         return;
     }
-    
+
+    // ======================= POCZĄTEK ZMIAN =======================
+    if (inventoryManager.isOpen && event.code === 'KeyQ') {
+        event.preventDefault();
+
+        // Wyrzucamy przedmiot pod kursorem tylko, jeśli nie trzymamy innego w ręku
+        if (!inventoryManager.heldItem) {
+            const hoveredSlot = inventoryManager._getHoveredSlot();
+
+            if (hoveredSlot && hoveredSlot.item) {
+                const droppedItem = { ...hoveredSlot.item };
+                hoveredSlot.item = null; // Usuń przedmiot ze slotu
+
+                // Wyślij informację do hosta o wyrzuceniu przedmiotu
+                sendPlayerAction('dropItem', {
+                    name: droppedItem.name,
+                    tier: droppedItem.tier
+                });
+
+                // Odtwórz dźwięk
+                soundManager.play('throw');
+            }
+        }
+        return; // Zakończ dalsze przetwarzanie
+    }
+    // ======================== KONIEC ZMIAN =========================
+
     if (event.code === 'KeyF' && tutorial.state === 'finished') {
         // Używamy globalnej zmiennej `closestNpc`, która jest aktualizowana w gameLoop
         if (closestNpc) {
             event.preventDefault();
-            
+
             // ======================= POCZĄTEK ZMIANY =======================
             // Stare wywołanie:
             // tradingManager.toggleTrading(closestNpc);
-            
+
             // Nowe wywołanie z przekazaniem nazwy biomu:
             tradingManager.toggleTrading(closestNpc, biomeManager.currentBiomeName);
             // ======================== KONIEC ZMIANY =========================
-            
+
             return;
         }
 
         // Jeśli nie ma aktywnego NPC, sprawdź obóz
         if (isPlayerInCampZone && !isCustomizationMenuOpen) {
-            if (loadingManager.isVisible) return; 
-            
+            if (loadingManager.isVisible) return;
+
             event.preventDefault();
+            soundManager.play('camp'); // <--- DODAJ TĘ LINIĘ
             transitionToNewRoom();
             return;
         }
@@ -3376,8 +3543,10 @@ document.addEventListener('keydown', (event) => {
 
     if (event.code === 'KeyE' && !fishingManager.isFishHooked && !tradingManager.isTradeWindowOpen) {
         event.preventDefault();
+        soundManager.play('inventory'); // <--- DODAJ TĘ LINIĘ
 
         if (tutorial.state === 5) {
+            soundManager.play('info'); // <-- DODANA LINIA
             advanceTutorialStep('finished');
             isCustomizationMenuOpen = true;
             inventoryManager.isOpen = true;
@@ -3407,18 +3576,46 @@ document.addEventListener('keydown', (event) => {
     if (isCustomizationMenuOpen) {
         event.preventDefault();
         if (customizationMenuState === 'category') {
-            if (event.code === 'ArrowUp') selectedCategoryIndex = (selectedCategoryIndex - 1 + customizationCategories.length) % customizationCategories.length;
-            else if (event.code === 'ArrowDown') selectedCategoryIndex = (selectedCategoryIndex + 1) % customizationCategories.length;
-            else if (event.code === 'ArrowRight') customizationMenuState = 'value';
+            if (event.code === 'ArrowUp') {
+                selectedCategoryIndex = (selectedCategoryIndex - 1 + customizationCategories.length) % customizationCategories.length;
+                soundManager.play('menuNavigate');
+            }
+            else if (event.code === 'ArrowDown') {
+                selectedCategoryIndex = (selectedCategoryIndex + 1) % customizationCategories.length;
+                soundManager.play('menuNavigate');
+            }
+            else if (event.code === 'ArrowRight') {
+                 customizationMenuState = 'value';
+                 soundManager.play('menuClick');
+            }
         } else if (customizationMenuState === 'value') {
             const currentCategory = customizationCategories[selectedCategoryIndex];
             const options = customizationOptions[currentCategory];
             let optionIndex = currentCustomizationOptionIndices[currentCategory];
             let selectionChanged = false;
-            if (event.code === 'ArrowUp') { optionIndex = (optionIndex - 1 + options.length) % options.length; selectionChanged = true; }
-            else if (event.code === 'ArrowDown') { optionIndex = (optionIndex + 1) % options.length; selectionChanged = true; }
-            else if (event.code === 'ArrowLeft') customizationMenuState = 'category';
-            else if (event.code === 'ArrowRight' && (currentCategory === 'hair' || currentCategory === 'beard')) { customizationMenuState = 'color'; selectedColorPropertyIndex = 0; }
+
+            // --- POCZĄTEK ZMIAN ---
+        if (event.code === 'ArrowUp') {
+            optionIndex = (optionIndex - 1 + options.length) % options.length;
+            selectionChanged = true;
+            soundManager.play('clothNavigate'); // Zawsze odtwarzaj ten dźwięk
+        }
+        else if (event.code === 'ArrowDown') {
+            optionIndex = (optionIndex + 1) % options.length;
+            selectionChanged = true;
+            soundManager.play('clothNavigate'); // Zawsze odtwarzaj ten dźwięk
+        }
+            // --- KONIEC ZMIAN ---
+
+            else if (event.code === 'ArrowLeft') {
+                customizationMenuState = 'category';
+                soundManager.play('menuClick');
+            }
+            else if (event.code === 'ArrowRight' && (currentCategory === 'hair' || currentCategory === 'beard')) {
+                customizationMenuState = 'color';
+                selectedColorPropertyIndex = 0;
+                soundManager.play('menuClick');
+            }
             if (selectionChanged) {
                 currentCustomizationOptionIndices[currentCategory] = optionIndex;
                 const newValue = options[optionIndex];
@@ -3428,13 +3625,29 @@ document.addEventListener('keydown', (event) => {
                 sendPlayerAction('updateCustomization', localPlayer.customizations);
             }
         } else if (customizationMenuState === 'color') {
-            if (event.code === 'ArrowUp') selectedColorPropertyIndex = (selectedColorPropertyIndex - 1 + colorProperties.length) % colorProperties.length;
-            else if (event.code === 'ArrowDown') selectedColorPropertyIndex = (selectedColorPropertyIndex + 1) % colorProperties.length;
-            else if (event.code === 'ArrowLeft') customizationMenuState = 'value';
-            else if (event.code === 'ArrowRight') customizationMenuState = 'adjust_value';
+            if (event.code === 'ArrowUp') {
+                selectedColorPropertyIndex = (selectedColorPropertyIndex - 1 + colorProperties.length) % colorProperties.length;
+                soundManager.play('menuNavigate'); // <-- NOWA LINIA
+            }
+            else if (event.code === 'ArrowDown') {
+                selectedColorPropertyIndex = (selectedColorPropertyIndex + 1) % colorProperties.length;
+                soundManager.play('menuNavigate'); // <-- NOWA LINIA
+            }
+            else if (event.code === 'ArrowLeft') {
+                customizationMenuState = 'value';
+                soundManager.play('menuClick'); // <-- NOWA LINIA
+            }
+            else if (event.code === 'ArrowRight') {
+                customizationMenuState = 'adjust_value';
+                soundManager.play('menuClick'); // <-- NOWA LINIA
+            }
         } else if (customizationMenuState === 'adjust_value') {
-            if (event.code === 'ArrowLeft') customizationMenuState = 'color';
+            if (event.code === 'ArrowLeft') {
+                customizationMenuState = 'color';
+                soundManager.play('menuClick'); // <-- NOWA LINIA
+            }
             else if (event.code === 'ArrowUp' || event.code === 'ArrowDown') {
+                soundManager.play('menuNavigate'); // <-- NOWA LINIA
                 const isIncrement = event.code === 'ArrowUp';
                 const category = customizationCategories[selectedCategoryIndex];
                 const property = colorProperties[selectedColorPropertyIndex];
@@ -3458,13 +3671,33 @@ document.addEventListener('keydown', (event) => {
         }
         return;
     }
-    
+
     if (tutorial.state !== 'finished') {
         switch (tutorial.state) {
-            case 1: if (event.code === 'ArrowLeft' || event.code === 'ArrowRight' || event.code === 'KeyA' || event.code === 'KeyD') advanceTutorialStep(2); break;
-            case 2: if (event.code === 'Space') advanceTutorialStep(3); break;
-            case 3: if (['Digit1', 'Numpad1', 'Digit2', 'Numpad2', 'Digit3', 'Numpad3'].includes(event.code)) advanceTutorialStep(4); break;
-            case 4: if (event.code === 'KeyT') advanceTutorialStep(5); break;
+            case 1:
+                if (event.code === 'ArrowLeft' || event.code === 'ArrowRight' || event.code === 'KeyA' || event.code === 'KeyD') {
+                    soundManager.play('info'); // <-- DODANE
+                    advanceTutorialStep(2);
+                }
+                break;
+            case 2:
+                if (event.code === 'Space') {
+                    soundManager.play('info'); // <-- DODANE
+                    advanceTutorialStep(3);
+                }
+                break;
+            case 3:
+                if (['Digit1', 'Numpad1', 'Digit2', 'Numpad2', 'Digit3', 'Numpad3'].includes(event.code)) {
+                    soundManager.play('info'); // <-- DODANE
+                    advanceTutorialStep(4);
+                }
+                break;
+            case 4:
+                if (event.code === 'KeyT') {
+                    soundManager.play('info'); // <-- DODANE
+                    advanceTutorialStep(5);
+                }
+                break;
         }
     }
 
@@ -3473,13 +3706,23 @@ document.addEventListener('keydown', (event) => {
         if (event.code.includes('1')) item = ITEM_NONE;
         if (event.code.includes('2')) item = ITEM_ROD;
         if (event.code.includes('3')) item = ITEM_SHOVEL;
+
+        // Sprawdzamy, czy przedmiot faktycznie się zmienia
         if (localPlayer.customizations.rightHandItem !== item) {
+
+            // ===============================================
+            // === DODAJ TĘ LINIĘ WŁAŚNIE TUTAJ ===
+            // ===============================================
+            soundManager.play('itemChange');
+            // ===============================================
+
             localPlayer.customizations.rightHandItem = item;
             localPlayerCustomizations.rightHandItem = item;
             sendPlayerAction('updateCustomization', localPlayer.customizations);
         }
         event.preventDefault();
     } else if (event.code === 'Space' && !localPlayer.isJumping) {
+        soundManager.play('jump');
         sendPlayerAction('playerJump');
     }
 });
@@ -3509,26 +3752,74 @@ canvas.addEventListener('mousemove', (event) => {
 canvas.addEventListener('mousedown', (event) => {
     if (event.button !== 0 || !currentRoom) return;
 
-    const inventoryActionResult = inventoryManager.handleMouseDown({ x: invX, y: invY });
-
-    if (typeof inventoryActionResult === 'object' && inventoryActionResult !== null) {
-        sendPlayerAction('dropItem', {
-            name: inventoryActionResult.name,
-            tier: inventoryActionResult.tier
-        });
+    // Logika zacinania ryby
+    if (!isCustomizationMenuOpen && fishingManager.isBiting) {
+        soundManager.stopStrikeSound();
+        const currentBiome = currentRoom?.gameData?.biome || 'grassland';
+        fishingManager.playerRightClicked(currentBiome);
         event.preventDefault();
         return;
     }
 
-    if (inventoryActionResult === true) {
+    // --- NOWA, ULEPSZONA LOGIKA OBSŁUGI EKWIPUNKU ---
+    
+    // Sprawdzamy, czy kursor jest nad jakimkolwiek slotem PRZED wykonaniem akcji
+    const isOverSlot = !!inventoryManager._getHoveredSlot();
+    
+    // Wykonujemy akcję w ekwipunku i pobieramy przedmiot, który brał w niej udział
+    const interactedItem = inventoryManager.handleMouseDown();
+
+    // Jeśli akcja dotyczyła jakiegoś przedmiotu...
+    if (interactedItem) {
+        // Jeśli kliknięcie było POZA slotem, to znaczy, że wyrzucamy przedmiot
+        if (!isOverSlot) {
+            sendPlayerAction('dropItem', {
+                name: interactedItem.name,
+                tier: interactedItem.tier
+            });
+            soundManager.play('throw');
+        } 
+        // Jeśli kliknięcie było WEWNĄTRZ slotu, to podnosimy, odkładamy lub zamieniamy
+        else {
+            const itemName = interactedItem.name;
+
+            // 1. Sprawdź, czy to haczyk
+            if (fishingManager.hookData[itemName]) {
+                soundManager.play('hook');
+            }
+            // 2. Sprawdź, czy to przynęta (nie-ryba)
+            else if (fishingManager.baitData[itemName] && fishingManager.baitData[itemName].chance > 0) {
+                soundManager.play('bait');
+            }
+            // 3. W przeciwnym razie, załóż, że to ryba
+            else {
+                let isFish = false;
+                for (const biome in fishingManager.fishData) {
+                    if (fishingManager.fishData[biome][itemName]) {
+                        isFish = true;
+                        break;
+                    }
+                }
+                if (isFish) {
+                    soundManager.play('fish');
+                }
+            }
+        }
+        
+        // Zapobiegaj dalszym akcjom (np. kopaniu), jeśli interakcja z ekwipunkiem miała miejsce
         event.preventDefault();
         return;
     }
+    
+    // --- Koniec logiki ekwipunku ---
 
+
+    // Logika kopania łopatą
     if (!isCustomizationMenuOpen && localPlayer.customizations.rightHandItem === ITEM_SHOVEL) {
         const groundLevelY = DEDICATED_GAME_HEIGHT - (currentRoom.gameData?.groundLevel || 100);
 
         if (localPlayer.currentMouseY >= groundLevelY) {
+            soundManager.playExclusive('dig');
             sendPlayerAction('digForBait', { 
                 clickX: localPlayer.currentMouseX,
                 clickY: localPlayer.currentMouseY
@@ -3538,6 +3829,7 @@ canvas.addEventListener('mousedown', (event) => {
         }
     }
 
+    // Logika zarzucania wędki
     if (!isCustomizationMenuOpen && localPlayer.customizations.rightHandItem === ITEM_ROD && !localPlayer.hasLineCast) {
         localPlayer.isCasting = true;
         localPlayer.fishingBarTime = 0;
@@ -3550,6 +3842,7 @@ canvas.addEventListener('contextmenu', (event) => {
     event.preventDefault();
 
     if (!isCustomizationMenuOpen && fishingManager.isBiting) {
+        soundManager.stopStrikeSound(); // <-- DODANA LINIA
         const currentBiome = currentRoom?.gameData?.biome || 'grassland';
         fishingManager.playerRightClicked(currentBiome);
     }
@@ -3561,6 +3854,11 @@ canvas.addEventListener('mouseup', (event) => {
     }
 
     if (fishingManager.isCatchComplete) {
+        // ======================= POCZĄTEK ZMIANY =======================
+        // TO JEST NOWE, PRAWIDŁOWE MIEJSCE ODTWARZANIA DŹWIĘKU
+        soundManager.play('catch');
+        // ======================== KONIEC ZMIANY =========================
+
         const fish = fishingManager.currentFish;
         if (fish) {
             // ======================= POCZĄTEK ZMIAN =======================
@@ -3585,13 +3883,20 @@ canvas.addEventListener('mouseup', (event) => {
 
     if (localPlayer.isCasting) {
         localPlayer.isCasting = false;
+
+        // --- POCZĄTEK ZMIAN ---
+        // Odtwarzamy dźwięk zarzucania, używając `castingPower` jako mnożnika głośności.
+        // Dodajemy minimalną głośność, aby nawet najsłabszy rzut był słyszalny.
+        const castVolume = Math.max(0.2, localPlayer.castingPower); // Minimalna głośność 20%
+        soundManager.playWithVolume('cast', castVolume);
+        // --- KONIEC ZMIAN ---
+
         const angle = Math.atan2(localPlayer.currentMouseY - localPlayer.rodTipWorldY, localPlayer.currentMouseX - localPlayer.rodTipWorldX);
-        const CAST_SPEED_MULTIPLIER = 1200; // Dopasuj tę wartość, aby symulacja była zbliżona do logiki serwera
+        const CAST_SPEED_MULTIPLIER = 1200;
         const distance = localPlayer.castingPower * CAST_SPEED_MULTIPLIER;
         const simulatedFloatX = localPlayer.rodTipWorldX + Math.cos(angle) * distance;
         const simulatedFloatY = localPlayer.rodTipWorldY + Math.sin(angle) * distance;
         
-        // Poinformuj BiomeManager o plusku
         biomeManager.scareFishAt(simulatedFloatX, simulatedFloatY);
         sendPlayerAction('castFishingLine', {
             power: localPlayer.castingPower,
@@ -3610,6 +3915,7 @@ canvas.addEventListener('mouseup', (event) => {
             return;
         }
         if (!fishingManager.isBiting) {
+            soundManager.play('reelIn'); // <-- DODANA LINIA
             sendPlayerAction('reelInFishingLine');
             event.preventDefault();
         }
@@ -3632,6 +3938,36 @@ setupNotificationArea();
 initializeSignaling();
 cycleManager.load();
 
+// === POCZĄTEK ZMIAN ===
+// Zdefiniuj ścieżki do dźwięków i rozpocznij ich ładowanie
+const soundPaths = {
+    'menuClick': 'sound/menu_click.mp3',
+    'menuNavigate': 'sound/menu_navigate.mp3',
+    'clothNavigate': 'sound/cloth_navigate.mp3',
+    'walk': 'sound/walk.mp3',
+    'jump': 'sound/jump.mp3',
+    'land': 'sound/land.mp3',
+    'itemChange': 'sound/change.mp3',
+    'cast': 'sound/cast.mp3',
+    'waterSplash': 'sound/watersplash.mp3',
+    'reelIn': 'sound/reelin.mp3',
+    'dig': 'sound/dig.mp3',
+    'info': 'sound/info.mp3',
+    'inventory': 'sound/inventory.mp3',
+    'camp': 'sound/camp.mp3',
+    'throw': 'sound/throw.mp3',
+    'strike': 'sound/strike_1.mp3',
+    'fishing': 'sound/fishing.mp3',
+    'catchin': 'sound/catchin.mp3',
+    'catchout': 'sound/catchout.mp3',
+    'catch': 'sound/catch.mp3',
+    'fish': 'sound/fish.mp3',
+    'hook': 'sound/hook.mp3',
+    'bait': 'sound/bait.mp3',
+    'strike_2': 'sound/strike_2.mp3' // <-- DODANA LINIA
+};
+soundManager.loadSounds(soundPaths);
+
 // WAŻNE: W tym miejscu nic nie zmieniamy. loadImages wciąż jest potrzebne,
 // aby zasoby gry były dostępne w pamięci, zanim gracz kliknie "Join".
 // Nasz drugi ekran ładowania symuluje wczytywanie stanu pokoju, nie plików.
@@ -3644,14 +3980,41 @@ loadImages(() => {
     fishingManager.baitImages = allItemImages;
     biomeManager.setFishAssets(fishingManager.getFishData(), allItemImages);
 
+    fishingManager.soundManager = soundManager; // <-- DODANA LINIA
+
     fishingManager.onFishingResetCallback = () => sendPlayerAction('reelInFishingLine');
 
     fishingManager.onBaitConsumedCallback = () => {
         inventoryManager.consumeBait();
     };
-
+    updatePlayerAudio();
     requestAnimationFrame(gameLoop);
 });
+
+function updatePlayerAudio() {
+    if (!currentRoom || !currentRoom.gameData) return;
+
+    const groundLevel = DEDICATED_GAME_HEIGHT - currentRoom.gameData.groundLevel - playerSize;
+    const isPlayerOnGround = localPlayer.y >= groundLevel - 1;
+
+    // --- Lądowanie ---
+    // Jeśli gracz jest teraz na ziemi, a w poprzedniej klatce nie był, to znaczy, że wylądował.
+    if (isPlayerOnGround && !wasPlayerOnGround) {
+    soundManager.play('land');
+    }
+    // --- Chodzenie ---
+    // Dźwięk chodzenia jest odtwarzany tylko, gdy gracz idzie I jest na ziemi.
+    const isWalkingOnGround = localPlayer.isWalking && isPlayerOnGround;
+    if (isWalkingOnGround) {
+        soundManager.startLoop('walk');
+    } else {
+        soundManager.stopLoop('walk'); // Zatrzymaj dźwięk, jeśli gracz się zatrzymał lub skoczył
+    }
+
+    // Zaktualizuj stan z poprzedniej klatki na potrzeby następnej iteracji
+    wasPlayerOnGround = isPlayerOnGround;
+}
+
 
 // Inicjalizacja Chatu
 const chatManager = new ChatManager();

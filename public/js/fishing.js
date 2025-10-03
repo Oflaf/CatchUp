@@ -54,6 +54,9 @@ class FishingManager {
         this.baitData = {};
         this.hookData = {};
         this.particleManager = new ParticleManager();
+        this.soundManager = null; // <-- DODANA LINIA  
+        this.activeMinigameSound = 'none'; // <-- DODANA LINIA 
+
         
         this._initializeFishData();
         this._initializeBaitData();
@@ -94,10 +97,17 @@ class FishingManager {
         this.isFailAnimationPlaying = false; 
         this.failAnimationTimer = 0;       
         this.escapedFish = null;
+        this.canPlayStrike2 = true; // <-- DODANA LINIA
     }
 
     _triggerFailAnimation() {
-    if (!this.currentFish || this.isFailAnimationPlaying) return;
+        if (!this.currentFish || this.isFailAnimationPlaying) return;
+
+        // ======================= POCZĄTEK ZMIANY =======================
+        if (this.soundManager) {
+            this.soundManager.play('reelIn');
+        }
+        // ======================== KONIEC ZMIANY =========================
 
     this.isFailAnimationPlaying = true;
     this.failAnimationTimer = 0;
@@ -126,12 +136,16 @@ class FishingManager {
 }
 
     abortMinigame() {
-        if (!this.isFishHooked || !this.currentFish) {
-            return;
-        }
-        this._triggerFailAnimation();
+    if (!this.isFishHooked || !this.currentFish) {
+        return;
     }
-
+    if (this.soundManager) {
+        this.soundManager.stopLoop('fishing');
+        this.soundManager.stopLoop('catchin');  // <-- DODANA LINIA
+        this.soundManager.stopLoop('catchout'); // <-- DODANA LINIA
+    }
+    this._triggerFailAnimation();
+}
     handlePrematurePull(biomeName) {
         if (this.isWaitingForBite) {
             clearTimeout(this.biteTimeoutId);
@@ -195,16 +209,29 @@ class FishingManager {
     startBite() {
         this.isWaitingForBite = false;
         this.isBiting = true;
+        
+        // ======================= POCZĄTEK ZMIANY =======================
+        if (this.soundManager) {
+            this.soundManager.playStrikeSound();
+        }
+        // ======================== KONIEC ZMIANY ========================
+
         this.strikeAnimationTime = 0;
         if (this.currentBait && this.onBaitConsumedCallback) {
             this.onBaitConsumedCallback();
         }
-        this.strikeTimeoutId = setTimeout(() => this.failFishing(), 2000);
+        this.strikeTimeoutId = setTimeout(() => this.failFishing(), 4000);
     }
 
     playerRightClicked(biomeName) {
         if (!this.isBiting) return;
-        this.currentFish = this.getRandomCatch(biomeName, this.currentBait);
+
+    // Wyczyść kolejkę samouczka, gdy rozpoczyna się minigra
+    if (typeof timedTutorialsQueue !== 'undefined') {
+        timedTutorialsQueue = [];
+    }
+
+    this.currentFish = this.getRandomCatch(biomeName, this.currentBait);
         if (!this.currentFish) {
             this.failFishing();
             return;
@@ -225,6 +252,12 @@ class FishingManager {
         this.fishTargetVelocity = 0;
         this.fishMoveTimer = 0;
         
+        // ======================= POCZĄTEK ZMIANY =======================
+        if (this.soundManager) {
+            this.soundManager.startLoop('fishing');
+        }
+        // ======================== KONIEC ZMIANY ========================
+
         if (this.fishFrameImage) {
             const frameWidth = this.fishFrameImage.width * this.fishFrameScale;
             this.catchProgressBarWidth = frameWidth * 0.35;
@@ -238,6 +271,11 @@ class FishingManager {
     }
 
     cleanUpAfterCatch() {
+        if (this.soundManager) {
+            this.soundManager.stopLoop('fishing');
+            this.soundManager.stopLoop('catchin');  // <-- DODANA LINIA
+            this.soundManager.stopLoop('catchout'); // <-- DODANA LINIA
+        }
         this.showFishFrame = false;
         this.isFishHooked = false;
         this.isBiting = false; 
@@ -257,6 +295,12 @@ class FishingManager {
     }
 
     failFishing() {
+    if (this.soundManager) {
+        this.soundManager.stopStrikeSound();
+        this.soundManager.stopLoop('fishing');
+        this.soundManager.stopLoop('catchin');  // <-- DODANA LINIA
+        this.soundManager.stopLoop('catchout'); // <-- DODANA LINIA
+    }
         this.isBiting = false;
         this.showFishFrame = false;
         this.catchProgressBarWidth = 0;
@@ -267,8 +311,20 @@ class FishingManager {
     }
 
     cancelFishing() {
-        clearTimeout(this.biteTimeoutId);
-        clearTimeout(this.strikeTimeoutId);
+    // Wyczyść kolejkę samouczka, gdy łowienie jest anulowane
+    if (typeof timedTutorialsQueue !== 'undefined') {
+        timedTutorialsQueue = [];
+    }
+    clearTimeout(this.biteTimeoutId);
+    clearTimeout(this.strikeTimeoutId);
+
+    if (this.soundManager) {
+        this.soundManager.stopStrikeSound();
+        this.soundManager.stopLoop('fishing');
+        this.soundManager.stopLoop('catchin');  // <-- DODANA LINIA
+        this.soundManager.stopLoop('catchout'); // <-- DODANA LINIA
+    }
+
         this.biteTimeoutId = null;
         this.strikeTimeoutId = null;
         this.isWaitingForBite = false;
@@ -283,8 +339,10 @@ class FishingManager {
         this.isCatchComplete = false;
         this.currentBait = null; 
         this.currentHook = null;
-        this.isFailAnimationPlaying = false;
+this.isFailAnimationPlaying = false;
         this.escapedFish = null;
+        this.activeMinigameSound = 'none';
+        this.canPlayStrike2 = true; // <-- DODANA LINIA (reset flagi)
     }
 
     update(deltaTime, player, bobberScreenPos) {
@@ -342,14 +400,45 @@ class FishingManager {
                 const fishRightEdge = this.fishPosition + (fishWidth / 2);
                 
                 if (barLeftEdge < fishRightEdge && barRightEdge > fishLeftEdge) {
-                    this.catchProgressBarWidth += this.CATCH_PROGRESS_INCREASE_RATE * deltaTime;
-                } else {
-                    this.catchProgressBarWidth -= this.CATCH_PROGRESS_DECREASE_RATE * deltaTime;
+                this.catchProgressBarWidth += this.CATCH_PROGRESS_INCREASE_RATE * deltaTime;
+                // Sprawdź, czy musimy zmienić dźwięk na "catchin"
+                if (this.soundManager && this.activeMinigameSound !== 'catchin') {
+                    this.soundManager.stopLoop('catchout');
+                    this.soundManager.startLoop('catchin');
+                    this.activeMinigameSound = 'catchin';
                 }
+            } else {
+                this.catchProgressBarWidth -= this.CATCH_PROGRESS_DECREASE_RATE * deltaTime;
+                // Sprawdź, czy musimy zmienić dźwięk na "catchout"
+                if (this.soundManager && this.activeMinigameSound !== 'catchout') {
+                    this.soundManager.stopLoop('catchin');
+                    this.soundManager.startLoop('catchout');
+                    this.activeMinigameSound = 'catchout';
+                }
+            }
                 
                 this.catchProgressBarWidth = Math.max(0, Math.min(this.catchProgressBarWidth, frameWidth));
                 
                 this.isCatchComplete = this.catchProgressBarWidth >= frameWidth;
+
+                if (this.isCatchComplete) {
+                    // I jeśli możemy odtworzyć dźwięk (nie zrobiliśmy tego w tym "podejściu")
+                    if (this.canPlayStrike2) {
+                        if (this.soundManager) {
+                            this.soundManager.play('strike_2');
+                        }
+                        // Zablokuj możliwość ponownego odtworzenia, dopóki pasek nie spadnie
+                        this.canPlayStrike2 = false;
+                    }
+                } 
+                // Jeśli PASEK NIE JEST PEŁNY
+                else {
+                    // Zresetuj flagę, pozwalając na ponowne odtworzenie dźwięku,
+                    // gdy pasek znów się zapełni
+                    this.canPlayStrike2 = true;
+                }
+
+
 
                 if (this.catchProgressBarWidth <= 0 && this.isFishHooked) {
                     this._triggerFailAnimation();
@@ -396,6 +485,7 @@ class FishingManager {
     if (this.failAnimationTimer > 2.0) {
         this.isFailAnimationPlaying = false;
         this.escapedFish = null;
+        this.catchSoundPlayed = false;
         this.failFishing();
     }
 }}

@@ -476,7 +476,7 @@ class GameHost {
         this.broadcast({ type: 'ping' });
     }
 
-    addPlayer(peerId, initialPlayerData) {
+     addPlayer(peerId, initialPlayerData) {
     console.log(`[HOST-WORKER] Gracz ${initialPlayerData.username} (${peerId}) dołącza.`);
 
     const initialY = DEDICATED_GAME_HEIGHT - this.room.gameData.groundLevel - PLAYER_SIZE;
@@ -489,7 +489,11 @@ class GameHost {
         floatVelocityX: 0, floatVelocityY: 0, lineAnchorWorldX: null, lineAnchorWorldY: null, 
         rodTipWorldX: null, rodTipWorldY: null,
         meActionText: null, 
-        meActionExpiry: null
+        meActionExpiry: null,
+        // ======================= POCZĄTEK ZMIAN =======================
+        chatMessageText: null,
+        chatMessageExpiry: null
+        // ======================== KONIEC ZMIAN =========================
     };
         this.room.playerInputs[peerId] = { keys: {} };
         
@@ -634,6 +638,20 @@ class GameHost {
             }
             break;
         }
+
+        case 'sendOverheadMessage': {
+                const message = actionData.payload.message;
+                if (message && message.length > 0 && message.length <= 100) {
+                    this.broadcast({
+                        type: 'overheadMessageBroadcast',
+                        payload: {
+                            peerId: peerId,
+                            message: message
+                        }
+                    });
+                }
+                break;
+            }
 
             case 'sendChatMessage': {
                 const message = actionData.payload.message;

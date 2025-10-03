@@ -106,31 +106,34 @@ class InventoryManager {
     }
 
    handleMouseDown() {
-        if (!this.isOpen) return false;
+        if (!this.isOpen) return null; // Zwracamy null zamiast false dla spójności
 
         const hoveredSlot = this._getHoveredSlot();
 
+        // Scenariusz 1: Gracz trzyma przedmiot i klika
         if (this.heldItem) {
+            const itemBeingPlaced = this.heldItem; // Zapisujemy, jaki przedmiot jest odkładany
+
             if (hoveredSlot) {
-                // Jeśli kursor jest nad slotem, upuść przedmiot do niego
+                // Kliknięto na slot -> odłóż lub zamień
                 this._dropItem(hoveredSlot);
+                return itemBeingPlaced; // Zwróć przedmiot, który został właśnie odłożony
             } else {
-                // ======================= POCZĄTEK POPRAWKI =======================
-                // Jeśli kursor jest poza slotami, zwróć przedmiot, aby go wyrzucić
+                // Kliknięto poza slotami -> wyrzuć przedmiot
                 const itemToDrop = this.heldItem;
                 this.heldItem = null;
                 this.heldItemOriginalSlot = null;
-                return itemToDrop; // Ta linia pozwala na wyrzucenie przedmiotu
-                // ======================== KONIEC POPRAWKI ========================
+                return itemToDrop; // Zwróć przedmiot, który ma być wyrzucony
             }
-            return true; // Akcja została obsłużona
-        } else if (hoveredSlot && hoveredSlot.item) {
-            // Jeśli kursor jest nad slotem z przedmiotem, podnieś go
+        } 
+        // Scenariusz 2: Gracz nie trzyma przedmiotu i klika na slot z przedmiotem
+        else if (hoveredSlot && hoveredSlot.item) {
+            const itemBeingPickedUp = hoveredSlot.item; // Zapisujemy, jaki przedmiot jest podnoszony
             this._pickupItem(hoveredSlot);
-            return true; // Akcja została obsłużona
+            return itemBeingPickedUp; // Zwróć przedmiot, który został właśnie podniesiony
         }
 
-        return false; // Nie wykonano żadnej akcji
+        return null; // Nie wykonano żadnej akcji
     }
     
     getBaitItem() {
