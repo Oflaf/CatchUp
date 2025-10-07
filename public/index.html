@@ -5,6 +5,48 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <link rel="stylesheet" href="style.css">
 
+    <style>
+        /* DODANE STYLE DLA PANELU ŁADOWANIA */
+        #loading-panel {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: #000;
+            color: white;
+            display: none; /* Początkowo ukryty */
+            justify-content: center;
+            align-items: center;
+            z-index: 10000;
+            font-family: 'Segoe UI', sans-serif;
+            transition: opacity 0.5s ease-in-out;
+            flex-direction: column;
+        }
+        .loading-content {
+            text-align: center;
+        }
+        #loading-status {
+            font-size: 24px;
+            margin-bottom: 20px;
+        }
+        .progress-bar-container {
+            width: 400px;
+            height: 20px;
+            border: 2px solid #555;
+            background-color: #222;
+            border-radius: 10px;
+            overflow: hidden;
+        }
+        #loading-progress-bar {
+            width: 0%;
+            height: 100%;
+            background: linear-gradient(90deg, rgba(70,130,180,1) 0%, rgba(135,206,250,1) 100%);
+            transition: width 0.3s ease-out;
+            border-radius: 8px;
+        }
+    </style>
+
     <script>
         document.addEventListener('wheel', function(event) {
             if (event.ctrlKey) event.preventDefault();
@@ -18,29 +60,29 @@
     </script>
 </head>
 <body>
+    <div id="intro-container"></div>
+
     <canvas id="menuCanvas"></canvas>
 
-    <div id="lobby">
-    <!-- ZMODYFIKOWANA STRUKTURA -->
-    <div class="player-input-container">
-        <p>Your Name:</p>
-        <div class="input-with-flag">
-            <!-- 1. Zmieniona kolejność: Input jest teraz PIERWSZY -->
-            <input type="text" id="usernameInput" maxlength="16" autocomplete="off">
-            <!-- 2. Flaga jest DRUGA, więc pojawi się po prawej stronie -->
-            <img src="https://flagcdn.com/24x18/pl.png"
-                 srcset="https://flagcdn.com/48x36/pl.png 2x, https://flagcdn.com/72x54/pl.png 3x"
-                 width="24" height="18" alt="Poland" id="selectedFlagImg" class="selected-flag">
+    <!-- Lobby jest PRAWIDŁOWO ukryte na starcie -->
+    <div id="lobby" style="display: none;">
+        <div class="player-input-container">
+            <p>Your Name:</p>
+            <div class="input-with-flag">
+                <input type="text" id="usernameInput" maxlength="16" autocomplete="off">
+                <img src="https://flagcdn.com/24x18/pl.png"
+                     srcset="https://flagcdn.com/48x36/pl.png 2x, https://flagcdn.com/72x54/pl.png 3x"
+                     width="24" height="18" alt="Poland" id="selectedFlagImg" class="selected-flag">
+            </div>
         </div>
+        <div id="flagListContainer" class="flag-list-container"></div>
+        
+        <div class="main-menu">
+            <button id="joinGameBtn">Join the Game</button>
+            <button id="optionsBtn" disabled>Options</button>
+        </div>
+        <p id="menuStatus" class="menu-status"></p>
     </div>
-    <div id="flagListContainer" class="flag-list-container"></div>
-    
-    <div class="main-menu">
-        <button id="joinGameBtn">Join the Game</button>
-        <button id="optionsBtn" disabled>Options</button>
-    </div>
-    <p id="menuStatus" class="menu-status"></p>
-</div>
 
     <div id="gameContainer" style="display: none; position: relative;">
         <button id="leaveRoomBtn">Leave</button>
@@ -48,12 +90,11 @@
         <div id="cycleOverlay"></div>
     </div>
 
-    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script> 
+<script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script> 
     <script src="/socket.io/socket.io.js"></script> 
-
-    <!-- WAŻNA ZMIANA: Dodajemy loading.js PRZED innymi skryptami gry -->
+    <script src="js/intro.js"></script>
+    <!-- Krok 1: Ładujemy wszystkie skrypty pomocnicze i definicje klas -->
     <script src="js/loading.js"></script> 
-    
     <script src="js/biomemanager.js"></script>
     <script src="js/menuworld.js"></script>
     <script src="js/cycle.js"></script>
@@ -62,7 +103,14 @@
     <script src="js/fishing.js"></script>
     <script src="js/chat.js"></script> 
     <script src="js/soundmanager.js"></script> 
+    <script src="js/weather.js"></script>
+    
+    <!-- Krok 2: Ładujemy główny skrypt gry, który zawiera funkcję startAppLoading() -->
+    <!-- MUSI być PRZED intro.js -->
     <script src="script.js"></script>
+    
+    <!-- Krok 3: Dopiero na samym końcu ładujemy skrypt intro, który wszystko uruchamia -->
+    <!-- MUSI być OSTATNI -->
 
 </body>
 </html>

@@ -13,6 +13,43 @@ body {
     color: #eee;
 }
 
+#intro-container {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    /* Zaczynamy z czarnym tłem, które później zmienimy na przezroczyste */
+    background-color: black; 
+    z-index: 10000;
+    overflow: hidden;
+    user-select: none;
+    -webkit-user-select: none;
+    /* Dodajemy transition dla tła */
+    transition: background-color 0.5s ease-in-out;
+}
+
+#intro-container img {
+    will-change: transform, opacity;
+    image-rendering: pixelated;
+    image-rendering: crisp-edges;
+}
+
+/* ZMIEŃ ISTNIEJĄCE REGUŁY DLA #lobby */
+#lobby {
+    display: none;
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    text-align: center;
+    z-index: 1000;
+    min-width: 320px;
+    /* NOWOŚĆ: Ustawiamy początkową przezroczystość i przejście */
+    opacity: 0;
+    transition: opacity 0.5s ease-out;
+}
+
 /* --- KLUCZOWE ZMIANY TUTAJ --- */
 
 /* 1. Nowy styl dla tła menu */

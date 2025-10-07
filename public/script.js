@@ -104,7 +104,8 @@ let worldItems = [];
 let hostRoomConfiguration = null;
 let invX = 0, invY = 0;
 let splashCreatedForPlayers = new Set();
-let closestNpc = null; // <--- DODAJ TĘ LINIĘ
+let closestNpc = null;
+let weatherChangeInterval = null; // <-- DODAJ TĘ LINIĘ
 
 const tutorial = {
     state: 1, 
@@ -165,6 +166,72 @@ const starImagePaths = {
     legendary_star: 'img/ui/legendary_star.png'
 };
 const starImages = {};
+
+class CloudManager {
+    constructor() {
+        this.currentAlpha = 0;
+        this.targetAlpha = 0;
+        this.FADE_SPEED = 0.5; // Prędkość przejścia (w jednostkach alfa na sekundę)
+        this.isCloudy = false; // Zapamiętuje, czy poprzedni stan był "pochmurny"
+    }
+
+    /**
+     * Ustawia docelową pogodę i decyduje, czy potrzebne jest przejście.
+     * @param {string} weatherType - Typ pogody ('clearsky', 'drizzle', 'rain', 'rainstorm').
+     */
+    setWeather(weatherType) {
+        const nextIsCloudy = ['drizzle', 'rain', 'rainstorm'].includes(weatherType);
+
+        // Jeśli stan "pochmurny" się nie zmienia (np. z deszczu na burzę), nie rób przejścia.
+        if (this.isCloudy && nextIsCloudy) {
+            this.targetAlpha = 1;
+            this.currentAlpha = 1; // Ustaw natychmiast, bez fade'u
+            return;
+        }
+
+        this.targetAlpha = nextIsCloudy ? 1 : 0;
+        this.isCloudy = nextIsCloudy;
+    }
+
+    /**
+     * Aktualizuje przezroczystość zachmurzenia w czasie (efekt fade in/out).
+     * @param {number} deltaTime - Czas od ostatniej klatki w sekundach.
+     */
+    update(deltaTime) {
+        if (this.currentAlpha !== this.targetAlpha) {
+            const difference = this.targetAlpha - this.currentAlpha;
+            const change = this.FADE_SPEED * deltaTime * Math.sign(difference);
+
+            if (Math.abs(difference) > Math.abs(change)) {
+                this.currentAlpha += change;
+            } else {
+                this.currentAlpha = this.targetAlpha;
+            }
+        }
+    }
+
+    /**
+     * Rysuje na canvasie warstwę zachmurzenia z gradientem.
+     * @param {CanvasRenderingContext2D} ctx - Kontekst rysowania.
+     */
+    draw(ctx) {
+        if (this.currentAlpha <= 0) return;
+
+        ctx.save();
+        // Rysujemy w przestrzeni ekranu, ignorując kamerę i zoom
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
+        ctx.globalAlpha = this.currentAlpha;
+
+        const gradient = ctx.createLinearGradient(0, 0, 0, ctx.canvas.height * 0.7);
+        gradient.addColorStop(0, '#6c757d'); // Ciemniejszy szary u góry
+        gradient.addColorStop(1, '#adb5bd'); // Jaśniejszy szary na dole
+
+        ctx.fillStyle = gradient;
+        ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+
+        ctx.restore();
+    }
+}
 
 class StarManager {
     constructor() {
@@ -729,6 +796,15 @@ const BOBBER_RISE_SPEED = 2.5;      // Prędkość z jaką spławik jest wypycha
 const BOBBER_MAX_SPLASHDOWN_ROTATION = 0.6; // Maksymalna rotacja w radianach (~35 stopni)
 const BOBBER_ROTATION_DAMPING = 4.0; // Jak szybko rotacja wraca do zera
 
+const weatherImagePaths = {
+    fog: 'img/world/fog.png',
+    fog_main: 'img/world/fog_main.png',
+    drizzle: 'img/world/drizzle.png',
+    rain: 'img/world/rain.png',
+    splash: 'img/world/splash.png' // <-- NOWA LINIA
+};
+const weatherImages = {};
+
 const characterImagePaths = { leg: 'img/character/leg.png', body: 'img/character/body.png', arm: 'img/character/arm.png', head: 'img/character/head.png', eye: 'img/character/eye.png' };
 const customizationUIPaths = { frame: 'img/ui/frame.png' };
 const fishingUIPaths = { strike: 'img/ui/strike.png', fishframe: 'img/ui/fishframe.png' };
@@ -1008,9 +1084,10 @@ const TIER_NAMES = {
 
 const inventoryManager = new InventoryManager();
 const fishingManager = new FishingManager();
-// ======================= POCZĄTEK ZMIANY =======================
 const tradingManager = new TradingManager(inventoryManager, fishingManager);
-const soundManager = new SoundManager(); // <-- NOWA LINIA
+const soundManager = new SoundManager(); 
+const weatherManager = new WeatherManager(); 
+const cloudManager = new CloudManager(); // <-- DODAJ TĘ LINIĘ
 // ======================== KONIEC ZMIANY =========================
 
 // Teraz, gdy oba managery istnieją, możemy je ze sobą połączyć
@@ -1231,9 +1308,7 @@ const npcManager = new NPCManager(drawPlayer);
 
 function loadImages(callback) {
     // ======================= POCZĄTEK ZMIAN =======================
-    const allPaths = { ...characterImagePaths, ...customizationUIPaths, ...tutorialImagePaths, ...fishingUIPaths, ...baitImagePaths, ...hookImagePaths };
-    // ======================== KONIEC ZMIAN =========================
-    
+    const allPaths = { ...characterImagePaths, ...customizationUIPaths, ...tutorialImagePaths, ...fishingUIPaths, ...baitImagePaths, ...hookImagePaths, ...weatherImagePaths };
     const fishNames = new Set();
     const allFishData = fishingManager.getFishData();
     for (const biome in allFishData) {
@@ -1268,6 +1343,15 @@ function loadImages(callback) {
         if (e === a) {
             starManager.areAssetsLoaded = true;
             starManager.initialize(DEDICATED_GAME_WIDTH, DEDICATED_GAME_HEIGHT);
+            // === ZMODYFIKUJ TĘ LINIĘ ===
+            weatherManager.setAssets({
+            fog: weatherImages.fog,
+            fog_main: weatherImages.fog_main,
+            drizzle: weatherImages.drizzle,
+            rain: weatherImages.rain,
+            splash: weatherImages.splash // <-- NOWA LINIA
+        });
+            // ==========================
             biomeManager.loadBiomeImages(() => {
                 npcManager.loadCurrentBiomeAssets(biomeManager.currentBiomeName, callback);
             });
@@ -1308,6 +1392,11 @@ function loadImages(callback) {
             else if (hookImagePaths[h]) {
                  allItemImages[h] = i;
             }
+            // === DODAJ NOWY WARUNEK 'ELSE IF' ===
+            else if (weatherImagePaths[h]) {
+                weatherImages[h] = i;
+            }
+            // =====================================
             // ======================== KONIEC ZMIAN =========================
             f()
         }, i.onerror = () => { console.error(`Image loading error: ${i.src}`), f() }
@@ -2391,6 +2480,22 @@ function drawWorldItems(ctx) {
 
 const MAX_DELTA_TIME = 1 / 1; 
 
+function changeWeather() {
+    const rand = Math.random();
+    let newWeather = 'clearsky';
+
+    if (rand < 0.10) { // 10%
+        newWeather = 'rainstorm';
+    } else if (rand < 0.25) { // 15% (0.10 + 0.15)
+        newWeather = 'rain';
+    } else if (rand < 0.50) { // 25% (0.25 + 0.25)
+        newWeather = 'drizzle';
+    } // Reszta to 50% na clearsky
+
+    weatherManager.setWeather(newWeather);
+    cloudManager.setWeather(newWeather); // <-- DODAJ TĘ LINIĘ
+}
+
 function gameLoop(currentTime) {
     function updateLocalPlayerMovement() {
         const PLAYER_WALK_SPEED = 5;
@@ -2547,11 +2652,47 @@ function gameLoop(currentTime) {
     }
 
     bobberAnimationTime += BOBBER_ANIMATION_SPEED;
-    biomeManager.updateAnimations(deltaTime);
+    biomeManager.updateAnimations(deltaTime, localPlayer, currentRoom.gameData.groundLevel, cameraX, DEDICATED_GAME_WIDTH);
     cycleManager.update(deltaTime);
     starManager.update(deltaTime);
     npcManager.update(deltaTime);
-    // Usunęliśmy particleManager.update(deltaTime); - teraz robi to fishingManager
+    cloudManager.update(deltaTime); // <-- DODAJ LINIĘ AKTUALIZACJI
+    // Przekazujemy teraz więcej danych do weatherManager
+    const groundY = currentRoom.gameData ? (DEDICATED_GAME_HEIGHT - currentRoom.gameData.groundLevel) : DEDICATED_GAME_HEIGHT;
+// Przekaż pozycję gruntu jako nowy argument do managera pogody
+weatherManager.update(deltaTime, cameraX, canvas.width, canvas.height, currentZoomLevel, biomeManager.WATER_TOP_Y_WORLD, groundY);
+
+    // === DYNAMICZNA MGŁA I POGODA (NOWA WERSJA) ===
+    const rotationDegrees = (cycleManager.rotation * (180 / Math.PI)) % 360;
+    const angle = rotationDegrees < 0 ? rotationDegrees + 360 : rotationDegrees;
+    let timeBasedFogAlpha = 0.08; 
+
+    if (angle >= 70 && angle < 100) {
+        timeBasedFogAlpha = lerp(0.08, 0.4, (angle - 70) / 30);
+    } else if (angle >= 100 && angle < 190) {
+        timeBasedFogAlpha = 0.4;
+    } else if (angle >= 190 && angle < 220) {
+        timeBasedFogAlpha = lerp(0.4, 0.6, (angle - 190) / 30);
+    } else if (angle >= 220 && angle < 230) {
+        timeBasedFogAlpha = 0.6;
+    } else if (angle >= 230 && angle < 300) {
+        timeBasedFogAlpha = lerp(0.6, 0.08, (angle - 230) / 70);
+    }
+    
+    let targetFogAlpha = timeBasedFogAlpha;
+    const weatherState = weatherManager.targetWeather;
+
+    if (weatherState === 'rainstorm') {
+        targetFogAlpha = 0.8;
+    } else if (weatherState === 'rain') {
+        targetFogAlpha = 0.63;
+    } else if (weatherState === 'drizzle') {
+        if (timeBasedFogAlpha < 0.5) {
+            targetFogAlpha = 0.5;
+        }
+    }
+    
+    weatherManager.setTargetFogAlpha(targetFogAlpha);
     updateTutorialAnimations();
     sendPlayerInput();
     updateLocalPlayerMovement();
@@ -2635,6 +2776,7 @@ function gameLoop(currentTime) {
 
     starManager.draw(ctx, cycleManager);
 
+    
     ctx.save();
     ctx.translate(centerX, centerY + 2150);
     ctx.rotate(cycleManager.rotation);
@@ -2645,7 +2787,7 @@ function gameLoop(currentTime) {
     ctx.scale(currentZoomLevel, currentZoomLevel);
     ctx.translate(-cameraX, -cameraY);
     biomeManager.drawClouds(ctx, cameraX, cameraY);
-    
+    cloudManager.draw(ctx); // <-- DODAJ LINIĘ RYSUJĄCĄ ZACHMURZENIE TUTAJ
     biomeManager.drawParallaxBackground(ctx, cameraX, cameraY, DEDICATED_GAME_WIDTH / currentZoomLevel);
             
     if (currentRoom?.gameData?.biome) {
@@ -2659,13 +2801,15 @@ function gameLoop(currentTime) {
     
     const allCharacters = [...Object.values(playersInRoom), ...npcManager.npcs];
     allCharacters.sort((a,b)=>(a.y+playerSize)-(b.y+playerSize)).forEach(p => {
-        if (p.username) drawPlayer(p);
-        else npcManager.drawPlayer(p, npcManager.npcAssets);
+    if (p.username) drawPlayer(p);
+    else npcManager.drawPlayer(p, npcManager.npcAssets);
     });
     drawWorldItems(ctx);
 
     if(currentRoom?.gameData?.biome){
         const {biome:b,groundLevel:g} = currentRoom.gameData;
+
+        biomeManager.drawLeaves(ctx); // <-- DODAJ TĘ LINIĘ TUTAJ
 
         biomeManager.drawForegroundTrees(ctx);
         biomeManager.drawFireplaceParticles(ctx);
@@ -2676,14 +2820,20 @@ function gameLoop(currentTime) {
         drawInsects();
                 
         biomeManager.drawForegroundBiomeGround(ctx,b,g);
-        biomeManager.drawSwimmingFish(ctx);
-        drawPierSupports(ctx);
         
-        if (biomeManager.drawPiers) biomeManager.drawPiers(ctx);
-        
-        biomeManager.drawWater(ctx,b,cameraX);
+         biomeManager.drawSwimmingFish(ctx); // <--- DODAJ TĘ LINIĘ TUTAJ
 
-        
+        drawPierSupports(ctx);
+
+        if (biomeManager.drawPiers) biomeManager.drawPiers(ctx);
+
+        biomeManager.drawWater(ctx,b,cameraX);
+       
+       
+        weatherManager.drawRain(ctx); // Rysowanie deszczu (w przestrzeni świata)
+ weatherManager.drawFog(ctx); // Rysowanie mgły
+
+
         // === POCZĄTEK TWOJEJ POPRAWKI ===
         // Dodaj tę jedną linię, aby narysować chmury na pierwszym planie
 
@@ -2691,7 +2841,7 @@ function gameLoop(currentTime) {
     }
 
     ctx.restore();
-
+    weatherManager.drawLightning(ctx);
     for(const id in playersInRoom) drawFishingLine(playersInRoom[id]);
     
     drawDanglingBobber(ctx, localPlayer);
@@ -3025,9 +3175,23 @@ function onSuccessfulJoin(roomData, hostPeerId = null) {
     }
     currentRoom = roomData;
     playersInRoom = roomData.playersInRoom;
+    weatherManager.setWeather(roomData.currentWeather, 0.1); 
+    cloudManager.setWeather(roomData.currentWeather); // <-- DODAJ TĘ LINIĘ
     if (roomData.gameData) {
         currentWorldWidth = roomData.gameData.worldWidth;
         biomeManager.worldWidth = currentWorldWidth;
+        weatherManager.initializeFog(currentWorldWidth, DEDICATED_GAME_HEIGHT);
+
+        // === TEN BLOK NALEŻY USUNĄĆ ===
+        if (isHost) {
+            if (weatherChangeInterval) clearInterval(weatherChangeInterval);
+            sendPlayerAction('changeWeather'); 
+            weatherChangeInterval = setInterval(() => {
+                sendPlayerAction('changeWeather');
+            }, 60000);
+        }
+        // ======================
+
         if (typeof roomData.gameData.initialCycleRotation === 'number' && typeof roomData.gameData.roomCreationTimestamp === 'number') {
             const timeElapsedSeconds = (Date.now() - roomData.gameData.roomCreationTimestamp) / 1000;
             const rotationToAdd = timeElapsedSeconds * cycleManager.ROTATION_SPEED;
@@ -3115,6 +3279,14 @@ function handleDataFromServer(data) {
         }
         break;
     }
+
+    case 'weatherUpdate': { // Nowy case dla klientów
+            const { newWeather } = data.payload;
+            weatherManager.setWeather(newWeather);
+    cloudManager.setWeather(newWeather); // <-- DODAJ TĘ LINIĘ
+    break;
+}
+
      case 'hostClosing': {
             showNotification('Host zamknął pokój.', 'warning');
             // Natychmiastowo wywołaj funkcję powrotu do lobby,
@@ -3374,6 +3546,11 @@ function leaveCurrentRoomUI() {
     if (hostPingTimeout) {
         clearInterval(hostPingTimeout);
         hostPingTimeout = null;
+    }
+
+    if (weatherChangeInterval) {
+        clearInterval(weatherChangeInterval);
+        weatherChangeInterval = null;
     }
 
     // Zamknij połączenie P2P z hostem (TYLKO jeśli jesteśmy gościem)

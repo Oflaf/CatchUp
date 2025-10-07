@@ -367,7 +367,8 @@ class GameHost {
     constructor() {
         this.room = null;
         this.gameLoopInterval = null;
-        this.pingInterval = null; // NOWOŚĆ: Zmienna na interwał pingowania
+        this.pingInterval = null;
+        this.weatherInterval = null; // <-- DODAJ TĘ LINIĘ
         this.digCooldowns = {};
     }
 
@@ -421,6 +422,7 @@ class GameHost {
                 piers: [],
                 initialCycleRotation: Math.random() * (Math.PI * 2),
                 roomCreationTimestamp: Date.now(),
+                weather: 'clearsky' // <-- DODAJ TĘ LINIĘ
             },
             playerInputs: {}
         };
@@ -438,19 +440,46 @@ class GameHost {
         // NOWOŚĆ: Uruchom pętlę pingowania
         this.pingInterval = setInterval(() => this.checkGuestHeartbeats(), PING_INTERVAL);
         
+        // <-- DODAJ TE DWIE LINIE -->
+        this._changeWeather(); // Ustaw pogodę od razu na starcie
+        this.weatherInterval = setInterval(() => this._changeWeather(), 60000); // Zmieniaj pogodę co minutę
+
         return {
             name: this.room.name,
             gameData: this.room.gameData
         };
     }
 
-   stop() {
+    stop() {
         if (this.gameLoopInterval) clearInterval(this.gameLoopInterval);
-        if (this.pingInterval) clearInterval(this.pingInterval); // NOWOŚĆ: Zatrzymaj pingowanie
+        if (this.pingInterval) clearInterval(this.pingInterval);
+        if (this.weatherInterval) clearInterval(this.weatherInterval); // <-- DODAJ TĘ LINIĘ
         this.gameLoopInterval = null;
-        this.pingInterval = null; // NOWOŚĆ
+        this.pingInterval = null;
+        this.weatherInterval = null; // <-- DODAJ TĘ LINIĘ
         this.room = null;
         console.log("[HOST-WORKER] Gra zatrzymana i zresetowana.");
+    }
+
+    // <-- DODAJ CAŁĄ NOWĄ METODĘ PONIŻEJ -->
+    _changeWeather() {
+        if (!this.room) return;
+
+        const rand = Math.random();
+        let newWeather = 'clearsky';
+
+        if (rand < 0.10) { newWeather = 'rainstorm'; } 
+        else if (rand < 0.25) { newWeather = 'rain'; } 
+        else if (rand < 0.50) { newWeather = 'drizzle'; }
+        
+        if (this.room.gameData.weather !== newWeather) {
+            console.log(`[HOST-WORKER] Zmiana pogody na: ${newWeather}`);
+            this.room.gameData.weather = newWeather;
+            this.broadcast({
+                type: 'weatherUpdate',
+                payload: { newWeather: newWeather }
+            });
+        }
     }
 
     checkGuestHeartbeats() {
@@ -503,7 +532,8 @@ class GameHost {
                 roomId: this.room.id,
                 roomName: this.room.name,
                 playersInRoom: this.room.players,
-                gameData: this.room.gameData
+                gameData: this.room.gameData,
+                currentWeather: this.room.gameData.weather
             }
         });
         
@@ -592,6 +622,32 @@ class GameHost {
             this.room.players[peerId].lastPongTime = Date.now();
         }
         break;
+        case 'changeWeather': {
+        // Ta akcja może być wywołana tylko przez hosta
+        if (peerId !== this.room.hostId) return;
+
+        const rand = Math.random();
+        let newWeather = 'clearsky';
+
+        if (rand < .10) { // 10%
+            newWeather = 'rainstorm';
+        } else if (rand < 0.25) { // 15%
+            newWeather = 'rain';
+        } else if (rand < 0.50) { // 25%
+            newWeather = 'drizzle';
+        }
+        
+        // Jeśli pogoda się faktycznie zmienia, zapisz stan i rozgłoś
+        if (this.room.gameData.weather !== newWeather) {
+            console.log(`[HOST-WORKER] Zmiana pogody na: ${newWeather}`);
+            this.room.gameData.weather = newWeather;
+            this.broadcast({
+                type: 'weatherUpdate',
+                payload: { newWeather: newWeather }
+            });
+        }
+        break;
+    }
 
             // NOWY CASE START
             case 'sendDirectMessage': {

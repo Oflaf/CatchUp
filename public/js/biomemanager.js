@@ -1,9 +1,199 @@
+class LeavesManager {
+    constructor(biomeManager) { // <-- 1. DODAJ PARAMETR 'biomeManager'
+        this.leaves = [];
+        this.leafImage = null;
+        this.isAssetLoaded = false;
+        this.currentBiome = null;
+        this.MAX_LEAVES = 24;
+        this.biomeManager = biomeManager; // <-- 2. ZAPISZ REFERENCJĘ
+    }
+
+    /**
+     * Ładuje grafikę liści dla konkretnego biomu.
+     * @param {string} biomeName - Nazwa aktualnego biomu.
+     */
+    loadLeafAsset(biomeName) {
+        if (this.currentBiome === biomeName && this.isAssetLoaded) {
+            return; // Zasób jest już załadowany
+        }
+
+        this.currentBiome = biomeName;
+        this.isAssetLoaded = false;
+        this.leafImage = new Image();
+        this.leafImage.src = `img/world/biome/${biomeName}/leaves.png`;
+
+        this.leafImage.onload = () => {
+            console.log(`Załadowano liście dla biomu: ${biomeName}`);
+            this.isAssetLoaded = true;
+        };
+        this.leafImage.onerror = () => {
+            console.warn(`Nie znaleziono pliku liści dla biomu: ${biomeName}`);
+            this.isAssetLoaded = false;
+            this.leafImage = null;
+        };
+    }
+
+    /**
+     * Tworzy nowy liść i dodaje go do symulacji.
+     * @param {object} player - Obiekt gracza, aby generować liście w jego pobliżu.
+     * @param {number} worldWidth - Szerokość świata gry.
+     */
+    spawnLeaf(player, worldWidth, cameraX, gameWidth, groundY) {
+    let spawnX = 0;
+    let spawnY = 0;
+
+    const screenLeftEdge = cameraX;
+    const screenRightEdge = cameraX + gameWidth;
+    const allTrees = [...this.biomeManager.backgroundTrees, ...this.biomeManager.foregroundTrees];
+
+    const visibleTrees = allTrees.filter(tree => {
+        const treeWidth = tree.definition.width * tree.scale;
+        const treeLeft = tree.x;
+        const treeRight = tree.x + treeWidth;
+        return treeRight > screenLeftEdge && treeLeft < screenRightEdge;
+    });
+
+    if (visibleTrees.length > 0) {
+        const tree = visibleTrees[Math.floor(Math.random() * visibleTrees.length)];
+        const treeRenderedWidth = tree.definition.width * tree.scale;
+        const treeRenderedHeight = tree.definition.height * tree.scale;
+
+        spawnX = tree.x + (Math.random() * treeRenderedWidth);
+
+        // ======================= POCZĄTEK POPRAWKI =======================
+        // Ignorujemy 'tree.y' i zakładamy, że podstawa drzewa jest na poziomie ziemi.
+        const treeTopY = groundY - treeRenderedHeight+300;
+        // ======================== KONIEC POPRAWKI ========================
+
+        const canopyHeight = treeRenderedHeight * 0.65;
+        spawnY = treeTopY + (Math.random() * canopyHeight);
+    } else {
+        spawnX = cameraX + (Math.random() * gameWidth);
+        // Ta wartość (600) jest prawdopodobnie zbyt duża, jeśli chcesz, aby liście
+        // pojawiały się na górze, gdy nie ma drzew. Zmień ją np. na 20.
+        spawnY = 400 + (Math.random() * 100); 
+    }
+        
+        const newLeaf = {
+            state: 'FADING_IN',
+            x: spawnX,
+            y: spawnY, // Użyj nowej, dynamicznej wysokości
+            startX: spawnX,
+            alpha: 0,
+            scale: 3.2,
+            spriteSection: Math.floor(Math.random() * 4),
+            mirrored: Math.random() < 0.5,
+            fallSpeed: 15 + Math.random() * 40,
+            lifeTime: Math.random() * Math.PI * 2,
+            sineAmplitude: 25 + Math.random() * 50,
+            sineFrequency: 0.9 + Math.random() * 0.7,
+            rotation: 0,
+            rotationAmount: (Math.random() * 1.8) - 2.4,
+        };
+        this.leaves.push(newLeaf);
+    }
+
+    /**
+     * Aktualizuje logikę wszystkich liści (spadanie, animacje, kolizje).
+     * @param {number} deltaTime - Czas od ostatniej klatki.
+     * @param {object} player - Obiekt gracza.
+     * @param {number} groundY - Pozycja Y ziemi.
+     * @param {number} worldWidth - Szerokość świata.
+     */
+        update(deltaTime, player, groundY, worldWidth, cameraX, gameWidth) {
+    if (!this.isAssetLoaded) return;
+
+    // Generuj nowe liście, jeśli jest ich za mało
+    if (this.leaves.length < this.MAX_LEAVES) {
+        //                       👇 DODAJ 'groundY' JAKO ARGUMENT
+        this.spawnLeaf(player, worldWidth, cameraX, gameWidth, groundY);
+    }
+
+
+        const screenLeftEdge = cameraX;
+        const screenRightEdge = cameraX + gameWidth;
+        const buffer = 150; // Bufor, aby liście znikały/pojawiały się poza ekranem
+
+        // Aktualizuj istniejące liście
+        for (let i = this.leaves.length - 1; i >= 0; i--) {
+            const leaf = this.leaves[i];
+            let shouldBeRemoved = false;
+
+            leaf.lifeTime += deltaTime;
+
+            // Logika stanów (fade in, spadanie, fade out)
+            if (leaf.state === 'FADING_IN') {
+                leaf.alpha += deltaTime * 1.5;
+                if (leaf.alpha >= 1) {
+                    leaf.alpha = 1;
+                    leaf.state = 'FALLING';
+                }
+            } else if (leaf.state === 'FALLING') {
+                leaf.y += leaf.fallSpeed * deltaTime;
+
+                if (leaf.y >= groundY - (8 * leaf.scale)) {
+                    leaf.y = groundY - (8 * leaf.scale);
+                    leaf.state = 'FADING_OUT';
+                }
+            } else if (leaf.state === 'FADING_OUT') {
+                leaf.alpha -= deltaTime * 1.2;
+                if (leaf.alpha <= 0) {
+                    shouldBeRemoved = true;
+                }
+            }
+
+            // Ruch sinusoidalny i rotacja
+            leaf.x = leaf.startX + Math.sin(leaf.lifeTime * leaf.sineFrequency) * leaf.sineAmplitude;
+            leaf.rotation = Math.cos(leaf.lifeTime * leaf.sineFrequency) * leaf.rotationAmount;
+
+            // Sprawdź, czy liść opuścił ekran lub zakończył cykl życia
+            if (shouldBeRemoved || leaf.x < screenLeftEdge - buffer || leaf.x > screenRightEdge + buffer) {
+                this.leaves.splice(i, 1); // Usuń stary liść
+            }
+        }
+    }
+
+
+    /**
+     * Rysuje wszystkie aktywne liście na ekranie.
+     * @param {CanvasRenderingContext2D} ctx - Kontekst canvas.
+     */
+    draw(ctx) {
+        if (!this.isAssetLoaded || this.leaves.length === 0) return;
+
+        this.leaves.forEach(leaf => {
+            const sourceSize = 8;
+            const scaledSize = sourceSize * leaf.scale;
+            const sourceX = leaf.spriteSection * sourceSize;
+
+            ctx.save();
+            ctx.globalAlpha = leaf.alpha;
+            ctx.translate(leaf.x + scaledSize / 2, leaf.y + scaledSize / 2);
+
+            if (leaf.mirrored) {
+                ctx.scale(-1, 1);
+            }
+            ctx.rotate(leaf.rotation);
+
+            ctx.drawImage(
+                this.leafImage,
+                sourceX, 0, sourceSize, sourceSize, // sx, sy, sWidth, sHeight
+                -scaledSize / 2, -scaledSize / 2, scaledSize, scaledSize // dx, dy, dWidth, dHeight
+            );
+
+            ctx.restore();
+        });
+    }
+}
+
 class BiomeManager {
-    constructor(worldWidth, gameHeight, tileSize = 32) {
+        constructor(worldWidth, gameHeight, tileSize = 32) {
         this.worldWidth = worldWidth;
         this.gameHeight = gameHeight;
         this.tileSize = tileSize;
         this.scaledTileSize = tileSize * 3.75;
+
+        this.leavesManager = new LeavesManager(this);
 
         this.biomeTiles = {};
         this.biomeBuildingsImages = {};
@@ -558,7 +748,7 @@ _initializeSwimmingFish() {
     }
 }
 
- scareFishAt(splashX, splashY_ignored) {
+  scareFishAt(splashX, splashY_ignored) {
         const SCARE_RADIUS = 250;
         const SCARE_RADIUS_SQUARED = SCARE_RADIUS * SCARE_RADIUS;
         const FLEE_SPEED = 350;
@@ -586,9 +776,9 @@ _initializeSwimmingFish() {
                 // Jeśli plusk jest po lewej stronie ryby (dx > 0), ryba ucieka w prawo.
                 // Jeśli plusk jest po prawej stronie ryby (dx < 0), ryba ucieka w lewo.
                 if (dx > 0) {
-                    fish.direction = 1; // Uciekaj w prawo
+                    fish.direction = -1; // Uciekaj w prawo
                 } else {
-                    fish.direction = -1; // Uciekaj w lewo
+                    fish.direction = 1; // Uciekaj w lewo
                 }
             }
         });
@@ -692,6 +882,9 @@ drawSwimmingFish(ctx) {
     setBiome(newBiomeName) {
         if (!this.biomeDefinitions[newBiomeName]) { return; }
         this.currentBiomeName = newBiomeName;
+        
+        this.leavesManager.loadLeafAsset(newBiomeName); // <-- DODAJ TĘ LINIĘ
+
         this.currentBiomeDef = this.biomeDefinitions[newBiomeName];
         this.waterPlantsLoaded = false;
         this.groundPlantsLoaded = false;
@@ -987,15 +1180,25 @@ drawSwimmingFish(ctx) {
         this.updateWaterPlantsAnimation(deltaTime);
     }
 
-    updateAnimations(deltaTime) {
-        this.updateWaterAnimation(deltaTime);
-        this._updateGroundPlantsAnimation(deltaTime);
-        this._updateFireplaceAnimation(deltaTime);
-        this._updateFireplaceParticles(deltaTime);
-        this._updateLightEffect(deltaTime);
-        this._updateSwimmingFish(deltaTime);
-        this._updateClouds(deltaTime);
+    updateAnimations(deltaTime, player, groundLevel, cameraX, gameWidth) {
+    this.updateWaterAnimation(deltaTime);
+    this._updateGroundPlantsAnimation(deltaTime);
+    this._updateFireplaceAnimation(deltaTime);
+    this._updateFireplaceParticles(deltaTime);
+    this._updateLightEffect(deltaTime);
+    this._updateSwimmingFish(deltaTime);
+    this._updateClouds(deltaTime);
+
+    if (player && groundLevel) {
+        const groundY = this.gameHeight - groundLevel;
+        // Przekaż dodatkowe parametry do managera liści
+        this.leavesManager.update(deltaTime, player, groundY, this.worldWidth, cameraX, gameWidth);
     }
+}
+
+    drawLeaves(ctx) {
+    this.leavesManager.draw(ctx);
+}
 
     drawWater(ctx, biomeName, cameraX) {
         const biomeImage = this.biomeTiles[biomeName];
