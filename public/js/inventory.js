@@ -19,6 +19,7 @@ class InventoryManager {
         
         // ======================= POCZĄTEK ZMIAN =======================
         this.tradingManager = null; // Miejsce na referencję do TradingManagera
+        this.totemManager = null; // <-- NOWA WŁAŚCIWOŚĆ
         // ======================== KONIEC ZMIAN =========================
 
         this._initSlots();
@@ -32,6 +33,11 @@ class InventoryManager {
      */
     linkTradingManager(manager) {
         this.tradingManager = manager;
+    }
+
+    // NOWA METODA
+    linkTotemManager(manager) {
+        this.totemManager = manager;
     }
     // ======================== KONIEC ZMIAN =========================
 
@@ -74,9 +80,13 @@ class InventoryManager {
     }
 
     toggle() {
-        if (this.tradingManager && this.tradingManager.isTradeWindowOpen) return;
+        // Blokuj otwieranie/zamykanie ekwipunku klawiszem 'E', jeśli handel lub totem jest aktywny
+        if ((this.tradingManager && this.tradingManager.isTradeWindowOpen) || (this.totemManager && this.totemManager.isOpen)) {
+            return;
+        }
 
         this.isOpen = !this.isOpen;
+        // Jeśli zamykamy ekwipunek (a nie jest on otwarty przez inny manager) i trzymamy przedmiot, zwróć go
         if (!this.isOpen && this.heldItem) {
             this._returnHeldItem(); 
         }
@@ -155,7 +165,10 @@ class InventoryManager {
     
     _returnHeldItem() {
         if (!this.heldItem || this.heldItemOriginalSlot === null) return;
-        let originalSlot = this._getSlotById(this.heldItemOriginalSlot) || this.tradingManager?.slots.find(s => s.id === this.heldItemOriginalSlot);
+        let originalSlot = this._getSlotById(this.heldItemOriginalSlot) 
+            || this.tradingManager?.slots.find(s => s.id === this.heldItemOriginalSlot)
+            || (this.totemManager && this.totemManager.cavitySlot.id === this.heldItemOriginalSlot ? this.totemManager.cavitySlot : null); // <-- ZMODYFIKOWANA LINIA
+
         if (originalSlot) originalSlot.item = this.heldItem;
         this.heldItem = null;
         this.heldItemOriginalSlot = null;
@@ -206,7 +219,10 @@ class InventoryManager {
             return;
         }
         
-        const originalSlot = this._getSlotById(this.heldItemOriginalSlot) || this.tradingManager?.slots.find(s => s.id === this.heldItemOriginalSlot);
+        const originalSlot = this._getSlotById(this.heldItemOriginalSlot) 
+            || this.tradingManager?.slots.find(s => s.id === this.heldItemOriginalSlot)
+            || (this.totemManager && this.totemManager.cavitySlot.id === this.heldItemOriginalSlot ? this.totemManager.cavitySlot : null); // <-- ZMODYFIKOWANA LINIA
+
         if (targetSlot.item) {
             if(originalSlot) originalSlot.item = targetSlot.item;
         } else {
@@ -254,6 +270,13 @@ class InventoryManager {
             const hoveredTradeSlot = this.tradingManager._getHoveredSlot();
             if (hoveredTradeSlot) return hoveredTradeSlot;
         }
+
+        // === NOWY BLOK KODU ===
+        if (this.totemManager && this.totemManager.isOpen) {
+            const hoveredTotemSlot = this.totemManager._getHoveredSlot();
+            if (hoveredTotemSlot) return hoveredTotemSlot;
+        }
+        // === KONIEC NOWEGO BLOKU ===
         
         return null;
     }

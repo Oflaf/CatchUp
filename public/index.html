@@ -60,11 +60,55 @@
     </script>
 </head>
 <body>
+    <!-- ================== POCZĄTEK NOWEGO KODU ================== -->
+    <div id="settings-window">
+        <div class="settings-header">
+            <h2 class="settings-title">OPTIONS</h2>
+            <div id="settings-close-btn" class="settings-close-btn">
+                <img src="img/ui/cross.png" alt="Close">
+            </div>
+        </div>
+        <div class="settings-content">
+            <div class="settings-row">
+                <span>master volume:</span>
+                <div class="settings-control">
+                    <img src="img/ui/arrow.png" id="master-volume-left" class="arrow-left" alt="Decrease">
+                    <span id="master-volume-value" class="settings-value">100%</span>
+                    <img src="img/ui/arrow.png" id="master-volume-right" class="arrow-right" alt="Increase">
+                </div>
+            </div>
+            <div class="settings-row">
+                <span>world:</span>
+                <div class="settings-control">
+                    <img src="img/ui/arrow.png" id="world-left" class="arrow-left" alt="Decrease">
+                    <span id="world-value" class="settings-value">100%</span>
+                    <img src="img/ui/arrow.png" id="world-right" class="arrow-right" alt="Increase">
+                </div>
+            </div>
+            <div class="settings-row">
+                <span>music:</span>
+                <div class="settings-control">
+                    <img src="img/ui/arrow.png" id="music-left" class="arrow-left" alt="Decrease">
+                    <span id="music-value" class="settings-value">100%</span>
+                    <img src="img/ui/arrow.png" id="music-right" class="arrow-right" alt="Increase">
+                </div>
+            </div>
+            <div class="settings-row">
+                <span>mobile:</span>
+                <div class="settings-control">
+                    <img src="img/ui/arrow.png" id="mobile-controls-left" class="arrow-left" alt="Decrease">
+                    <span id="mobile-controls-value" class="settings-value">ON</span>
+                    <img src="img/ui/arrow.png" id="mobile-controls-right" class="arrow-right" alt="Increase">
+                </div>
+            </div>
+        </div>
+    </div>
+    <!-- =================== KONIEC NOWEGO KODU =================== -->
+
     <div id="intro-container"></div>
 
     <canvas id="menuCanvas"></canvas>
 
-    <!-- Lobby jest PRAWIDŁOWO ukryte na starcie -->
     <div id="lobby" style="display: none;">
         <div class="player-input-container">
             <p>Your Name:</p>
@@ -77,40 +121,70 @@
         </div>
         <div id="flagListContainer" class="flag-list-container"></div>
         
-        <div class="main-menu">
-            <button id="joinGameBtn">Join the Game</button>
-            <button id="optionsBtn" disabled>Options</button>
+<div class="main-menu">
+            <div class="main-menu-stack">
+                <button id="joinGameBtn">Join the Game</button>
+                <button id="optionsBtn">Options</button>
+            </div>
+            <button id="toggleMobileControlsBtn">
+                <img src="img/ui/phone.png" alt="Toggle Mobile UI">
+            </button>
         </div>
         <p id="menuStatus" class="menu-status"></p>
     </div>
 
     <div id="gameContainer" style="display: none; position: relative;">
         <button id="leaveRoomBtn">Leave</button>
+        <button id="inGameSettingsBtn" class="ingame-btn">
+            <img src="img/ui/settings.png" alt="Settings">
+        </button>
         <canvas id="gameCanvas"></canvas>
         <div id="cycleOverlay"></div>
     </div>
 
-<script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script> 
+    <div id="mobile-controls">
+        <div class="d-pad">
+    <div id="mobile-up" class="control-button d-pad-up"><img src="img/ui/arrow.png" alt="Up"></div>
+    <div id="mobile-left" class="control-button d-pad-left"><img src="img/ui/arrow.png" alt="Left"></div>
+    <div id="mobile-right" class="control-button d-pad-right"><img src="img/ui/arrow.png" alt="Right"></div>
+    <div id="mobile-down" class="control-button d-pad-down"><img src="img/ui/arrow.png" alt="Down"></div>
+</div>
+        <div class="action-buttons">
+    <!-- NOWY GŁÓWNY PRZYCISK AKCJI -->
+    <div id="mobile-lmb" class="control-button action-primary">
+        <img src="img/ui/rod.png" alt="Action">
+    </div>
+
+    <div id="mobile-space" class="control-button action-space">JUMP</div>
+    <div id="mobile-e" class="control-button action-small">E</div>
+    <div id="mobile-t" class="control-button action-small">T</div>
+    <div id="mobile-f" class="control-button action-small">F</div>
+</div>
+        <div class="item-buttons">
+            <div id="mobile-1" class="control-button item-button">1</div>
+            <div id="mobile-2" class="control-button item-button">2</div>
+            <div id="mobile-3" class="control-button item-button">3</div>
+            <div id="mobile-4" class="control-button item-button">4</div>
+        </div>
+    </div>
+
+    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script> 
     <script src="/socket.io/socket.io.js"></script> 
     <script src="js/intro.js"></script>
-    <!-- Krok 1: Ładujemy wszystkie skrypty pomocnicze i definicje klas -->
     <script src="js/loading.js"></script> 
     <script src="js/biomemanager.js"></script>
     <script src="js/menuworld.js"></script>
     <script src="js/cycle.js"></script>
-    <script src="js/inventory.js"></script> 
     <script src="js/trading.js"></script>
     <script src="js/fishing.js"></script>
     <script src="js/chat.js"></script> 
     <script src="js/soundmanager.js"></script> 
     <script src="js/weather.js"></script>
+    <script src="js/scoreboard.js"></script>
+    <script src="js/inventory.js"></script> 
+    <script src="js/totem.js"></script>
+    <script src="js/settings.js"></script>
     
-    <!-- Krok 2: Ładujemy główny skrypt gry, który zawiera funkcję startAppLoading() -->
-    <!-- MUSI być PRZED intro.js -->
     <script src="script.js"></script>
-    
-    <!-- Krok 3: Dopiero na samym końcu ładujemy skrypt intro, który wszystko uruchamia -->
-    <!-- MUSI być OSTATNI -->
-
 </body>
 </html>

@@ -84,14 +84,14 @@ class LoadingManager {
     
     _loadCharacterAssets() {
         const paths = {
-            leg: 'img/character/leg_load.png',
-            body: 'img/character/body_load.png',
-            arm: 'img/character/arm_load.png',
-            head: 'img/character/head_load.png',
-            eye: 'img/character/eye_load.png',
+            leg: 'img/character/load/leg_load.png',
+            body: 'img/character/load/body_load.png',
+            arm: 'img/character/load/arm_load.png',
+            head: 'img/character/load/head_load.png',
+            eye: 'img/character/load/eye_load.png',
             // === NOWE OBRAZKI ===
-            rod: 'img/item/rod_load.png',
-            float: 'img/item/float_load.png'
+            rod: 'img/character/load/rod_load.png',
+            float: 'img/character/load/float_load.png'
         };
         const keys = Object.keys(paths);
         let loadedCount = 0;

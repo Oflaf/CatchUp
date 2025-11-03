@@ -200,8 +200,13 @@ class BiomeManager {
         this.biomeInsectImages = {};
         this.biomePierImages = {}; 
         this.biomePierSpanImages = {};
+        this.biomeFrontLayerImages = {};
+        this.biomeFrontLayerClearImages = {}; // <-- NOWA LINIA
+        this.biomeObstacleImages = {};
 
-        this.placedPiers = [];     
+        this.frontLayerClearAlpha = 0; // <-- NOWA LINIA
+        this.placedPiers = [];
+        this.placedObstacles = []; // <-- DODAJ TĘ LINIĘ
 
         this.backgroundImage = new Image();
         this.backgroundLoaded = false;
@@ -276,12 +281,22 @@ class BiomeManager {
         this.campsiteImage.onerror = () => { console.error('Failed to load camp.png'); };
         // === KONIEC ZMIAN ===
 
+        // <-- POCZĄTEK ZMIAN -->
+this.signImage = new Image();
+this.signLoaded = false;
+this.signObject = null; // Obiekt do przechowywania danych znaku
+
+this.signImage.src = 'img/world/sign.png'; // Ścieżka do obrazka
+this.signImage.onload = () => { this.signLoaded = true; };
+this.signImage.onerror = () => { console.error('Failed to load sign.png'); };
 
         const BASE_BUILDING_SOURCE_TILE_SIZE = 128;
 
         this.biomeDefinitions = {
             jurassic: {
-                // ======================= POCZĄTEK ZMIAN DLA UNIKATOWEGO TŁA =======================
+                obstaclePath: 'img/world/biome/jurassic/obstacle.png', // <-- DODAJ TĘ LINIĘ
+                frontLayerPath: 'img/world/biome/jurassic/front.png',
+                frontLayerClearPath: 'img/world/biome/jurassic/front_clear.png', // 
                 tileBackgroundPath: 'img/world/biome/jurassic/background_tile.png',
                 // ======================= KONIEC ZMIAN DLA UNIKATOWEGO TŁA ========================
                 backgroundPath: 'img/world/biome/jurassic/background.png',
@@ -318,11 +333,12 @@ class BiomeManager {
                 waterPlantsPath: 'img/world/biome/jurassic/waterplants.png',
                 groundPlantsPath: 'img/world/biome/jurassic/groundplants.png',
                 groundPlantDefinitions: [
-                    { x: 0, y: 0, width: 32, height: 64 }, { x: 32, y: 0, width: 32, height: 64 }, { x: 64, y: 0, width: 32, height: 64 },
-                    { x: 96, y: 0, width: 32, height: 64 }, { x: 128, y: 0, width: 32, height: 64 }, { x: 160, y: 0, width: 32, height: 64 },
-                    { x: 192, y: 0, width: 32, height: 64 }, { x: 224, y: 0, width: 64, height: 64 }, { x: 288, y: 0, width: 32, height: 64 },
-                    { x: 320, y: 0, width: 32, height: 64 }, { x: 352, y: 0, width: 32, height: 64 }, { x: 384, y: 0, width: 32, height: 64 }
-                ],
+                { x: 0, y: 0, width: 32, height: 64 }, { x: 32, y: 0, width: 32, height: 64 }, { x: 64, y: 0, width: 32, height: 64 },
+                { x: 96, y: 0, width: 32, height: 64 }, { x: 128, y: 0, width: 32, height: 64 }, { x: 160, y: 0, width: 32, height: 64 },
+                { x: 192, y: 0, width: 32, height: 64 }, { x: 224, y: 0, width: 64, height: 64 }, { x: 288, y: 0, width: 32, height: 64 },
+                { x: 320, y: 0, width: 32, height: 64 }, { x: 352, y: 0, width: 32, height: 64 }, { x: 384, y: 0, width: 32, height: 64 },
+                { x: 416, y: 0, width: 32, height: 64 }, 
+            ],
                 waterPlantDefinitions: [
                     { y: 0, x: 0, width: 32, height: 64, layer: 'front', canBeMirrored: true, zIndex: 1 },
                     { y: 0, x: 32, width: 32, height: 64, layer: 'front', canBeMirrored: true, zIndex: 1 },
@@ -335,7 +351,9 @@ class BiomeManager {
                 ]
             },
             grassland: {
-                // ======================= POCZĄTEK ZMIAN DLA UNIKATOWEGO TŁA =======================
+                obstaclePath: 'img/world/biome/grassland/obstacle.png', // <-- DODAJ TĘ LINIĘ
+                frontLayerPath: 'img/world/biome/grassland/front.png',
+                frontLayerClearPath: 'img/world/biome/grassland/front_clear.png', // 
                 tileBackgroundPath: 'img/world/biome/grassland/background_tile.png',
                 // ======================= KONIEC ZMIAN DLA UNIKATOWEGO TŁA ========================
                 backgroundPath: 'img/world/biome/grassland/background.png',
@@ -355,8 +373,7 @@ class BiomeManager {
                 treeDefinitions: [
                     { x: 0,   y: 0, width: 128, height: 256 }, { x: 128, y: 0, width: 128, height: 256 },
                     { x: 256, y: 0, width: 128, height: 256 }, { x: 384, y: 0, width: 128, height: 256 },
-                    { x: 512, y: 0, width: 128, height: 256 }, { x: 640, y: 0, width: 128, height: 256 },
-                    { x: 768, y: 0, width: 128, height: 256 }, { x: 896, y: 0, width: 128, height: 256 },
+
                 ],
                 tileMap: {
                     grass: { x: 0, y: 0, width: 32, height: 32 }, ground1: { x: 32, y: 0, width: 32, height: 32 },
@@ -375,7 +392,11 @@ class BiomeManager {
                     { x: 0, y: 0, width: 32, height: 64 }, { x: 32, y: 0, width: 32, height: 64 }, { x: 64, y: 0, width: 32, height: 64 },
                     { x: 96, y: 0, width: 32, height: 64 }, { x: 128, y: 0, width: 32, height: 64 }, { x: 160, y: 0, width: 32, height: 64 },
                     { x: 192, y: 0, width: 32, height: 64 }, { x: 224, y: 0, width: 64, height: 64 }, { x: 288, y: 0, width: 32, height: 64 },
-                    { x: 320, y: 0, width: 32, height: 64 }, { x: 352, y: 0, width: 32, height: 64 }, { x: 384, y: 0, width: 32, height: 64 }
+                    { x: 320, y: 0, width: 32, height: 64 }, { x: 352, y: 0, width: 32, height: 64 }, { x: 384, y: 0, width: 32, height: 64 },
+                    { x: 416, y: 0, width: 32, height: 64 }, 
+                    // === DODANE NOWE SEKCJE ===
+                    { x: 448, y: 0, width: 32, height: 64 }, // Nowy element, indeks 13
+                    
                 ],
                 waterPlantDefinitions: [
                     { y: 0, x: 0, width: 32, height: 64, layer: 'front', canBeMirrored: true, zIndex: 1 },
@@ -411,7 +432,7 @@ class BiomeManager {
         this.backgroundTrees = [];
         this.foregroundTrees = [];
         this.TREE_VERTICAL_OFFSET = 0;
-        this.TREE_MIN_SCALE = 2.7;
+        this.TREE_MIN_SCALE = 3.2;
         this.TREE_MAX_SCALE = 3.6;
         this.groundPlantDefinitions = [];
         this.waterPlantDefinitions = [];
@@ -420,7 +441,7 @@ class BiomeManager {
         this.backgroundGroundPlants = [];
         this.foregroundGroundPlants = [];
         this.GROUNDGRASS_VERTICAL_OFFSET = 0;
-        this.GROUNDGRASS_MIN_SCALE = 2.2;
+        this.GROUNDGRASS_MIN_SCALE = 3.3;
         this.GROUNDGRASS_MAX_SCALE = 3.6;
         this.placedWaterPlants = [];
         this.WATER_PLANT_SPAWN_INTERVAL = 30;
@@ -454,7 +475,7 @@ class BiomeManager {
         const SOURCE_HEIGHT = 128;
 
         for (let i = 0; i < cloudCount; i++) {
-            const scale = 0.5 + Math.random() * 0.8; // Niewielkie różnice w wielkości
+            const scale = 0.4 + Math.random() * 1.2; // Niewielkie różnice w wielkości
             const cloudWidth = SOURCE_WIDTH * scale;
             
             this.clouds.push({
@@ -492,7 +513,7 @@ class BiomeManager {
             
             // Jeśli chmura wyjdzie całkowicie poza prawą krawędź świata...
             if (cloud.x > this.worldWidth) {
-                const newScale = 0.3 + Math.random() * 1.1;
+                const newScale = 0.6 + Math.random() * 1.8;
                 const newWidth = SOURCE_WIDTH * newScale;
                 
                 cloud.x = -newWidth; // Pozycja startowa daleko po lewej, poza ekranem
@@ -530,7 +551,7 @@ class BiomeManager {
             const drawY = cloud.y - parallaxY;
 
             ctx.save();
-            ctx.globalAlpha = 0.75; // Lekka przezroczystość
+            ctx.globalAlpha = 1; // Lekka przezroczystość
             ctx.translate(drawX + cloud.width / 2, drawY + cloud.height / 2);
             
             if (cloud.mirrored) {
@@ -589,6 +610,24 @@ class BiomeManager {
             width: SOURCE_WIDTH * CAMPSITE_SCALE,
             height: SOURCE_HEIGHT * CAMPSITE_SCALE,
         };
+
+        if (!this.signObject) {
+        const SIGN_SCALE = 3.5;
+        // Załóżmy wymiary źródłowe obrazka, dostosuj w razie potrzeby
+        const SIGN_SOURCE_WIDTH = 24; 
+        const SIGN_SOURCE_HEIGHT = 60;
+
+        this.signObject = {
+            x: this.campsiteObject.x + this.campsiteObject.width - 40, // Pozycja na prawo od obozu
+            y: this.campsiteObject.y, // Wyrównany do dołu z obozem
+            scale: SIGN_SCALE,
+            width: SIGN_SOURCE_WIDTH * SIGN_SCALE,
+            height: SIGN_SOURCE_HEIGHT * SIGN_SCALE,
+            // Losowa rotacja od -5 do +5 stopni, przekonwertowana na radiany
+            rotation: (Math.random() * 10 - 5) * (Math.PI / 180) 
+        };
+    }
+
 
         // <--- NOWOŚĆ: Ustawiamy publiczne właściwości dla detekcji kolizji.
         // Pamiętaj, że `campsiteObject.y` to DÓŁ, więc Y dla kolizji to `y - height`.
@@ -878,7 +917,89 @@ drawSwimmingFish(ctx) {
         ctx.restore();
     });
 }
+initializeObstacles(obstaclesData) {
+        this.placedObstacles = obstaclesData || [];
 
+// I DODAJ POD NIĄ TEN FRAGMENT:
+// Inicjalizujemy stan animacji dla każdej przeszkody
+this.placedObstacles.forEach(obs => {
+    obs.isShaking = false;
+    obs.shakeStartTime = 0;
+});
+
+
+    }
+
+    // W DOWOLNYM MIEJSCU wewnątrz klasy `BiomeManager` dodaj tę nową metodę:
+/**
+ * Uruchamia animację trzęsienia dla konkretnej przeszkody.
+ * @param {string} obstacleId - ID przeszkody, która ma się zatrząść.
+ */
+startObstacleShake(obstacleId) {
+    const obstacle = this.placedObstacles.find(o => o.id === obstacleId);
+    if (obstacle) {
+        obstacle.isShaking = true;
+        obstacle.shakeStartTime = Date.now();
+    }
+}
+
+    // DODAJ TĘ NOWĄ FUNKCJĘ
+       drawObstacles(ctx) {
+    const obstacleImage = this.biomeObstacleImages[this.currentBiomeName];
+    if (!obstacleImage || !obstacleImage.complete || this.placedObstacles.length === 0) {
+        return;
+    }
+
+    // Definicje sekcji w pliku sprite przeszkód
+    const typeDetails = {
+        0: { sx: 0, sy: 0, sWidth: 32, sHeight: 18 },
+        1: { sx: 32, sy: 0, sWidth: 32, sHeight: 18 },
+        2: { sx: 64, sy: 0, sWidth: 64, sHeight: 18 }
+    };
+
+    // --- Parametry nowej animacji ---
+    const SHAKE_DURATION_MS = 450;
+    const MAX_INTENSITY = 8; // Maksymalne wychylenie w pikselach przy pierwszym uderzeniu
+    const FREQUENCY = 50;    // Częstotliwość drgań (kontroluje ilość "uderzeń")
+    const DAMPING_FACTOR = 5;  // Jak szybko drgania zanikają
+
+    for (const obstacle of this.placedObstacles) {
+        const details = typeDetails[obstacle.typeIndex];
+        if (!details) continue;
+
+        ctx.save();
+
+        if (obstacle.isShaking) {
+            // 1. Oblicz postęp animacji (od 0.0 do 1.0)
+            const elapsed = Date.now() - obstacle.shakeStartTime;
+            let progress = elapsed / SHAKE_DURATION_MS;
+            progress = Math.min(progress, 1.0); // Upewnij się, że nie przekracza 1
+
+            // 2. Oblicz siłę wygaszania (im dalej w animacji, tym słabsze drgania)
+            const damping = Math.exp(-progress * DAMPING_FACTOR);
+
+            // 3. Oblicz falę drgań za pomocą funkcji sinus
+            const vibration = Math.sin(progress * FREQUENCY);
+
+            // 4. Połącz wszystko, aby uzyskać finalne przesunięcie
+            const offset = MAX_INTENSITY * vibration * damping;
+
+            // Zastosuj przesunięcie do kamienia
+            ctx.translate(offset, 0); // Trzęsiemy tylko na boki dla lepszego efektu
+        }
+
+        // Narysuj przeszkodę (przesuniętą lub nie)
+        ctx.drawImage(
+            obstacleImage,
+            details.sx, details.sy,
+            details.sWidth, details.sHeight,
+            obstacle.x, obstacle.y,
+            obstacle.width, obstacle.height
+        );
+
+        ctx.restore();
+    }
+}
     setBiome(newBiomeName) {
         if (!this.biomeDefinitions[newBiomeName]) { return; }
         this.currentBiomeName = newBiomeName;
@@ -893,6 +1014,27 @@ drawSwimmingFish(ctx) {
         this.background2Loaded = false;
         this.tileBackgroundLoaded = false;
         this.placedPiers = [];
+        this.placedObstacles = []; // <-- DODAJ TĘ LINIĘ (do resetowania)
+
+        // --- POCZĄTEK NOWEJ ZMIANY ---
+        // Wczytywanie obrazu dla warstwy frontowej
+        if (this.currentBiomeDef.frontLayerPath) {
+            if (!this.biomeFrontLayerImages[newBiomeName]) {
+                const img = new Image();
+                img.src = this.currentBiomeDef.frontLayerPath;
+                this.biomeFrontLayerImages[newBiomeName] = img;
+            }
+        }
+        // Wczytywanie obrazu dla "czystej" warstwy frontowej
+        if (this.currentBiomeDef.frontLayerClearPath) {
+            if (!this.biomeFrontLayerClearImages[newBiomeName]) {
+                const img = new Image();
+                img.src = this.currentBiomeDef.frontLayerClearPath;
+                this.biomeFrontLayerClearImages[newBiomeName] = img;
+            }
+        }
+        // --- KONIEC ZMIENIONEGO BLOKU ---
+
         if (this.currentBiomeDef.backgroundPath) {
             this.backgroundImage.onload = () => { this.backgroundLoaded = true; };
             this.backgroundImage.onerror = () => { console.error(`Failed to load background.png for ${newBiomeName}`); };
@@ -934,6 +1076,59 @@ drawSwimmingFish(ctx) {
         // ===============================================================
     }
 
+     drawFrontLayer(ctx, cameraX, gameWidth, currentZoomLevel, minZoom, maxZoom) {
+    const baseImage = this.biomeFrontLayerImages[this.currentBiomeName];
+    const clearImage = this.biomeFrontLayerClearImages[this.currentBiomeName];
+
+    // Jeśli nie ma załadowanego podstawowego obrazu, nie rób nic
+    if (!baseImage || !baseImage.complete || baseImage.naturalWidth === 0) {
+        return;
+    }
+
+    const DISPLAY_SCALE_FACTOR = 0.95;
+    const zoomRange = maxZoom - minZoom;
+    let zoomProgress = 0;
+    if (zoomRange > 0) {
+        zoomProgress = (currentZoomLevel - minZoom) / zoomRange;
+    }
+    zoomProgress = Math.max(0, Math.min(1, zoomProgress));
+
+    const MAX_VERTICAL_OFFSET = this.gameHeight * 0.24;
+    const currentOffsetY = zoomProgress * MAX_VERTICAL_OFFSET;
+
+    const PARALLAX_FACTOR = 1.2;
+    const parallaxX = cameraX * PARALLAX_FACTOR;
+
+    const scaledHeight = this.gameHeight * DISPLAY_SCALE_FACTOR;
+    const scaleRatio = scaledHeight / baseImage.naturalHeight;
+    const scaledWidth = baseImage.naturalWidth * scaleRatio;
+
+    const startX = -(parallaxX % scaledWidth);
+    const drawY = (this.gameHeight - scaledHeight) + currentOffsetY;
+
+    // --- NOWA, POPRAWIONA LOGIKA RYSOWANIA (CROSS-FADE) ---
+
+    // 1. Rysuj podstawową warstwę (front.png) z malejącą przezroczystością
+    const baseAlpha = 1.0 - this.frontLayerClearAlpha;
+    if (baseAlpha > 0) {
+        ctx.save();
+        ctx.globalAlpha = baseAlpha;
+        for (let x = startX; x < gameWidth; x += scaledWidth) {
+            ctx.drawImage(baseImage, x, drawY, scaledWidth, scaledHeight);
+        }
+        ctx.restore();
+    }
+
+    // 2. Rysuj "czystą" warstwę (front_clear.png) z rosnącą przezroczystością
+    if (this.frontLayerClearAlpha > 0 && clearImage && clearImage.complete && clearImage.naturalWidth > 0) {
+        ctx.save();
+        ctx.globalAlpha = this.frontLayerClearAlpha;
+        for (let x = startX; x < gameWidth; x += scaledWidth) {
+            ctx.drawImage(clearImage, x, drawY, scaledWidth, scaledHeight);
+        }
+        ctx.restore();
+    }
+}
     setVillageData(villageType, villageXPosition, placedBuildingsData) {
         this.currentVillageType = villageType;
         this.currentVillageXPosition = villageXPosition;
@@ -1146,7 +1341,7 @@ drawSwimmingFish(ctx) {
     _drawTilingMirroredParallaxLayer(ctx, image, isLoaded, parallaxX, coverWidth) {
         if (!isLoaded || !image || !image.complete || image.naturalWidth === 0) return;
 
-        const BG_HEIGHT = 256 * 2.85;
+        const BG_HEIGHT = 256 * 3.15; 
         const scaleFactor = BG_HEIGHT / image.naturalHeight;
         const TILE_WIDTH = image.naturalWidth * scaleFactor;
         const TILE_HEIGHT = BG_HEIGHT;
@@ -1181,13 +1376,46 @@ drawSwimmingFish(ctx) {
     }
 
     updateAnimations(deltaTime, player, groundLevel, cameraX, gameWidth) {
-    this.updateWaterAnimation(deltaTime);
-    this._updateGroundPlantsAnimation(deltaTime);
-    this._updateFireplaceAnimation(deltaTime);
-    this._updateFireplaceParticles(deltaTime);
-    this._updateLightEffect(deltaTime);
-    this._updateSwimmingFish(deltaTime);
-    this._updateClouds(deltaTime);
+        this.updateWaterAnimation(deltaTime);
+        this._updateGroundPlantsAnimation(deltaTime);
+        this._updateFireplaceAnimation(deltaTime);
+        this._updateFireplaceParticles(deltaTime);
+        this._updateLightEffect(deltaTime);
+        this._updateSwimmingFish(deltaTime);
+        this._updateClouds(deltaTime);
+
+        // --- POCZĄTEK NOWEGO BLOKU ---
+        // Logika płynnego przejścia dla warstwy front_clear.png
+        if (player) {
+    const FADE_SPEED = 2.4;
+    // ZMIANA JEST TUTAJ: Dodajemy mały bufor (np. 15 pikseli)
+    const isFishingInWater = player.hasLineCast && player.floatWorldY >= (this.WATER_TOP_Y_WORLD - 15);
+    const targetAlpha = isFishingInWater ? 1.0 : 0.0;
+
+    // --- NOWY BLOK Z LOGAMI ---
+    
+    // --- KONIEC BLOKU Z LOGAMI ---
+
+    if (this.frontLayerClearAlpha !== targetAlpha) {
+        const difference = targetAlpha - this.frontLayerClearAlpha;
+        const change = FADE_SPEED * deltaTime * Math.sign(difference);
+
+        if (Math.abs(difference) > Math.abs(change)) {
+            this.frontLayerClearAlpha += change;
+        } else {
+            this.frontLayerClearAlpha = targetAlpha;
+        }
+    }
+}
+        // --- KONIEC NOWEGO BLOKU ---
+
+        const SHAKE_DURATION_MS = 600;
+
+this.placedObstacles.forEach(obstacle => {
+    if (obstacle.isShaking && Date.now() - obstacle.shakeStartTime > SHAKE_DURATION_MS) {
+        obstacle.isShaking = false;
+    }
+});
 
     if (player && groundLevel) {
         const groundY = this.gameHeight - groundLevel;
@@ -1268,6 +1496,7 @@ drawSwimmingFish(ctx) {
             if (def.insectPath) imagesToLoadPaths.add(def.insectPath);
             if (def.pierPath) imagesToLoadPaths.add(def.pierPath);
             if (def.pierSpanPath) imagesToLoadPaths.add(def.pierSpanPath);
+            if (def.obstaclePath) imagesToLoadPaths.add(def.obstaclePath); // <-- DODAJ TĘ LINIĘ
         });
 
         const pathArray = Array.from(imagesToLoadPaths);
@@ -1291,6 +1520,7 @@ drawSwimmingFish(ctx) {
                     if (def.insectPath === src) this.biomeInsectImages[biomeName] = img;
                     if (def.pierPath === src) this.biomePierImages[biomeName] = img;
                     if (def.pierSpanPath === src) this.biomePierSpanImages[biomeName] = img;
+                    if (def.obstaclePath === src) this.biomeObstacleImages[biomeName] = img; // <-- DODAJ TĘ LINIĘ
                 }
 
                 if (loadedCount === totalImages) {
@@ -1418,6 +1648,28 @@ drawSwimmingFish(ctx) {
                 x, drawY,
                 width, height
             );
+
+        if (this.signLoaded && this.signObject) {
+        const sign = this.signObject;
+        const drawY = sign.y - sign.height; // Oblicz górną krawędź do rysowania
+
+        ctx.save();
+        // Przesuń punkt obrotu do środka podstawy znaku, aby obracał się naturalnie
+        ctx.translate(sign.x + sign.width / 2, sign.y);
+        // Zastosuj wylosowaną rotację
+        ctx.rotate(sign.rotation);
+        
+        // Narysuj obrazek, centrując go względem nowego punktu (0,0)
+        ctx.drawImage(
+            this.signImage,
+            -sign.width / 2, // cofnij o połowę szerokości
+            -sign.height,    // cofnij o całą wysokość
+            sign.width,
+            sign.height
+        );
+        
+        ctx.restore();
+    }    
         
         // Krok 2: Jeśli gracz jest blisko, narysuj na wierzchu poświatę
         if (this.playerIsNearCamp) {

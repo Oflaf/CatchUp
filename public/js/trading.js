@@ -120,7 +120,8 @@ class TradingManager {
         if (this.isTradeWindowOpen) {
             this.stopTrading();
         } else {
-            this.startTrading(npc, biomeName); // Przekazujemy biom
+            soundManager.play('inventory'); // <-- DODANA LINIA
+            this.startTrading(npc, biomeName);
         }
     }
 

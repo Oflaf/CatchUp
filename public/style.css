@@ -118,9 +118,47 @@ body {
 
 /* --- NOWE STYLE DLA PRZYCISKÓW MENU --- */
 .main-menu {
+    position: relative;
+
+}
+
+.main-menu-stack {
     display: flex;
     flex-direction: column;
-    gap: 15px; /* Odstęp między przyciskami */
+    gap: 15px;
+}
+/* Styl dla nowego przycisku przełączania UI */
+#toggleMobileControlsBtn {
+    position: absolute; /* Pozycjonujemy go względem .main-menu */
+    bottom: 5px; /* Wyrównujemy go do dołu przycisku "Options" */
+    right: -70px; /* Przesuwamy go na prawo od głównych przycisków */
+    
+    width: 55px; /* Mały, prostokątny */
+    height: 40px;
+    padding: 5px; /* Mały margines wewnętrzny dla obrazka */
+
+    /* Resetowanie stylów z głównych przycisków */
+    background: rgba(255, 255, 255, 0.1);
+    border: 2px solid rgba(255, 255, 255, 0.3);
+    box-shadow: none;
+    border-bottom: 2px solid rgba(255, 255, 255, 0.3); /* Ujednolicenie ramki */
+}
+
+#toggleMobileControlsBtn:hover {
+    background: rgba(255, 255, 255, 0.2);
+}
+
+#toggleMobileControlsBtn:active {
+    transform: translateY(1px); /* Mniejszy efekt wciśnięcia */
+    border-bottom-width: 2px;
+    box-shadow: none;
+}
+
+/* Styl dla obrazka wewnątrz przycisku */
+#toggleMobileControlsBtn img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain; /* Gwarantuje, że obrazek zmieści się w całości */
 }
 
 .main-menu button {
@@ -139,25 +177,15 @@ body {
     transition: background-color 0.2s, transform 0.1s, box-shadow 0.2s;
 }
 
-#joinGameBtn {
+#joinGameBtn, #optionsBtn {
     background: linear-gradient(145deg, #28a745, #24913c);
     border-bottom: 3px solid #1a682b;
 }
 
-#joinGameBtn:hover {
+#joinGameBtn:hover, #optionsBtn:hover {
     background: linear-gradient(145deg, #2ebf4f, #28a745);
     box-shadow: 0 5px 15px rgba(46, 191, 79, 0.2);
 }
-
-#optionsBtn {
-    background: linear-gradient(145deg, #6c757d, #5a6268);
-    border-bottom: 3px solid #495057;
-}
-
-#optionsBtn:hover {
-    background: linear-gradient(145deg, #818a91, #6c757d);
-}
-
 /* Efekt wciśnięcia przycisku */
 .main-menu button:active {
     transform: translateY(2px); /* Przesuń w dół */
@@ -370,16 +398,328 @@ body {
     line-height: 1.5;
 }
 
-#gameContainer button {
+
+
+#settings-window {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%) scale(0.95); /* Lekkie zmniejszenie dla animacji */
+    width: 450px;
+    background-color: rgba(30, 30, 30, 0.85);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    border: 2px solid #555;
+    border-radius: 12px;
+    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.5);
+    z-index: 10001;
+    color: white;
+    font-family: 'Segoe UI', sans-serif;
+    
+    /* Ustawienia animacji */
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    transition: opacity 0.2s ease-out, transform 0.2s ease-out, visibility 0.2s;
+}
+
+#settings-window.visible {
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+    transform: translate(-50%, -50%) scale(1);
+}
+
+.settings-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 20px;
+    border-bottom: 1px solid #444;
+}
+
+.settings-title {
+    margin: 0;
+    font-size: 1.5em;
+    font-weight: bold;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+}
+
+.settings-close-btn {
+    width: 30px;
+    height: 30px;
+    background-color: #dc3545;
+    border-radius: 5px;
+    cursor: pointer;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    transition: background-color 0.2s;
+}
+
+.settings-close-btn:hover {
+    background-color: #c82333;
+}
+
+.settings-close-btn img {
+    width: 16px;
+    height: 16px;
+}
+
+.settings-content {
+    padding: 25px 30px;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.settings-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 1.1em;
+}
+
+.settings-control {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+}
+
+.settings-value {
+    width: 80px;
+    text-align: center;
+    font-weight: bold;
+}
+
+.arrow-left, .arrow-right {
+    width: 24px;
+    height: 24px;
+    cursor: pointer;
+    transition: transform 0.1s;
+}
+
+.arrow-left:active, .arrow-right:active {
+    transform: scale(0.9);
+}
+
+.arrow-right {
+    transform: scaleX(-1); /* Lustrzane odbicie */
+}
+
+.arrow-right:active {
+    transform: scaleX(-1) scale(0.9);
+}
+
+.ingame-btn {
+    position: absolute;
+    left: 10px;
+    z-index: 1001;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    transition: background-color 0.2s, transform 0.1s;
+}
+
+.ingame-btn:active {
+    transform: scale(0.95);
+}
+
+/* Styl dla istniejącego przycisku "Leave" */
+#leaveRoomBtn {
     position: absolute;
     top: 10px;
     left: 10px;
     z-index: 1001;
+    
+    height: 38px; /* Stała wysokość jest kluczowa dla pozycjonowania przycisku pod nim */
     padding: 8px 15px;
-    background-color: #dc3545;
+    
+    background-color: #dc3545; /* Kolor czerwony */
     color: white;
-    border: none;
-    border-radius: 4px;
-    cursor: pointer;
     font-size: 1em;
+    font-weight: bold;
+    
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    box-sizing: border-box;
+    transition: background-color 0.2s, transform 0.1s;
+}
+
+#leaveRoomBtn:hover {
+    background-color: #c82333;
+}
+
+#leaveRoomBtn:active {
+    transform: scale(0.95);
+}
+
+/* 2. Styl TYLKO dla przycisku "Settings" (ID: inGameSettingsBtn) */
+#inGameSettingsBtn {
+    position: absolute;
+    left: 10px;
+    z-index: 1001;
+    
+    /* Pozycjonowanie: 
+       10px (góra przycisku Leave)
+       + 38px (wysokość przycisku Leave)
+       + 20px (Twój wymagany odstęp)
+       = 68px od góry */
+    top: 58px; 
+    
+    width: 38px;
+    height: 38px;
+    padding: 8px; /* Mały wewnętrzny margines, by ikona nie dotykała krawędzi */
+    
+    background-color: #d88407c0; /* Kolor ŻÓŁTY */
+
+    border-radius: 5px;
+    cursor: pointer;
+    box-sizing: border-box;
+    transition: background-color 0.2s, transform 0.1s;
+}
+
+#inGameSettingsBtn:hover {
+    background-color: #e0af1c; 
+}
+
+#inGameSettingsBtn:active {
+    transform: scale(0.95);
+}
+
+/* 3. Styl dla obrazka wewnątrz przycisku "Settings" */
+#inGameSettingsBtn img {
+    width: 100%;
+    height: 100%;
+    display: block; /* Usuwa ewentualne dodatkowe miejsce pod obrazkiem */
+}
+
+#mobile-controls {
+    /* Zmienna CSS kontrolująca ogólny rozmiar. 1.0 = 100% */
+    --mobile-ui-scale: 0.75; /* <--- TUTAJ KONTROLUJESZ ROZMIAR! (np. 0.8, 0.9, 1.0) */
+
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 10000;
+    pointer-events: none;
+    display: block;
+    font-family: 'Segoe UI', sans-serif;
+    user-select: none;
+    -webkit-user-select: none;
+}
+
+#mobile-controls.hidden {
+    display: none;
+}
+
+.control-button {
+    position: absolute;
+    background-color: rgba(0, 0, 0, 0.4);
+    color: white;
+    border: 2px solid rgba(255, 255, 255, 0.5);
+    border-radius: 50%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    font-weight: bold;
+    pointer-events: auto;
+    transition: background-color 0.1s;
+}
+
+.control-button:active {
+    background-color: rgba(0, 0, 0, 0.7);
+}
+
+/* === D-Pad (przyciski kierunkowe) === */
+.d-pad {
+    position: absolute;
+    bottom: calc(140px * var(--mobile-ui-scale));
+    left: calc(30px * var(--mobile-ui-scale));
+    width: calc(180px * var(--mobile-ui-scale));
+    height: calc(180px * var(--mobile-ui-scale));
+}
+
+.d-pad-up, .d-pad-left, .d-pad-right, .d-pad-down {
+    width: calc(60px * var(--mobile-ui-scale));
+    height: calc(60px * var(--mobile-ui-scale));
+}
+
+.d-pad-up { top: 0; left: calc(60px * var(--mobile-ui-scale)); }
+.d-pad-left { top: calc(60px * var(--mobile-ui-scale)); left: 0; }
+.d-pad-right { top: calc(60px * var(--mobile-ui-scale)); left: calc(120px * var(--mobile-ui-scale)); }
+.d-pad-down { top: calc(120px * var(--mobile-ui-scale)); left: calc(60px * var(--mobile-ui-scale)); }
+
+.d-pad .control-button img {
+    width: 60%;
+    height: auto;
+    transition: transform 0.1s;
+}
+
+#mobile-up img { transform: rotate(90deg); }
+#mobile-down img { transform: rotate(-90deg); }
+#mobile-right img { transform: scaleX(-1); }
+
+/* === Przyciski Akcji (prawa strona) === */
+.action-buttons {
+    position: absolute;
+    /* Ustawiamy punkt odniesienia, aby łatwiej pozycjonować przyciski */
+    bottom: calc(40px * var(--mobile-ui-scale));
+    right: calc(30px * var(--mobile-ui-scale));
+}
+
+/* Przycisk PPM (wędka) */
+.action-primary {
+    position: absolute; /* Wszystkie przyciski akcji pozycjonujemy absolutnie */
+    width: calc(100px * var(--mobile-ui-scale));
+    height: calc(100px * var(--mobile-ui-scale));
+    bottom: calc(70px * var(--mobile-ui-scale));
+    right: calc(10px * var(--mobile-ui-scale));
+    border-radius: 50%;
+    border-width: 3px;
+}
+.action-primary img { width: 70%; height: auto; }
+
+/* Przycisk JUMP */
+.action-space {
+    position: absolute;
+    width: calc(80px * var(--mobile-ui-scale));
+    height: calc(80px * var(--mobile-ui-scale));
+    bottom: calc(190px * var(--mobile-ui-scale));
+    right: calc(30px * var(--mobile-ui-scale));
+    border-radius: calc(55px * var(--mobile-ui-scale));
+    font-size: calc(1em * var(--mobile-ui-scale));
+}
+
+/* Małe przyciski akcji (E, T, F) */
+.action-small {
+    position: absolute;
+    width: calc(60px * var(--mobile-ui-scale));
+    height: calc(60px * var(--mobile-ui-scale));
+    font-size: calc(1em * var(--mobile-ui-scale));
+}
+
+#mobile-e { right: calc(133px * var(--mobile-ui-scale)); bottom: calc(75px * var(--mobile-ui-scale)); }
+#mobile-t { right: calc(120px * var(--mobile-ui-scale)); bottom: calc(150px * var(--mobile-ui-scale)); }
+#mobile-f { right: calc(128px * var(--mobile-ui-scale)); bottom: calc(225px * var(--mobile-ui-scale)); }
+
+/* === Przyciski przedmiotów (góra) === */
+.item-buttons {
+    position: absolute;
+    top: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    gap: calc(15px * var(--mobile-ui-scale));
+}
+
+.item-button {
+    position: relative;
+    width: calc(50px * var(--mobile-ui-scale));
+    height: calc(50px * var(--mobile-ui-scale));
+    font-size: calc(1.2em * var(--mobile-ui-scale));
 }

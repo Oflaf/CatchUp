@@ -1,14 +1,7 @@
-// ====================================================================================
-// === HOST-WORKER.JS ===
-// Ta wersja logiki serwera jest przeznaczona do uruchomienia w Web Workerze.
-// Nie ma dostępu do DOM ani do obiektów połączeń PeerJS.
-// Komunikuje się z głównym wątkiem (script.js) za pomocą `postMessage`.
-// ====================================================================================
 console.log('[DEBUG] Plik host-worker.js został załadowany i uruchomiony.');
 
-const GUEST_TIMEOUT = 15000; // 15 sekund - czas, po którym gość bez odpowiedzi jest usuwany
-const PING_INTERVAL = 5000;   // 5 sekund - jak często host wysyła ping do gości
-
+const GUEST_TIMEOUT = 15000;
+const PING_INTERVAL = 5000;
 
 // ====================================================================================
 // === SEKCJA 1: STAŁE GRY ===
@@ -28,12 +21,11 @@ const GAME_TICK_RATE = 1000 / 60;
 const WATER_TOP_Y_WORLD = DEDICATED_GAME_HEIGHT - 164;
 const FLOAT_GRAVITY = 0.3;
 const FLOAT_WATER_FRICTION = 0.9;
-const FLOAT_HITBOX_RADIUS = 32 / 2;
+const FLOAT_HITBOX_RADIUS = 16;
 const CASTING_POWER_MULTIPLIER = 11.5;
 const GRASS_SWAY_DURATION_MS = 1800;
 const GRASS_DENSITY_FACTOR = 0.075;
 const GRASS_SPRITE_WIDTH = 32 * 3.8;
-const TREE_DENSITY_BASE_FACTOR = 0.015;
 const TREE_DENSITY_VARIATION_FACTOR = 0.55;
 const TREE_FOREGROUND_CHANCE = 0.15;
 const TREE_MIN_HORIZONTAL_GAP = 64;
@@ -41,53 +33,33 @@ const INSECT_DENSITY_FACTOR = 0.0009;
 const MAX_CAST_DISTANCE = 850;
 const MAX_PLAYER_FLOAT_DISTANCE = 950;
 const MIN_PIER_DISTANCE = 600;
-
-const DIGGING_COOLDOWN_MS = 2000; // 2 sekundy przerwy między kopaniem
-
-
-const VILLAGE_TYPE = {
-    NONE: 'none',
-    MINIMAL: 'minimal',
-    MEDIUM: 'medium',
-    LARGE: 'large'
-};
-
-const VILLAGE_PROBABILITIES = [
-    { type: VILLAGE_TYPE.NONE, weight: 40 },
-    { type: VILLAGE_TYPE.MINIMAL, weight: 32 },
-    { type: VILLAGE_TYPE.MEDIUM, weight: 20 },
-    { type: VILLAGE_TYPE.LARGE, weight: 8 }
+const DIGGING_COOLDOWN_MS = 2000;
+const OBSTACLE_DENSITY_FACTOR = 0.001;
+const MINING_COOLDOWN_MS = 2000;
+const OBSTACLE_SCALE_FACTOR = 3.9;
+const OBSTACLE_TYPE_DEFINITIONS = [
+    { typeIndex: 0, sWidth: 32, sHeight: 18 }, // szer: 32, wys: 18
+    { typeIndex: 1, sWidth: 32, sHeight: 18 }, // szer: 32, wys: 18
+    { typeIndex: 2, sWidth: 64, sHeight: 18 }  // szer: 64, wys: 18
 ];
-
+const VILLAGE_TYPE = { NONE: 'none', MINIMAL: 'minimal', MEDIUM: 'medium', LARGE: 'large' };
+const VILLAGE_PROBABILITIES = [
+    { type: VILLAGE_TYPE.NONE, weight: 40 }, { type: VILLAGE_TYPE.MINIMAL, weight: 32 },
+    { type: VILLAGE_TYPE.MEDIUM, weight: 20 }, { type: VILLAGE_TYPE.LARGE, weight: 8 }
+];
 const VILLAGE_MIN_WORLD_X_OFFSET_PERCENT = 0.2;
 const VILLAGE_MAX_WORLD_X_OFFSET_PERCENT = 0.8;
 const BASE_BUILDING_SOURCE_TILE_SIZE = 128;
-
 const AVAILABLE_BIOMES_DETAILS = {
     jurassic: {
-        buildings: {
-            definitions: [
-                { id: 'j_house1', x: 0, y: 0, width: BASE_BUILDING_SOURCE_TILE_SIZE, height: BASE_BUILDING_SOURCE_TILE_SIZE },
-                { id: 'j_house2', x: BASE_BUILDING_SOURCE_TILE_SIZE, y: 0, width: BASE_BUILDING_SOURCE_TILE_SIZE, height: BASE_BUILDING_SOURCE_TILE_SIZE },
-                { id: 'j_tower', x: BASE_BUILDING_SOURCE_TILE_SIZE * 2, y: 0, width: BASE_BUILDING_SOURCE_TILE_SIZE, height: BASE_BUILDING_SOURCE_TILE_SIZE },
-            ],
-            displayScaleFactor: 4.5,
-        },
-        treeDefinitionCount: 8
+        buildings: { definitions: [ { id: 'j_house1', x: 0, y: 0, width: 128, height: 128 }, { id: 'j_house2', x: 128, y: 0, width: 128, height: 128 }, { id: 'j_tower', x: 256, y: 0, width: 128, height: 128 } ], displayScaleFactor: 4.5 },
+        treeDefinitionCount: 4, treeDensityBaseFactor: 0.0045
     },
     grassland: {
-        buildings: {
-            definitions: [
-                { id: 'g_hut1', x: 0, y: 0, width: BASE_BUILDING_SOURCE_TILE_SIZE, height: BASE_BUILDING_SOURCE_TILE_SIZE },
-                { id: 'g_hut2', x: BASE_BUILDING_SOURCE_TILE_SIZE, y: 0, width: BASE_BUILDING_SOURCE_TILE_SIZE, height: BASE_BUILDING_SOURCE_TILE_SIZE },
-                { id: 'g_farm', x: BASE_BUILDING_SOURCE_TILE_SIZE * 2, y: 0, width: BASE_BUILDING_SOURCE_TILE_SIZE, height: BASE_BUILDING_SOURCE_TILE_SIZE },
-            ],
-            displayScaleFactor: 4.5,
-        },
-        treeDefinitionCount: 8
+        buildings: { definitions: [ { id: 'g_hut1', x: 0, y: 0, width: 128, height: 128 }, { id: 'g_hut2', x: 128, y: 0, width: 128, height: 128 }, { id: 'g_farm', x: 256, y: 0, width: 128, height: 128 } ], displayScaleFactor: 4.5 },
+        treeDefinitionCount: 4, treeDensityBaseFactor: 0.002
     }
 };
-
 const ORIGINAL_ARM_PIVOT_IN_IMAGE_X = Math.round(14 * (PLAYER_SIZE / 36));
 const ORIGINAL_ARM_PIVOT_IN_IMAGE_Y = Math.round(15 * (PLAYER_SIZE / 36));
 const ROD_TIP_OFFSET_X = Math.round(136 * (PLAYER_SIZE / 128));
@@ -95,10 +67,70 @@ const ROD_TIP_OFFSET_Y = Math.round(-38 * (PLAYER_SIZE / 128));
 const FRONT_ARM_OFFSET_X = 0;
 const ARM_OFFSET_Y_IN_PLAYER_SPACE = 0;
 
+// I DODAJ POD NIM NOWY BLOK:
+const AVAILABLE_GEMS = [
+    { name: 'amethyst', tier: 3, chance: 60 },
+    { name: 'echo crystal', tier: 4, chance: 25 },
+    { name: 'ocean heart', tier: 4, chance: 15 }
+];
 
 // ====================================================================================
 // === SEKCJA 2: FUNKCJE POMOCNICZE ===
 // ====================================================================================
+
+function getRandomGem() {
+    const totalChanceWeight = AVAILABLE_GEMS.reduce((sum, gem) => sum + gem.chance, 0);
+    let randomPick = Math.random() * totalChanceWeight;
+
+    for (const gem of AVAILABLE_GEMS) {
+        if (randomPick < gem.chance) {
+            return { name: gem.name, tier: gem.tier };
+        }
+        randomPick -= gem.chance;
+    }
+    return null; // Na wszelki wypadek
+}
+
+
+function createSeededRandom(seedStr) {
+    let seed = 0;
+    for (let i = 0; i < seedStr.length; i++) { seed = (seed * 31 + seedStr.charCodeAt(i)) | 0; }
+    if (seed === 0) seed = 1;
+    return () => (seed = (seed * 1664525 + 1013904223) | 0) / 4294967296;
+}
+
+function generateObstacles(roomId, groundLevel, worldWidth) {
+    const obstacles = [];
+    const seededRandom = createSeededRandom(roomId + '-obstacles');
+    const groundY = DEDICATED_GAME_HEIGHT - groundLevel;
+    const numObstacles = Math.floor(worldWidth * OBSTACLE_DENSITY_FACTOR);
+    const MIN_GAP = 500;
+
+    for (let i = 0; i < numObstacles; i++) {
+        let attempts = 0;
+        while (attempts < 20) {
+            const typeDef = OBSTACLE_TYPE_DEFINITIONS[Math.floor(seededRandom() * OBSTACLE_TYPE_DEFINITIONS.length)];
+            const width = typeDef.sWidth * OBSTACLE_SCALE_FACTOR;
+            const height = typeDef.sHeight * OBSTACLE_SCALE_FACTOR;
+            const potentialX = seededRandom() * (worldWidth - width);
+            
+            const isOverlapping = obstacles.some(obs => Math.abs(potentialX - obs.x) < obs.width / 2 + width / 2 + MIN_GAP);
+
+            if (!isOverlapping) {
+                obstacles.push({
+                    id: `obstacle_${i}`, x: potentialX,
+                    // === POPRAWKA POZYCJI Y ===
+                    // Dodajemy +4, aby przeszkoda wizualnie "wtopiła się" w ziemię.
+                    y: groundY - height + 4,
+                    width: width, height: height, typeIndex: typeDef.typeIndex
+                });
+                break;
+            }
+            attempts++;
+        }
+    }
+    return obstacles;
+}
 
 function createSeededRandom(seedStr) {
     let seed = 0;
@@ -135,6 +167,9 @@ function getRandomBait() {
     }
     return null;
 }
+
+
+
 
 
 function generatePiers(roomId, groundLevel, worldWidth) {
@@ -201,7 +236,7 @@ function generateGroundPlants(roomId, groundLevel, worldWidth) {
             id: `grass_${i}`,
             x: seededRandom() * worldWidth,
             y: groundY,
-            typeIndex: Math.floor(seededRandom() * 12),
+            typeIndex: Math.floor(seededRandom() * 13),
             isMirrored: seededRandom() < 0.5,
             swaying: false,
             swayStartTime: 0,
@@ -219,8 +254,11 @@ function generateTrees(roomId, groundLevel, worldWidth, biomeName) {
 
     if (!biomeDetails || !biomeDetails.treeDefinitionCount) return trees;
 
+    // --- ZMODYFIKOWANE LINIE ---
     const roomDensityModifier = 1 + (seededRandom() * 2 - 1) * TREE_DENSITY_VARIATION_FACTOR;
-    const numTrees = Math.floor(worldWidth * TREE_DENSITY_BASE_FACTOR * roomDensityModifier);
+    const densityFactor = biomeDetails.treeDensityBaseFactor || 0.01; // Użyj gęstości z definicji biomu
+    const numTrees = Math.floor(worldWidth * densityFactor * roomDensityModifier);
+
 
     for (let i = 0; i < numTrees; i++) {
         let attempts = 0;
@@ -370,6 +408,9 @@ class GameHost {
         this.pingInterval = null;
         this.weatherInterval = null; // <-- DODAJ TĘ LINIĘ
         this.digCooldowns = {};
+
+// I DODAJ POD NIM LINIĘ:
+        this.miningCooldowns = {}; // <-- DODANA LINIA
     }
 
     broadcast(message) {
@@ -385,6 +426,40 @@ class GameHost {
             peerId: peerId,
             message: message
         });
+    }
+
+    _updateScoreboard(peerId, username, fishName, size) {
+        if (!this.room) return;
+        const scoreboard = this.room.roomScoreboard;
+        const playerIndex = scoreboard.findIndex(p => p.peerId === peerId);
+        let needsUpdate = false;
+
+        if (playerIndex !== -1) {
+            // Gracz jest już na tablicy, zaktualizuj, jeśli nowa ryba jest większa
+            if (size > scoreboard[playerIndex].size) {
+                scoreboard[playerIndex].fishName = fishName;
+                scoreboard[playerIndex].size = size;
+                needsUpdate = true;
+            }
+        } else {
+            // Dodaj nowego gracza do tablicy
+            scoreboard.push({ peerId, username, fishName, size });
+            needsUpdate = true;
+        }
+
+        if (needsUpdate) {
+            // Posortuj od największej do najmniejszej i ogranicz do 4 najlepszych
+            scoreboard.sort((a, b) => b.size - a.size);
+            if (scoreboard.length > 4) {
+                this.room.roomScoreboard = scoreboard.slice(0, 4);
+            }
+
+            // Roześlij zaktualizowaną tablicę do wszystkich graczy
+            this.broadcast({
+                type: 'scoreboardUpdate',
+                payload: this.room.roomScoreboard
+            });
+        }
     }
     
     start(hostData) {
@@ -405,6 +480,7 @@ class GameHost {
 
         this.room = {
             worldItems: [],
+            roomScoreboard: [] ,
             id: roomId,
             name: `Pokój ${hostData.username}`,
             hostId: roomId,
@@ -420,29 +496,64 @@ class GameHost {
                 insects: [],
                 placedBuildings: [],
                 piers: [],
+                obstacles: [],
+                totem: null, // <-- NOWA LINIA: Inicjalizujemy totem jako null
                 initialCycleRotation: Math.random() * (Math.PI * 2),
                 roomCreationTimestamp: Date.now(),
-                weather: 'clearsky' // <-- DODAJ TĘ LINIĘ
+                weather: 'clearsky'
             },
             playerInputs: {}
         };
+
+        // === POCZĄTEK ZMIAN: Logika generowania totemu ===
+        const totemSpawnChance = roomSeededRandom();
+        if (totemSpawnChance <= 0.9) {
+            const groundLevel = this.room.gameData.groundLevel;
+            
+            // --- NOWE ZMIANY: Przeskalowanie totemu ---
+            const totemBaseHeight = 60;
+            const totemScale = 3.8;
+            const totemHeight = totemBaseHeight * totemScale;
+            // --- KONIEC NOWYCH ZMIAN ---
+            
+            // Losuj pozycję w środkowych 40% świata
+            const middleZoneStart = randomWorldWidth * 0.3;
+            const middleZoneWidth = randomWorldWidth * 0.4;
+            const totemX = middleZoneStart + roomSeededRandom() * middleZoneWidth;
+            const totemY = DEDICATED_GAME_HEIGHT - groundLevel - totemHeight; // Ta linia teraz używa poprawnej, większej wysokości
+
+            this.room.gameData.totem = {
+            x: totemX,
+            y: totemY,
+            state: 'IDLE', // Nazwa stanu z klasy Totem
+            stateTimer: 0, // Czas pozostały
+            // Te wartości są potrzebne, aby łatwo obliczyć czas trwania faz po stronie serwera
+            phaseDurations: {
+                PHASE1_DURATION: 1.5,
+                PHASE2_DURATION: 2.0,
+                PHASE3_DURATION: 1.5,
+                PHASE4_DURATION: 2.5,
+                TRANSITION_DURATION: 1.5,
+            }
+        };
+        console.log(`[HOST-WORKER] Wygenerowano totem w biomie ${randomBiome} na pozycji X: ${totemX}`);
+        } else {
+            console.log('[HOST-WORKER] Totem nie został wygenerowany (10% szans na brak).');
+        }
+        // === KONIEC ZMIAN ===
         
         this.room.gameData.placedBuildings = _generateBuildingsLayout(roomId, randomBiome, selectedVillageType, villageXPosition, randomWorldWidth);
         this.room.gameData.groundPlants = generateGroundPlants(roomId, this.room.gameData.groundLevel, this.room.gameData.worldWidth);
         this.room.gameData.trees = generateTrees(roomId, this.room.gameData.groundLevel, this.room.gameData.worldWidth, randomBiome);
         this.room.gameData.insects = generateInsects(roomId, this.room.gameData.groundLevel, this.room.gameData.worldWidth);
         this.room.gameData.piers = generatePiers(roomId, this.room.gameData.groundLevel, this.room.gameData.worldWidth);
-
+        this.room.gameData.obstacles = generateObstacles(roomId, this.room.gameData.groundLevel, this.room.gameData.worldWidth);
         console.log(`[HOST-WORKER] Gra wystartowała w pokoju ${roomId}`);
         
         this.gameLoopInterval = setInterval(() => this.updateGame(), GAME_TICK_RATE);
-
-        // NOWOŚĆ: Uruchom pętlę pingowania
         this.pingInterval = setInterval(() => this.checkGuestHeartbeats(), PING_INTERVAL);
-        
-        // <-- DODAJ TE DWIE LINIE -->
-        this._changeWeather(); // Ustaw pogodę od razu na starcie
-        this.weatherInterval = setInterval(() => this._changeWeather(), 60000); // Zmieniaj pogodę co minutę
+        this._changeWeather();
+        this.weatherInterval = setInterval(() => this._changeWeather(), 60000);
 
         return {
             name: this.room.name,
@@ -460,6 +571,8 @@ class GameHost {
         this.room = null;
         console.log("[HOST-WORKER] Gra zatrzymana i zresetowana.");
     }
+
+    
 
     // <-- DODAJ CAŁĄ NOWĄ METODĘ PONIŻEJ -->
     _changeWeather() {
@@ -481,6 +594,7 @@ class GameHost {
             });
         }
     }
+    
 
     checkGuestHeartbeats() {
         if (!this.room || !this.room.players) return;
@@ -536,6 +650,16 @@ class GameHost {
                 currentWeather: this.room.gameData.weather
             }
         });
+
+        if (this.room.roomScoreboard.length > 0) {
+            setTimeout(() => {
+                this.sendTo(peerId, {
+                    type: 'scoreboardUpdate',
+                    payload: this.room.roomScoreboard
+                });
+            }, 250); // Małe opóźnienie, aby klient był gotowy
+        }
+    
         
         // ======================= POCZĄTEK ZMIAN =======================
         // Wyślij nowemu graczowi informację o starowym haczyku.
@@ -581,6 +705,9 @@ class GameHost {
          delete this.room.players[peerId];
          delete this.room.playerInputs[peerId];
          delete this.digCooldowns[peerId];
+
+// I DODAJ POD NIM LINIĘ:
+         delete this.miningCooldowns[peerId]; // <-- DODANA LINIA
          
          // === KLUCZOWA POPRAWKA ===
          // Musimy rozgłosić nie tylko notyfikację na czacie,
@@ -622,6 +749,8 @@ class GameHost {
             this.room.players[peerId].lastPongTime = Date.now();
         }
         break;
+
+        
         case 'changeWeather': {
         // Ta akcja może być wywołana tylko przez hosta
         if (peerId !== this.room.hostId) return;
@@ -629,11 +758,11 @@ class GameHost {
         const rand = Math.random();
         let newWeather = 'clearsky';
 
-        if (rand < .10) { // 10%
+        if (rand < 0.1) { // 10%
             newWeather = 'rainstorm';
-        } else if (rand < 0.25) { // 15%
+        } else if (rand < 0.15) { // 15%
             newWeather = 'rain';
-        } else if (rand < 0.50) { // 25%
+        } else if (rand < 0.35) { // 25%
             newWeather = 'drizzle';
         }
         
@@ -647,6 +776,7 @@ class GameHost {
             });
         }
         break;
+        
     }
 
             // NOWY CASE START
@@ -741,9 +871,9 @@ class GameHost {
                 break;
             }
             case 'playerJump': {
-                const groundY = DEDICATED_GAME_HEIGHT - this.room.gameData.groundLevel - PLAYER_SIZE;
-                const isOnGround = (player.y >= groundY - 1 && player.y <= groundY + 1);
-                if (!player.isJumping && isOnGround) {
+                // Gracz może skoczyć tylko, jeśli nie jest już w powietrzu (czyli nie jest w trakcie skoku)
+                // i jego prędkość pionowa jest bliska zeru (zapobiega "double jumpom").
+                if (!player.isJumping && Math.abs(player.velocityY) < 1) {
                     player.isJumping = true;
                     player.velocityY = JUMP_STRENGTH;
                 }
@@ -798,6 +928,7 @@ class GameHost {
             startPos: { x: player.floatWorldX, y: player.floatWorldY }
         }
     });
+    
 
     this.broadcast({
         type: 'fishCaughtNotification',
@@ -807,9 +938,31 @@ class GameHost {
             size: size
         }
     });
+    this._updateScoreboard(peerId, player.username, fishName, size);
     
     break;
+
+
 }
+
+
+            case 'activateTotem': {
+            if (this.room.gameData.totem && this.room.gameData.totem.state === 'IDLE') {
+                console.log(`[HOST-WORKER] Gracz ${player.username} aktywował totem.`);
+                const totem = this.room.gameData.totem;
+                totem.state = 'TOTEM_SHAKE_INCREASING';
+                totem.stateTimer = totem.phaseDurations.PHASE1_DURATION;
+                // Natychmiast rozgłoś zmianę, aby wszyscy gracze ją zobaczyli
+                this.broadcast({
+                    type: 'totemStateUpdate',
+                    payload: {
+                        newState: totem.state,
+                        remainingTime: totem.stateTimer
+                    }
+                });
+            }
+            break;
+        }
             case 'digForBait': {
                 const now = Date.now();
                 const lastDigTime = this.digCooldowns[peerId] || 0;
@@ -842,8 +995,52 @@ class GameHost {
                 }
                 break;
             }
+            case 'mineObstacle': {
+    const now = Date.now();
+    const lastMineTime = this.miningCooldowns[peerId] || 0;
+
+    if (now - lastMineTime < MINING_COOLDOWN_MS) {
+        return; // Gracz jest na cooldownie
+    }
+
+    this.miningCooldowns[peerId] = now;
+
+    const obstacle = this.room.gameData.obstacles.find(o => o.id === actionData.payload.obstacleId);
+    if (!obstacle) return;
+
+    // Rozgłoś informację o uderzeniu w kamień do wszystkich graczy
+    this.broadcast({
+        type: 'obstacleMined',
+        payload: {
+            obstacleId: obstacle.id
+        }
+    });
+
+    // Sprawdź 90% szansy na drop
+    if (Math.random() < 0.8) {
+        const gem = getRandomGem();
+        if (gem) {
+            // Roześlij informację o animacji do wszystkich
+            this.broadcast({
+                type: 'gemMinedBroadcast',
+                payload: {
+                    playerId: peerId,
+                    gemData: gem,
+                    startPos: { x: obstacle.x + obstacle.width / 2, y: obstacle.y }
+                }
+            });
+
+            // Przyznaj przedmiot tylko graczowi, który kopał
+            this.sendTo(peerId, {
+                type: 'gemAwarded',
+                payload: { gemData: gem }
+            });
         }
     }
+    break;
+}}}
+
+    // host-worker.js - ZASTĄP CAŁĄ FUNKCJĘ updateGame() W KLASIE GameHost
 
     updateGame() {
         if (!this.room) return;
@@ -851,7 +1048,52 @@ class GameHost {
         const groundLevel = room.gameData.groundLevel;
         const worldWidth = room.gameData.worldWidth;
         const groundY_for_items = DEDICATED_GAME_HEIGHT - groundLevel - (92 * 0.7 / 2);
+        if (room.gameData.totem && room.gameData.totem.state !== 'IDLE' && room.gameData.totem.state !== 'ACTIVE') {
+        const totem = room.gameData.totem;
+        const deltaTime = GAME_TICK_RATE / 1000; // Czas od ostatniej klatki w sekundach
+        totem.stateTimer -= deltaTime;
 
+        let stateChanged = false;
+
+        if (totem.stateTimer <= 0) {
+            stateChanged = true;
+            switch (totem.state) {
+                case 'TOTEM_SHAKE_INCREASING':
+                    totem.state = 'SCREEN_SHAKE_INCREASING';
+                    totem.stateTimer = totem.phaseDurations.PHASE2_DURATION;
+                    break;
+                case 'SCREEN_SHAKE_INCREASING':
+                    totem.state = 'TOTEM_SHAKE_DECREASING';
+                    totem.stateTimer = totem.phaseDurations.PHASE3_DURATION;
+                    break;
+                case 'TOTEM_SHAKE_DECREASING':
+                    totem.state = 'SCREEN_SHAKE_DECREASING';
+                    totem.stateTimer = totem.phaseDurations.PHASE4_DURATION;
+                    break;
+                case 'SCREEN_SHAKE_DECREASING':
+                    totem.state = 'TRANSITIONING';
+                    totem.stateTimer = totem.phaseDurations.TRANSITION_DURATION;
+                    break;
+                case 'TRANSITIONING':
+                    totem.state = 'ACTIVE';
+                    totem.stateTimer = 0; // Stan ACTIVE trwa w nieskończoność (lub do resetu serwera)
+                    break;
+            }
+        }
+        
+        // Jeśli stan się zmienił, poinformuj o tym wszystkich graczy
+        if (stateChanged) {
+             this.broadcast({
+                type: 'totemStateUpdate',
+                payload: {
+                    newState: totem.state,
+                    remainingTime: totem.stateTimer
+                }
+            });
+        }
+    }
+
+        // Aktualizacja przedmiotów leżących na ziemi (bez zmian)
         room.worldItems.forEach(item => {
             if (item.y < groundY_for_items) {
                 item.velocityY += GRAVITY * 0.5;
@@ -861,19 +1103,18 @@ class GameHost {
                 item.y = groundY_for_items;
                 item.velocityY = 0;
                 item.velocityX *= 0.85; 
-                if (Math.abs(item.velocityX) < 0.1) {
-                    item.velocityX = 0;
-                }
+                if (Math.abs(item.velocityX) < 0.1) item.velocityX = 0;
                 item.x += item.velocityX;
             }
         });
 
-        const groundY_target_for_player_top = DEDICATED_GAME_HEIGHT - groundLevel - PLAYER_SIZE;
-
+        // Główna pętla aktualizacji graczy (NOWA, ULEPSZONA LOGIKA)
         for (const playerId in room.players) {
             const player = room.players[playerId];
             const playerInput = room.playerInputs[playerId] || { keys: {} };
-            
+            const groundY = DEDICATED_GAME_HEIGHT - groundLevel - PLAYER_SIZE;
+
+            // --- 1. RUCH POZIOMY I KOLIZJE BOCZNE ---
             let targetVelocityX = 0;
             if (playerInput.keys['ArrowLeft'] || playerInput.keys['KeyA']) {
                 targetVelocityX = -PLAYER_WALK_SPEED;
@@ -885,28 +1126,94 @@ class GameHost {
             player.velocityX = targetVelocityX !== 0 ? targetVelocityX : player.velocityX * DECELERATION_FACTOR;
             if (Math.abs(player.velocityX) < MIN_VELOCITY_FOR_WALK_ANIMATION) player.velocityX = 0;
             
+            const oldX = player.x;
             player.x += player.velocityX;
+
+            // Definicja hitboxa gracza do kolizji bocznych (nieco węższy i wyższy)
+            const playerSideHitbox = {
+                x: player.x + PLAYER_SIZE * 0.3,
+                y: player.y + PLAYER_SIZE * 0.1, // Zaczyna się trochę wyżej
+                width: PLAYER_SIZE * 0.4,
+                height: PLAYER_SIZE * 0.8 // Nie obejmuje samych stóp
+            };
+
+            for (const obstacle of room.gameData.obstacles) {
+                if (
+                    playerSideHitbox.x < obstacle.x + obstacle.width &&
+                    playerSideHitbox.x + playerSideHitbox.width > obstacle.x &&
+                    playerSideHitbox.y < obstacle.y + obstacle.height &&
+                    playerSideHitbox.y + playerSideHitbox.height > obstacle.y
+                ) {
+                    player.x = oldX;
+                    player.velocityX = 0;
+                    break;
+                }
+            }
             player.x = Math.max(0, Math.min(worldWidth - PLAYER_SIZE, player.x));
 
-            if (player.isJumping || player.y < groundY_target_for_player_top) {
-                player.velocityY += GRAVITY;
-                player.y += player.velocityY;
+            // --- 2. RUCH PIONOWY I KOLIZJE Z PLATFORMAMI ---
+            const oldY = player.y;
+            player.velocityY += GRAVITY;
+            player.y += player.velocityY;
 
-                if (player.y >= groundY_target_for_player_top) {
-                    player.y = groundY_target_for_player_top;
-                    player.isJumping = false;
-                    player.velocityY = 0;
+            let landedOnPlatform = false;
+            
+            // Definicja hitboxa stóp gracza
+            const playerFeetHitbox = {
+                x: player.x + PLAYER_SIZE * 0.3,
+                width: PLAYER_SIZE * 0.4
+            };
+
+            // Sprawdzenie lądowania na przeszkodach
+            if (player.velocityY >= 0) { // Sprawdzaj lądowanie tylko, gdy gracz spada
+                for (const obstacle of room.gameData.obstacles) {
+                    // Sprawdzenie, czy stopy gracza przecinają górną krawędź przeszkody
+                    if (
+                        oldY + PLAYER_SIZE <= obstacle.y && // Czy stopy były NAD przeszkodą?
+                        player.y + PLAYER_SIZE >= obstacle.y && // Czy stopy są TERAZ POD lub NA przeszkodzie?
+                        playerFeetHitbox.x < obstacle.x + obstacle.width && // Czy jest kolizja pozioma?
+                        playerFeetHitbox.x + playerFeetHitbox.width > obstacle.x
+                    ) {
+                        player.y = obstacle.y - PLAYER_SIZE; // Ustaw gracza na wierzchu
+                        player.velocityY = 0;
+                        player.isJumping = false;
+                        landedOnPlatform = true;
+                        break; // Gracz wylądował, nie ma potrzeby sprawdzać dalej
+                    }
                 }
-            } else {
-                 player.y = groundY_target_for_player_top;
             }
 
-            const playerHitbox = { x: player.x + PLAYER_SIZE * 0.25, y: player.y + PLAYER_SIZE * 0.8, width: PLAYER_SIZE * 0.5, height: PLAYER_SIZE * 0.2 };
+            // Sprawdzenie lądowania na głównej ziemi, jeśli nie wylądowano na platformie
+            if (!landedOnPlatform && player.y >= groundY) {
+                player.y = groundY;
+                player.isJumping = false;
+                player.velocityY = 0;
+            }
+            
+            // --- 3. KOLIZJE Z GŁOWĄ ---
+            if (player.velocityY < 0) { // Sprawdzaj uderzenia głową tylko, gdy gracz leci w górę
+                 for (const obstacle of room.gameData.obstacles) {
+                    if (
+                        oldY >= obstacle.y + obstacle.height &&
+                        player.y <= obstacle.y + obstacle.height &&
+                        playerFeetHitbox.x < obstacle.x + obstacle.width &&
+                        playerFeetHitbox.x + playerFeetHitbox.width > obstacle.x
+                    ) {
+                        player.y = obstacle.y + obstacle.height; // Odepchnij gracza w dół
+                        player.velocityY = 0; // Zatrzymaj ruch w górę
+                        break;
+                    }
+                }
+            }
+
+
+            // --- 4. POZOSTAŁA LOGIKA (TRAWA, WĘDKA ITD.) ---
+            const playerGrassHitbox = { x: player.x + PLAYER_SIZE * 0.25, y: player.y + PLAYER_SIZE * 0.8, width: PLAYER_SIZE * 0.5, height: PLAYER_SIZE * 0.2 };
             room.gameData.groundPlants.forEach(grass => {
                 if (grass.swaying && Date.now() - grass.swayStartTime > GRASS_SWAY_DURATION_MS) grass.swaying = false;
                 if (!grass.swaying && player.velocityX !== 0) {
                     const grassHitbox = { x: grass.x, y: grass.y - 20, width: GRASS_SPRITE_WIDTH / 2, height: 20 };
-                    if (playerHitbox.x < grassHitbox.x + grassHitbox.width && playerHitbox.x + playerHitbox.width > grassHitbox.x) {
+                    if (playerGrassHitbox.x < grassHitbox.x + grassHitbox.width && playerGrassHitbox.x + playerGrassHitbox.width > grassHitbox.x) {
                         grass.swaying = true;
                         grass.swayStartTime = Date.now();
                         this.broadcast({ type: 'grassSwaying', payload: { grassId: grass.id, direction: player.direction } });
@@ -961,9 +1268,7 @@ class GameHost {
 
                     if (distance < pickupRadius) {
                         console.log(`[HOST-WORKER] Gracz ${player.username} podniósł ${item.data.name}`);
-                        
                         this.sendTo(playerId, { type: 'itemPickedUp', payload: item.data });
-                        
                         room.worldItems.splice(i, 1);
                     }
                 }
@@ -977,8 +1282,7 @@ class GameHost {
                 worldItems: room.worldItems
             }
         });
-    }
-}
+    }}
 
 
 // ====================================================================================
@@ -991,6 +1295,8 @@ self.onmessage = function(event) {
     const { type, payload } = event.data;
 
     switch (type) {
+
+
         case 'start':
             if (gameHostInstance) gameHostInstance.stop();
             gameHostInstance = new GameHost();
@@ -1024,6 +1330,8 @@ self.onmessage = function(event) {
             }
             break;
             
+
+
         case 'stop':
             if (gameHostInstance) {
                 gameHostInstance.stop();

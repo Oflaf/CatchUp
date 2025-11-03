@@ -2,15 +2,13 @@
 
 class WeatherManager {
     constructor() {
-        // Zasoby graficzne
+        // ... (wszystkie istniejące właściwości bez zmian)
         this.fogMainImage = null;
         this.fogOverlayImage = null;
         this.drizzleImage = null;
         this.rainImage = null;
-        this.splashImage = null; // <-- NOWA LINIA
+        this.splashImage = null;
         this.areAssetsLoaded = false;
-
-        // Właściwości mgły
         this.fogMainLayer = [];
         this.fogOverlayLayer = [];
         this.worldWidth = 0;
@@ -20,18 +18,12 @@ class WeatherManager {
         this.FOG_OVERLAY_SPEED = 25;
         this.FOG_MAIN_SCALE = 22;
         this.FOG_OVERLAY_SCALE = 12;
-
-        // Stan pogody i przejścia
         this.currentWeather = 'clearsky';
         this.targetWeather = 'clearsky';
         this.transitionTimer = 0;
         this.transitionDuration = 10.0;
-
-        // Dynamiczna alfa mgły
         this.targetFogAlpha = 0.08;
         this.currentFogAlpha = 0.08;
-
-        // Cząsteczki deszczu
         this.drizzleDrops = [];
         this.rainDrops = [];
         this.maxDrizzleDrops = 70;
@@ -39,24 +31,22 @@ class WeatherManager {
         this.currentMaxDrizzle = 0;
         this.currentMaxRain = 0;
         this.DROP_SCALE = 2.8;
-
-        // === NOWE ZMIENNE DLA BŁYSKAWIC ===
         this.lightningActive = false;
         this.lightningTimer = 0;
-        this.lightningCooldown = 5; // Początkowy cooldown 5s
-        this.LIGHTNING_CHANCE_PER_SEC = 0.1; // 10% szansy na sekundę
-        // ===================================
-
-        // === NOWA STAŁA SKALOWANIA KROPEL ===
+        this.lightningCooldown = 5;
+        this.LIGHTNING_CHANCE_PER_SEC = 0.1;
         this.splashes = [];
-        this.MAX_SPLASHES = 250; // Pula 250 obiektów animacji
+        this.MAX_SPLASHES = 250;
         this.SPLASH_FRAME_WIDTH = 7;
         this.SPLASH_FRAME_HEIGHT = 7;
         this.SPLASH_FRAME_COUNT = 4;
-        this.SPLASH_ANIM_DURATION = 0.36; // Całkowity czas trwania animacji w sekundach
+        this.SPLASH_ANIM_DURATION = 0.36;
         this.SPLASH_SCALE = 3.5;
-        this.GROUND_HIT_CHANCE = 0.4; // <-- NOWA LINIA (40% szans na uderzenie w ziemię)
-        // ===================================
+        this.GROUND_HIT_CHANCE = 0.4;
+        
+        // === NOWA WŁAŚCIWOŚĆ DO PRZECHOWYWANIA REFERENCJI ===
+        this.soundManager = null;
+        // =====================================================
     }
 
 
@@ -65,14 +55,13 @@ class WeatherManager {
     this.fogOverlayImage = assets.fog;
     this.drizzleImage = assets.drizzle;
     this.rainImage = assets.rain;
-    this.splashImage = assets.splash; // <-- NOWA LINIA
+    this.splashImage = assets.splash;
     
-    // Zaktualizuj warunek, aby uwzględniał nowy obrazek
     if (this.fogMainImage?.complete && this.fogOverlayImage?.complete && this.drizzleImage?.complete && this.rainImage?.complete && this.splashImage?.complete) {
         this.areAssetsLoaded = true;
         console.log('All weather assets are set.');
         this.initializeRainDrops();
-        this.initializeSplashes(); // <-- NOWA LINIA
+        this.initializeSplashes();
     } else {
         console.error('Provided weather assets are not fully loaded.');
     }
@@ -125,8 +114,7 @@ class WeatherManager {
             this.rainDrops.push(this.createRainDrop(0, screenWidth, screenHeight, true));
         }
     }
-
-    // ======================= POCZĄTEK ZMIAN =======================
+    
     createDrizzleDrop(viewLeft, viewWidth, screenHeight, isInitial = false) {
     const angleRad = (30 + Math.random() * 10) * (Math.PI / 180);
     const baseSpeed = 500 + Math.random() * 200;
@@ -136,11 +124,10 @@ class WeatherManager {
         y: isInitial ? Math.random() * screenHeight : -Math.random() * 300,
         speedX: -Math.sin(angleRad) * baseSpeed,
         speedY: Math.cos(angleRad) * baseSpeed,
-        targetSurface: Math.random() < this.GROUND_HIT_CHANCE ? 'ground' : 'water' // <-- NOWA LINIA
+        targetSurface: Math.random() < this.GROUND_HIT_CHANCE ? 'ground' : 'water'
     };
 }
-    // ======================== KONIEC ZMIAN =========================
-
+    
     createRainDrop(viewLeft, viewWidth, screenHeight, isInitial = false) {
     const angleRad = (30 + Math.random() * 10) * (Math.PI / 180);
     const baseSpeed = 1200 + Math.random() * 400;
@@ -150,14 +137,13 @@ class WeatherManager {
         y: isInitial ? Math.random() * screenHeight : -Math.random() * 300,
         speedX: -Math.sin(angleRad) * baseSpeed,
         speedY: Math.cos(angleRad) * baseSpeed,
-        targetSurface: Math.random() < this.GROUND_HIT_CHANCE ? 'ground' : 'water' // <-- NOWA LINIA
+        targetSurface: Math.random() < this.GROUND_HIT_CHANCE ? 'ground' : 'water'
     };
 }
 
     update(deltaTime, cameraX, screenWidth, screenHeight, currentZoom, waterLevelY, groundLevelY) {
         if (!this.areAssetsLoaded) return;
 
-        // === NOWA LOGIKA BŁYSKAWIC ===
         if (this.targetWeather === 'rainstorm' || (this.currentWeather === 'rainstorm' && this.transitionTimer > 0)) {
             this.lightningCooldown -= deltaTime;
             if (this.lightningCooldown <= 0 && !this.lightningActive) {
@@ -172,7 +158,6 @@ class WeatherManager {
                 this.lightningActive = false;
             }
         }
-        // ============================
         
         if (this.transitionTimer > 0) {
             this.transitionTimer -= deltaTime;
@@ -213,14 +198,11 @@ class WeatherManager {
         const viewLeft = cameraX;
         const viewWidth = screenWidth / currentZoom;
         
-        // --- POCZĄTEK POPRAWKI ---
-        // Dodajemy brakującą definicję 'safeGroundY' i przekazujemy ją dalej
         const safeGroundY = groundLevelY !== undefined ? groundLevelY : DEDICATED_GAME_HEIGHT;
         const rainDisappearY = waterLevelY !== undefined ? waterLevelY : screenHeight / currentZoom;
         
         this.updateDrops(this.drizzleDrops, this.currentMaxDrizzle, deltaTime, viewLeft, viewWidth, rainDisappearY, safeGroundY);
         this.updateDrops(this.rainDrops, this.currentMaxRain, deltaTime, viewLeft, viewWidth, rainDisappearY, safeGroundY);
-        // --- KONIEC POPRAWKI ---
     }
 
     updateDrops(drops, count, deltaTime, viewLeft, viewWidth, waterLevelY, groundLevelY) {
@@ -233,20 +215,15 @@ class WeatherManager {
         drop.y += drop.speedY * deltaTime;
         drop.x += drop.speedX * deltaTime;
 
-        // Wybierz docelową wysokość Y na podstawie wylosowanego celu kropli
         const disappearY = drop.targetSurface === 'ground' ? groundLevelY : waterLevelY;
 
-        // Sprawdź, czy kropla osiągnęła swój cel
         if (drop.y > disappearY) {
-            // Wywołaj plusk na odpowiedniej wysokości
             this.triggerSplash(drop.x, disappearY);
 
-            // Zresetuj pozycję kropli na górze ekranu
             const viewTop = cameraY;
             drop.y = viewTop - Math.random() * 300; 
             drop.x = viewLeft + Math.random() * (viewWidth + RESPAWN_BUFFER_X);
 
-            // Wylosuj nowy cel dla zresetowanej kropli
             drop.targetSurface = Math.random() < this.GROUND_HIT_CHANCE ? 'ground' : 'water';
         }
     }
@@ -268,19 +245,17 @@ class WeatherManager {
             }
         });
         ctx.restore();
-        this.drawSplashes(ctx); // <-- NOWA LINIA
+        this.drawSplashes(ctx);
         }
     
-    // ======================= POCZĄTEK ZMIAN =======================
     drawRain(ctx) {
         if (!this.areAssetsLoaded || (this.currentMaxDrizzle === 0 && this.currentMaxRain === 0)) return;
 
-        const rotationAngle = 45 * (Math.PI / 180); // 45 stopni w radianach
+        const rotationAngle = 45 * (Math.PI / 180);
 
         ctx.save();
         ctx.globalAlpha = 0.8;
         
-        // Rysowanie mżawki (drizzle) z obrotem
         const drizzleWidth = this.drizzleImage.naturalWidth * this.DROP_SCALE;
         const drizzleHeight = this.drizzleImage.naturalHeight * this.DROP_SCALE;
         for (let i = 0; i < this.currentMaxDrizzle; i++) {
@@ -294,7 +269,6 @@ class WeatherManager {
             ctx.restore();
         }
 
-        // Rysowanie deszczu (rain) bez dodatkowego obrotu (obrazek jest już ukośny)
         const rainWidth = this.rainImage.naturalWidth * this.DROP_SCALE;
         const rainHeight = this.rainImage.naturalHeight * this.DROP_SCALE;
         for (let i = 0; i < this.currentMaxRain; i++) {
@@ -320,9 +294,7 @@ class WeatherManager {
     }
 }
 
-/** Aktywuje animację plusku z puli w podanej lokalizacji. */
 triggerSplash(x, y) {
-    // Znajdź pierwszą nieaktywną animację w puli
     const splash = this.splashes.find(s => !s.isActive);
     if (splash) {
         splash.isActive = true;
@@ -330,12 +302,10 @@ triggerSplash(x, y) {
         splash.y = y;
         splash.frame = 0;
         splash.timer = 0;
-        splash.flipped = Math.random() < 0.5; // 50% szans na odbicie lustrzane
+        splash.flipped = Math.random() < 0.5;
     }
-    // Jeśli nie znaleziono wolnej animacji, nic się nie dzieje (zapobiega błędom)
 }
 
-/** Aktualizuje logikę wszystkich aktywnych animacji plusku. */
 updateSplashes(deltaTime) {
     const timePerFrame = this.SPLASH_ANIM_DURATION / this.SPLASH_FRAME_COUNT;
 
@@ -346,57 +316,63 @@ updateSplashes(deltaTime) {
                 splash.timer -= timePerFrame;
                 splash.frame++;
                 if (splash.frame >= this.SPLASH_FRAME_COUNT) {
-                    splash.isActive = false; // Dezaktywuj animację, aby mogła być użyta ponownie
+                    splash.isActive = false;
                 }
             }
         }
     }
 }
 
-// === NOWA METODA DO WYZWALANIA BŁYSKAWICY ===
+// ================== ZAKTUALIZOWANA METODA ==================
 triggerLightning() {
     this.lightningActive = true;
-    this.lightningTimer = 0.54; // Całkowity czas trwania efektu
-    // Cooldown pomiędzy 3 a 10 sekund
+    this.lightningTimer = 0.54;
     this.lightningCooldown = 2 + Math.random() * 4;
-}
 
-// === NOWA METODA DO RYSOWANIA BŁYSKAWICY ===
+    // Sprawdź, czy soundManager jest dostępny
+    if (this.soundManager) {
+        // Oblicz losowe opóźnienie od 0.5s do 3s (500ms do 3000ms)
+        const delay = 500 + Math.random() * 2500; 
+
+        // Użyj setTimeout, aby zaplanować odtworzenie dźwięku
+        setTimeout(() => {
+            this.soundManager.playRandomThunder();
+        }, delay);
+    }
+}
+// =========================================================
+
 drawLightning(ctx) {
     if (!this.lightningActive) return;
 
     const t = this.lightningTimer;
     ctx.save();
-    // Użyj przestrzeni ekranu, ignorując kamerę i zoom
     ctx.setTransform(1, 0, 0, 1, 0, 0);
 
-    // Sekwencja animacji oparta na Twoich wytycznych i timerze 0.3s
-    if (t > 0.49) { // Czas 0.30 -> 0.27
+    if (t > 0.49) {
         ctx.fillStyle = 'rgba(255, 255, 255, 1)';
         ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height);
-    } else if (t > 0.20 && t <= 0.22) { // Czas 0.22 -> 0.20
+    } else if (t > 0.20 && t <= 0.22) {
         ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
         ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height);
-    } else if (t > 0.15 && t <= 0.17) { // Czas 0.17 -> 0.15
+    } else if (t > 0.15 && t <= 0.17) {
         ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
         ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height);
-    } else if (t > 0.12 && t <= 0.15) { // Czas 0.15 -> 0.12
+    } else if (t > 0.12 && t <= 0.15) {
         ctx.globalCompositeOperation = 'difference';
         ctx.fillStyle = 'white';
         ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height);
-    } else if (t > 0.10 && t <= 0.12) { // Czas 0.12 -> 0.10
+    } else if (t > 0.10 && t <= 0.12) {
         ctx.fillStyle = 'rgba(255, 255, 255, 1)';
         ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height);
-    } else if (t > 0.03 && t <= 0.05) { // Czas 0.05 -> 0.03
+    } else if (t > 0.03 && t <= 0.05) {
         ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
         ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height);
     }
-    // Przerwy w animacji ("przerwa") to momenty, gdy żaden warunek nie jest spełniony
 
     ctx.restore();
 }
 
-/** Rysuje wszystkie aktywne animacje plusku. */
 drawSplashes(ctx) {
     if (!this.splashImage || !this.splashImage.complete) return;
     
@@ -410,12 +386,10 @@ drawSplashes(ctx) {
             ctx.save();
             ctx.translate(splash.x, splash.y);
 
-            // Zastosuj odbicie lustrzane, jeśli flaga jest ustawiona
             if (splash.flipped) {
                 ctx.scale(-1, 1);
             }
 
-            // Rysuj klatkę animacji, centrując ją i unosząc lekko nad linię wody
             ctx.drawImage(
                 this.splashImage,
                 sourceX, 0,
@@ -427,5 +401,4 @@ drawSplashes(ctx) {
         }
     }
 }
-    // ======================== KONIEC ZMIAN =========================
 }

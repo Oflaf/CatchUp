@@ -39,18 +39,51 @@ document.addEventListener('DOMContentLoaded', () => {
         return;
     }
     
+    let isSkipped = false;
+    let skipMessageElement = null;
+    const allTimeouts = [];
+
     const style = document.createElement('style');
+    // ZMIANA: Zaktualizowano style w poniższym bloku
     style.textContent = `
+        /* Import czcionki pikselowej z Google Fonts */
+        @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
+
         .letter-z-inner {
             transition: transform ${Z_NUDGE_TRANSITION_MS}ms ease-out;
         }
         .intro-logo {
-            /* Ta klasa będzie teraz na wrapperze logo */
             transition: width ${SPREAD_DURATION_MS}ms ease-in-out, 
                         left ${SPREAD_DURATION_MS}ms ease-in-out,
                         top ${SPREAD_DURATION_MS}ms ease-in-out,
                         opacity ${SPREAD_DURATION_MS * 0.7}ms ease-in-out;
         }
+
+        /* Definicja animacji kołysania */
+        @keyframes sway {
+            0%, 100% {
+                transform: translateX(-50%) rotate(-2deg);
+            }
+            50% {
+                transform: translateX(-50%) rotate(2deg);
+            }
+        }
+
+        /* Style dla wiadomości o pominięciu */
+.skip-intro-message {
+            position: absolute;
+            bottom: 30px; /* ZMIANA: Obniżono napis */
+            right: -80px; /* ZMIANA: Przesunięto napis na prawą stronę */
+            color: rgba(255, 255, 255, 0.8);
+            font-family: 'Press Start 2P', monospace; 
+            font-size: 9px; 
+            opacity: 0;
+            transition: opacity 0.5s ease-in-out;
+            pointer-events: none;
+            animation: sway 3s ease-in-out infinite; 
+            z-index: -5;
+        }
+
     `;
     document.head.append(style);
 
@@ -62,6 +95,35 @@ document.addEventListener('DOMContentLoaded', () => {
         zLetterIndex: -1,
         zRotationMultiplier: 1,
     };
+
+    function setSafeTimeout(callback, delay) {
+        const id = setTimeout(callback, delay);
+        allTimeouts.push(id);
+        return id;
+    }
+
+    function clearAllTimeouts() {
+        allTimeouts.forEach(id => clearTimeout(id));
+    }
+    
+    function skipIntro() {
+        if (isSkipped) return;
+        isSkipped = true;
+
+        console.log("Intro skipped!");
+        document.removeEventListener('keydown', skipIntro);
+        document.removeEventListener('mousedown', skipIntro);
+
+        cancelAnimationFrame(animationState.animationFrameId);
+        animationState.animationFrameId = null;
+        clearAllTimeouts();
+
+        if (skipMessageElement) {
+            skipMessageElement.style.opacity = '0';
+        }
+
+        fadeOutIntro();
+    }
 
     function loadLetterImages() {
         const uniqueChars = [...new Set(TEXT.toLowerCase().replace(/\s/g, ''))];
@@ -86,6 +148,24 @@ document.addEventListener('DOMContentLoaded', () => {
             const imageMap = new Map(loadedImages.map(item => [item.char, item.img]));
             prepareLetters(imageMap);
             startNextLetterAnimation();
+
+            setSafeTimeout(() => {
+                if (isSkipped) return;
+                
+                skipMessageElement = document.createElement('div');
+                skipMessageElement.textContent = 'press any key to skip intro';
+                skipMessageElement.className = 'skip-intro-message';
+                introContainer.appendChild(skipMessageElement);
+                
+                requestAnimationFrame(() => {
+                     skipMessageElement.style.opacity = '1';
+                });
+                
+                document.addEventListener('keydown', skipIntro);
+                document.addEventListener('mousedown', skipIntro);
+
+            }, 2000);
+
         } catch (error) {
             console.error("Failed to start intro:", error);
             cleanupAndShowLoadingPanel();
@@ -145,7 +225,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 letterData.element = wrapper;
                 letterData.innerElement = innerImg;
                 
-                // === POPRAWKA: Tworzenie logo z wrapperem ===
                 const logoWrapper = document.createElement('div');
                 const logoImg = document.createElement('img');
                 const finalLogoWidth = LOGO_FINAL_HEIGHT;
@@ -189,8 +268,9 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function startNextLetterAnimation() {
+        if (isSkipped) return;
         if (animationState.currentLetterIndex >= animationState.letters.length) {
-            setTimeout(finalZFallAnimation, Z_FINAL_FALL_DELAY_MS);
+            setSafeTimeout(finalZFallAnimation, Z_FINAL_FALL_DELAY_MS);
             return;
         }
         if (animationState.currentLetterIndex >= Z_FALL_TRIGGER_CHAR_INDEX && animationState.zLetterIndex !== -1) {
@@ -249,7 +329,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     letter.element.style.height = `${letter.targetH}px`;
                     if (i === animationState.currentLetterIndex) {
                        animationState.currentLetterIndex++;
-                       setTimeout(startNextLetterAnimation, DELAY_BETWEEN_LETTERS_MS);
+                       setSafeTimeout(startNextLetterAnimation, DELAY_BETWEEN_LETTERS_MS);
                     }
                 }
             } else if (letter.state === 'finished') {
@@ -267,7 +347,7 @@ document.addEventListener('DOMContentLoaded', () => {
     
     function finalZFallAnimation() {
         if (animationState.zLetterIndex === -1) {
-            setTimeout(spreadLettersAnimation, SPREAD_DELAY_MS);
+            setSafeTimeout(spreadLettersAnimation, SPREAD_DELAY_MS);
             return;
         }
         const zLetter = animationState.letters[animationState.zLetterIndex];
@@ -276,12 +356,12 @@ document.addEventListener('DOMContentLoaded', () => {
         zLetter.element.style.transition = `transform ${Z_FINAL_FALL_DURATION_MS}ms ease-in, opacity ${Z_FINAL_FALL_DURATION_MS}ms linear`;
         zLetter.element.style.transform = `translate(${zLetter.targetX}px, ${finalY}px) rotate(${finalRotation}deg)`;
         zLetter.element.style.opacity = '0';
-        setTimeout(() => spreadLettersAnimation(), Z_FINAL_FALL_DURATION_MS + SPREAD_DELAY_MS);
+        setSafeTimeout(() => spreadLettersAnimation(), Z_FINAL_FALL_DURATION_MS + SPREAD_DELAY_MS);
     }
     
     function spreadLettersAnimation() {
         if (animationState.zLetterIndex === -1) {
-            setTimeout(finalSplitAndZoom, FADE_OUT_DELAY_MS);
+            setSafeTimeout(finalSplitAndZoom, FADE_OUT_DELAY_MS);
             return;
         }
         
@@ -304,7 +384,6 @@ document.addEventListener('DOMContentLoaded', () => {
             letter.element.style.transform = `translate(${letter.targetX}px, ${letter.targetY}px) rotate(${letter.rotation}deg)`;
         });
         
-        // === POPRAWKA: Animowanie wrappera logo ===
         if (animationState.logo) {
             const logo = animationState.logo;
             logo.wrapper.style.opacity = '1';
@@ -312,7 +391,7 @@ document.addEventListener('DOMContentLoaded', () => {
             logo.wrapper.style.width = `${logo.targetWidth}px`;
         }
 
-        setTimeout(finalSplitAndZoom, SPREAD_DURATION_MS + FADE_OUT_DELAY_MS);
+        setSafeTimeout(finalSplitAndZoom, SPREAD_DURATION_MS + FADE_OUT_DELAY_MS);
     }
 
     function finalSplitAndZoom() {
@@ -344,51 +423,50 @@ document.addEventListener('DOMContentLoaded', () => {
         moveLetters(solendLetters, 'left');
         moveLetters(caravanLetters, 'right');
 
-        // === POPRAWKA: Nowa, niezawodna animacja logo do centrum ekranu ===
         if (animationState.logo && animationState.logo.wrapper) {
             const logoWrapper = animationState.logo.wrapper;
-            const logoElement = animationState.logo.element; // Wewnętrzny <img>
+            const logoElement = animationState.logo.element;
             
-            // 1. Zastosuj animację obrotu do wewnętrznego obrazka
             const totalWobbleTime = LOGO_ZOOM_DURATION_MS + LOGO_ZOOM_HOLD_MS;
             logoElement.style.animation = `gentleWobble ${totalWobbleTime}ms ease-in-out infinite`;
 
-            // 2. Animuj zewnętrzny wrapper, aby przesunąć i przeskalować logo
             logoWrapper.style.transformOrigin = 'center center';
             
-            // Pobierz aktualną pozycję i rozmiar wrappera
             const rect = logoWrapper.getBoundingClientRect();
             const logoCenterX = rect.left + rect.width / 2;
             const logoCenterY = rect.top + rect.height / 2;
             
-            // Oblicz przesunięcie potrzebne do wyśrodkowania
             const screenCenterX = window.innerWidth / 2;
             const screenCenterY = window.innerHeight / 2;
             const deltaX = screenCenterX - logoCenterX;
             const deltaY = screenCenterY - logoCenterY;
 
-            // Oblicz skalę potrzebną do wypełnienia ekranu
             const scale = Math.max(
                 window.innerWidth / rect.width, 
                 window.innerHeight / rect.height
-            ) * 0.3; // Dodatkowy margines
+            ) * 0.3;
             
-            // Ustaw płynne przejście i docelową transformację
             logoWrapper.style.transition = `transform ${LOGO_ZOOM_DURATION_MS}ms cubic-bezier(0.4, 0, 0.2, 1)`;
             logoWrapper.style.transform = `translate(${deltaX}px, ${deltaY}px) scale(${scale})`;
         }
         
-        setTimeout(fadeOutIntro, LOGO_ZOOM_DURATION_MS + LOGO_ZOOM_HOLD_MS);
+        setSafeTimeout(fadeOutIntro, LOGO_ZOOM_DURATION_MS + LOGO_ZOOM_HOLD_MS);
     }
 
     function fadeOutIntro() {
         introContainer.style.transition = `opacity ${FADE_OUT_DURATION_MS}ms ease-in`;
         introContainer.style.opacity = '0';
-        setTimeout(cleanupAndShowLoadingPanel, FADE_OUT_DURATION_MS);
+        setSafeTimeout(cleanupAndShowLoadingPanel, FADE_OUT_DURATION_MS);
     }
 
     function cleanupAndShowLoadingPanel() {
+        document.removeEventListener('keydown', skipIntro);
+        document.removeEventListener('mousedown', skipIntro);
+        clearAllTimeouts();
+        
         introContainer.style.display = 'none';
+        introContainer.innerHTML = '';
+
         if (window.loadingManager) {
             window.loadingManager.show(() => {
                 if (window.startAssetLoading) {

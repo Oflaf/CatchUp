@@ -84,20 +84,26 @@ function showNotification(message, type = 'warning', duration = 5000) {
 // === SEKCJA 1: ZMIENNE SIECIOWE P2P i STANU GRY ===
 // ====================================================================
 
+
 let signalingSocket;
 let peer;
 let isHost = false;
 let hostConnection;
 
-let hostPingTimeout = null; // Interwał sprawdzający, czy host żyje
-const HOST_TIMEOUT_LIMIT = 15000; // 15 sekund - limit dla gościa
-let lastPingTime = 0; // Czas ostatniego pingu od hosta
+let hostPingTimeout = null;
+const HOST_TIMEOUT_LIMIT = 15000;
+let lastPingTime = 0;
 let isPlayerInCampZone = false;
 let showCampPrompt = false;
-let timedTutorialsQueue = []; // <-- DODAJ TĘ LINIĘ
+let timedTutorialsQueue = [];
 
 let gameHostWorker = null;
 let hostPeerConnections = {};
+
+// === POCZĄTEK ZMIAN ===
+let worldTotem = null;
+const totemImages = {};
+window.particleCharImage = null; // <-- DODAJ TĘ LINIĘ
 
 let availableRooms = {};
 let worldItems = [];
@@ -106,6 +112,8 @@ let invX = 0, invY = 0;
 let splashCreatedForPlayers = new Set();
 let closestNpc = null;
 let weatherChangeInterval = null; // <-- DODAJ TĘ LINIĘ
+let lastLogTime = 0;
+const LOG_INTERVAL = 2000; // Loguj pozycję co 2 sekundy
 
 const tutorial = {
     state: 1, 
@@ -312,6 +320,8 @@ class StarManager {
         });
     }
 }
+
+
 
 const starManager = new StarManager();
 const flagImageCache = {}; // <-- NOWA ZMIENNA
@@ -649,7 +659,8 @@ class NPCManager {
                     state: 'idle',
                     stateTimer: Math.random() * 7 + 2,
                     isInteracting: false, // <--- NOWOŚĆ: Stan interakcji
-                    customizations: { hat: 'none', hair: randomHair, accessories: 'none', beard: 'none', clothes: 'none', pants: 'none', shoes: 'none', rightHandItem: ITEM_NONE, hairHue: 150, hairBrightness: randomBrightness, hairSaturation: 100, beardHue: 0, beardBrightness: 100, beardSaturation: 100 }
+                    customizations: { hat: 'none', hair: 'none', accessories: 'none', beard: 'none', clothes: 'none', pants: 'none', shoes: 'none', skin: 'white fair tone', rightHandItem: ITEM_NONE, hairSaturation: 100, hairHue: 160, hairBrightness: 100, beardSaturation: 100, beardHue: 160, beardBrightness: 100 },
+
                 };
                 this.npcs.push(npc);
             }
@@ -781,6 +792,7 @@ const ZOOM_SENSITIVITY = 0.1;
 const ITEM_NONE = 'none';
 const ITEM_ROD = 'rod';
 const ITEM_SHOVEL = 'shovel';
+const ITEM_PICKAXE = 'pickaxe';
 const FISHING_BAR_WIDTH = 192;
 const FISHING_BAR_HEIGHT = 30;
 const FISHING_SLIDER_SPEED = 0.05;
@@ -801,11 +813,43 @@ const weatherImagePaths = {
     fog_main: 'img/world/fog_main.png',
     drizzle: 'img/world/drizzle.png',
     rain: 'img/world/rain.png',
-    splash: 'img/world/splash.png' // <-- NOWA LINIA
+    splash: 'img/world/splash.png',
+    char: 'img/world/char.png' // <-- DODAJ TĘ LINIĘ
 };
 const weatherImages = {};
 
-const characterImagePaths = { leg: 'img/character/leg.png', body: 'img/character/body.png', arm: 'img/character/arm.png', head: 'img/character/head.png', eye: 'img/character/eye.png' };
+// ======================= POCZĄTEK ZMIAN - KOLOR SKÓRY =======================
+
+// Tablica definiująca wszystkie odcienie skóry dla łatwiejszego zarządzania
+const SKIN_TONES = [
+    { name: 'white fair tone', suffix: '', images: {}, paths: { leg: 'img/character/leg.png', body: 'img/character/body.png', arm: 'img/character/arm.png', head: 'img/character/head.png', eye: 'img/character/eye.png' } },
+    { name: 'medium fair tone', suffix: '2', images: {}, paths: {} },
+    { name: 'olive tone', suffix: '3', images: {}, paths: {} },
+    { name: 'dark brown tone', suffix: '4', images: {}, paths: {} },
+    { name: 'black tone', suffix: '5', images: {}, paths: {} },
+    { name: 'warm tone', suffix: '6', images: {}, paths: {} },
+    { name: 'pale white', suffix: '7', images: {}, paths: {} },
+
+];
+
+// Pętla generująca ścieżki dla odcieni innych niż domyślny
+SKIN_TONES.forEach(tone => {
+    if (tone.suffix) { // Pomiń domyślny, bo ma już zdefiniowane ścieżki
+        tone.paths = {
+            leg: `img/character/leg${tone.suffix}.png`,
+            body: `img/character/body${tone.suffix}.png`,
+            arm: `img/character/arm${tone.suffix}.png`,
+            head: `img/character/head${tone.suffix}.png`,
+            eye: 'img/character/eye.png' // Oko pozostaje to samo dla wszystkich odcieni
+        };
+    }
+});
+
+// Zastępujemy starą definicję, aby uniknąć duplikacji
+const characterImagePaths = SKIN_TONES[0].paths; // Domyślne ścieżki
+const characterImages = SKIN_TONES[0].images; // Domyślne załadowane obrazki
+
+// ======================== KONIEC ZMIAN - KOLOR SKÓRY =========================
 const customizationUIPaths = { frame: 'img/ui/frame.png' };
 const fishingUIPaths = { strike: 'img/ui/strike.png', fishframe: 'img/ui/fishframe.png' };
 const baitImagePaths = {
@@ -836,10 +880,17 @@ const hookImagePaths = {
     'treble': 'img/hook/treble.png',
 };
 
+const mineralImagePaths = {
+    'echo crystal': 'img/minerals/echo crystal.png',
+    'amethyst': 'img/minerals/amethyst.png',
+    'ocean heart': 'img/minerals/ocean heart.png'
+};
+
+
 
 // ======================== KONIEC ZMIAN =========================
 
-const characterImages = {};
+
 const customizationUIImages = {};
 const fishingUIImages = {};
 const allItemImages = {}; 
@@ -893,6 +944,7 @@ hair: {
     'Ponytail': 'img/character/custom/hair/type25.png',
     'Pigtails': 'img/character/custom/hair/type24.png',
     'Richie': 'img/character/custom/hair/type26.png',
+    'Rambo': 'img/character/custom/hair/type27.png',
 },
 accessories: {
     'librarian glasses': 'img/character/custom/accessories/type1.png',
@@ -927,6 +979,23 @@ clothes: {
     'light soccer shirt': 'img/character/custom/clothes/type10.png',
     'denim vest': 'img/character/custom/clothes/type11.png',
     'coquette dress': 'img/character/custom/clothes/type12.png',
+    'elegant shirt': 'img/character/custom/clothes/type13.png',
+    'employee shirt': 'img/character/custom/clothes/type14.png',
+    '60s motorcyclist': 'img/character/custom/clothes/type15.png',
+    '80s motorcyclist': 'img/character/custom/clothes/type16.png',
+    'hippie diy': 'img/character/custom/clothes/type17.png',
+    'pink nylon': 'img/character/custom/clothes/type18.png',
+    'orange nylon': 'img/character/custom/clothes/type19.png',
+    'pink shirt': 'img/character/custom/clothes/type20.png',
+    'green shirt': 'img/character/custom/clothes/type21.png',
+    'raincoat': 'img/character/custom/clothes/type22.png',
+    'plaid suit': 'img/character/custom/clothes/type23.png',
+    'suit': 'img/character/custom/clothes/type24.png',
+    'purple sweater': 'img/character/custom/clothes/type25.png',
+    'aqua sweater': 'img/character/custom/clothes/type26.png',
+    'black top': 'img/character/custom/clothes/type27.png',
+    'white top': 'img/character/custom/clothes/type28.png',
+    
 },
 clothes_arm: {
     'white t-shirt': 'img/character/custom/clothes/arm/type1.png',
@@ -941,6 +1010,22 @@ clothes_arm: {
     'light soccer shirt': 'img/character/custom/clothes/arm/type10.png',
     'denim vest': 'img/character/custom/clothes/arm/type11.png',
     'coquette dress': 'img/character/custom/clothes/arm/type12.png',
+    'elegant shirt': 'img/character/custom/clothes/arm/type13.png',
+    'employee shirt': 'img/character/custom/clothes/arm/type14.png',
+    '60s motorcyclist': 'img/character/custom/clothes/arm/type15.png',
+    '80s motorcyclist': 'img/character/custom/clothes/arm/type16.png',
+    'hippie diy': 'img/character/custom/clothes/arm/type17.png',
+    'pink nylon': 'img/character/custom/clothes/arm/type18.png',
+    'orange nylon': 'img/character/custom/clothes/arm/type19.png',
+    'pink shirt': 'img/character/custom/clothes/arm/type20.png',
+    'green shirt': 'img/character/custom/clothes/arm/type21.png',
+    'raincoat': 'img/character/custom/clothes/arm/type22.png',
+    'plaid suit': 'img/character/custom/clothes/arm/type23.png',
+    'suit': 'img/character/custom/clothes/arm/type24.png',
+    'purple sweater': 'img/character/custom/clothes/arm/type25.png',
+    'aqua sweater': 'img/character/custom/clothes/arm/type26.png',
+    'black top': 'img/character/custom/clothes/arm/type27.png',
+    'white top': 'img/character/custom/clothes/arm/type28.png',
 },
 pants: {
     'blue jeans': 'img/character/custom/pants/type1.png',
@@ -949,6 +1034,20 @@ pants: {
     'black skirt': 'img/character/custom/pants/type4.png',
     'black bell bottom jeans': 'img/character/custom/pants/type5.png',
     'blue bell bottom jeans': 'img/character/custom/pants/type6.png',
+    'red shorts': 'img/character/custom/pants/type7.png',
+    'black shorts': 'img/character/custom/pants/type8.png',
+    'adventure pants': 'img/character/custom/pants/type9.png',
+    'camo pants': 'img/character/custom/pants/type10.png',
+    'camo shorts': 'img/character/custom/pants/type11.png',
+    'fishnet stockings': 'img/character/custom/pants/type12.png',
+    'punk pants': 'img/character/custom/pants/type13.png',
+    'pink nylon': 'img/character/custom/pants/type14.png',
+    'orange nylon': 'img/character/custom/pants/type15.png',
+    'classic sweatpants': 'img/character/custom/pants/type16.png',
+    'sweatpants': 'img/character/custom/pants/type17.png',
+    'sweat shorts': 'img/character/custom/pants/type18.png',
+    
+
 },
 pants_leg: {
     'blue jeans': 'img/character/custom/pants/leg/type1.png',
@@ -957,11 +1056,26 @@ pants_leg: {
     'black skirt': 'img/character/custom/pants/leg/type4.png',
     'black bell bottom jeans': 'img/character/custom/pants/leg/type5.png',
     'blue bell bottom jeans': 'img/character/custom/pants/leg/type6.png',
+    'red shorts': 'img/character/custom/pants/leg/type7.png',
+    'black shorts': 'img/character/custom/pants/leg/type8.png',
+    'adventure pants': 'img/character/custom/pants/leg/type9.png',
+    'camo pants': 'img/character/custom/pants/leg/type10.png',
+    'camo shorts': 'img/character/custom/pants/leg/type11.png',
+    'fishnet stockings': 'img/character/custom/pants/leg/type12.png',
+    'punk pants': 'img/character/custom/pants/leg/type13.png',
+    'pink nylon': 'img/character/custom/pants/leg/type14.png',
+    'orange nylon': 'img/character/custom/pants/leg/type15.png',
+    'classic sweatpants': 'img/character/custom/pants/leg/type16.png',
+    'sweatpants': 'img/character/custom/pants/leg/type17.png',
+    'sweat shorts': 'img/character/custom/pants/leg/type18.png',
+
+
+
 },
 shoes: {
     'shoes1': 'img/character/custom/shoes/type1.png'
 },
-    items: {'rod':{path:'img/item/rod.png',width:playerSize*2,height:playerSize,pivotX_in_img:Math.round(20*(playerSize/128)),pivotY_in_round:(20*(playerSize/128))},'shovel':{path:'img/item/shovel.png',width:playerSize,height:playerSize,pivotX_in_img:playerSize/2,pivotY_in_img:playerSize/2},'float':{path:'img/item/float.png',width:32,height:62,pivotX_in_img:FLOAT_SIZE/2,pivotY_in_img:FLOAT_SIZE/2}}
+    items: {'rod':{path:'img/item/rod.png',width:playerSize*2,height:playerSize,pivotX_in_img:Math.round(20*(playerSize/128)),pivotY_in_round:(20*(playerSize/128))},'shovel':{path:'img/item/shovel.png',width:playerSize,height:playerSize,pivotX_in_img:playerSize/2,pivotY_in_img:playerSize/2},'pickaxe':{path:'img/item/pickaxe.png',width:playerSize,height:playerSize,pivotX_in_img:playerSize/2,pivotY_in_img:playerSize/2}, 'float':{path:'img/item/float.png',width:32,height:62,pivotX_in_img:FLOAT_SIZE/2,pivotY_in_img:FLOAT_SIZE/2}}
 };
 let localPlayer = { 
     id: null, 
@@ -1044,11 +1158,22 @@ const CAMERA_SMOOTHING_FACTOR = 0.08;
 
 const CAMERA_VERTICAL_BIAS = 0.4;
 let isCustomizationMenuOpen = false;
-const customizationCategories = [ 'hat', 'hair', 'accessories', 'beard', 'clothes', 'pants', 'shoes' ];
+const customizationCategories = [ 'hat', 'hair', 'accessories', 'beard', 'clothes', 'pants', 'shoes', 'skin' ];
 let selectedCategoryIndex = 0;
 let localPlayerCustomizations = { hat: 'none', hair: 'none', accessories: 'none', beard: 'none', clothes: 'none', pants: 'none', shoes: 'none', rightHandItem: ITEM_NONE, hairSaturation: 100, hairHue: 0, hairBrightness: 100, beardSaturation: 100, beardHue: 0, beardBrightness: 100 };
-const customizationOptions = { hat: ['none', 'red cap', 'blue cap', 'special', 'street cap', 'pink cap', 'black cap', 'oldschool cap', 'blue straight cap', 'green straight cap', 'kiddo cap', 'red seasonal', 'green seasonal', 'flat cap','cowboy hat', 'adventure hat', 'straw hat', 'lake hat', 'fedora'], hair: ['none', 'Curly', 'Curly Short', 'Short', 'Plodder', '"Cool Kid"', 'inmate', 'maniac', 'alopecia', 'Mrs. Robinson', 'Bob', 'Mod', 'U.S Army', 'Afro', 'Tuber Afro', 'Greasy Grunge', 'Mohawk', 'Messy Bun', 'Juliet', 'I`m a Star', 'Short Twist', '"Emo"', "Dandere", "Smart Bangs", 'Ponytail','Richie', 'Pigtails'], accessories: ['none', 'librarian glasses', 'mole glasses', 'square glasses', 'black glasses', 'red glasses', '"cool" glasses', 'sunglasses', 'windsor glasses', 'eye patch'], beard: ['none', 'goatee', 'overgrown goatee', 'mustache', 'overgrown mustache', 'charlie?', 'unshaven', 'sailor'], clothes: ['none', 'white t-shirt', 'black t-shirt', 'hawaii shirt', 'red hoodie', 'blue hoodie', 'skull t-shirt', 'red plaid vest', 'dark blue soccer shirt', 'green soccer shirt', 'light soccer shirt', 'denim vest', 'coquette dress'], pants: ['none', 'blue jeans', 'ripped jeans', 'black jeans', 'black skirt', 'black bell bottom jeans', 'blue bell bottom jeans'], shoes: ['none', 'shoes1'] };
-let currentCustomizationOptionIndices = { hat: 0, hair: 0, accessories: 0, beard: 0, clothes: 0, pants: 0, shoes: 0 };
+
+const customizationOptions = { 
+    hat: ['none', 'red cap', 'blue cap', 'special', 'street cap', 'pink cap', 'black cap', 'oldschool cap', 'blue straight cap', 'green straight cap', 'kiddo cap', 'red seasonal', 'green seasonal', 'flat cap','cowboy hat', 'adventure hat', 'straw hat', 'lake hat', 'fedora'], 
+    hair: ['none', 'Curly', 'Curly Short', 'Short', 'Plodder', '"Cool Kid"', 'inmate', 'maniac', 'alopecia', 'Mrs. Robinson', 'Bob', 'Mod', 'U.S Army', 'Afro', 'Tuber Afro', 'Greasy Grunge', 'Mohawk', 'Messy Bun', 'Juliet', 'I`m a Star', 'Short Twist', '"Emo"', "Dandere", "Smart Bangs", 'Ponytail','Richie', 'Pigtails', 'Rambo'], 
+    accessories: ['none', 'librarian glasses', 'mole glasses', 'square glasses', 'black glasses', 'red glasses', '"cool" glasses', 'sunglasses', 'windsor glasses', 'eye patch'], 
+    beard: ['none', 'goatee', 'overgrown goatee', 'mustache', 'overgrown mustache', 'charlie?', 'unshaven', 'sailor'], 
+    clothes: ['none', 'white t-shirt', 'black t-shirt', 'hawaii shirt', 'red hoodie', 'blue hoodie', 'skull t-shirt', 'red plaid vest', 'dark blue soccer shirt', 'green soccer shirt', 'light soccer shirt', 'denim vest', 'coquette dress', 'elegant shirt', 'employee shirt', '60s motorcyclist', '80s motorcyclist', 'hippie diy', 'pink nylon', 'orange nylon', 'pink shirt', 'green shirt', 'raincoat', 'purple sweater', 'aqua sweater', 'plaid suit', 'suit', 'black top', 'white top'], 
+    pants: ['none', 'blue jeans', 'ripped jeans', 'black jeans', 'black skirt', 'black bell bottom jeans', 'blue bell bottom jeans', 'red shorts', 'black shorts', 'adventure pants', 'camo pants', 'camo shorts', 'fishnet stockings', 'punk pants', 'pink nylon', 'orange nylon', 'classic sweatpants', 'sweatpants', 'sweat shorts'], 
+    shoes: ['none', 'shoes1'],
+    skin: ['white fair tone', 'medium fair tone', 'olive tone', 'dark brown tone', 'black tone', 'pale white', 'warm tone'] // <-- DODANA LINIA
+};
+
+let currentCustomizationOptionIndices = { hat: 0, hair: 0, accessories: 0, beard: 0, clothes: 0, pants: 0, shoes: 0, skin: 0 };
 
 const MENU_WIDTH=150,MENU_TEXT_COLOR='white',MENU_HIGHLIGHT_COLOR='yellow',MENU_ITEM_HEIGHT=40,MENU_X_OFFSET_FROM_PLAYER=0,MENU_Y_OFFSET_FROM_PLAYER_TOP_CENTER_SELECTED=-40,ROLLER_VISIBLE_COUNT=3,ROLLER_ITEM_VERTICAL_SPACING=1.2*MENU_ITEM_HEIGHT,ROLLER_DIMMED_SCALE=.7,ROLLER_DIMMED_ALPHA=.3,FRAME_SIZE=186,FRAME_OFFSET_X_FROM_MENU_TEXT=30,FRAME_OSCILLATION_SPEED=.05,FRAME_ROTATION_DEGREES=5;let frameOscillationTime=0;const PIXEL_FONT='Segoe UI, monospace',DEFAULT_FONT_SIZE_USERNAME=16,DEFAULT_FONT_SIZE_MENU=24,HAIR_SATURATION_MIN=0,HAIR_SATURATION_MAX=200,HAIR_BRIGHTNESS_MIN=40,HAIR_BRIGHTNESS_MAX=200,HAIR_HUE_MIN=0,HAIR_HUE_MAX=360,BEARD_SATURATION_MIN=0,BEARD_SATURATION_MAX=200,BEARD_BRIGHTNESS_MIN=40,BEARD_BRIGHTNESS_MAX=200,BEARD_HUE_MIN=0,BEARD_HUE_MAX=360;
 let customizationMenuState = 'category';
@@ -1057,6 +1182,7 @@ const colorProperties = ['brightness', 'saturation', 'hue'];
 let lastTime = 0;
 let campPromptAlpha = 0;
 let npcPromptAlpha = 0; // <--- DODAJ TĘ LINIĘ
+let totemPromptAlpha = 0; // <-- NOWA ZMIENNA DLA TOTEMU
 const PROMPT_FADE_SPEED = 4;
 let wasPlayerOnGround = true; // <-- NOWA ZMIENNA
 
@@ -1085,13 +1211,16 @@ const TIER_NAMES = {
 const inventoryManager = new InventoryManager();
 const fishingManager = new FishingManager();
 const tradingManager = new TradingManager(inventoryManager, fishingManager);
+const totemManager = new TotemManager(inventoryManager); // <-- NOWA LINIA
 const soundManager = new SoundManager(); 
 const weatherManager = new WeatherManager(); 
 const cloudManager = new CloudManager(); // <-- DODAJ TĘ LINIĘ
+const scoreboardManager = new ScoreboardManager();
 // ======================== KONIEC ZMIANY =========================
 
 // Teraz, gdy oba managery istnieją, możemy je ze sobą połączyć
 inventoryManager.linkTradingManager(tradingManager);
+inventoryManager.linkTotemManager(totemManager); // <-- NOWA LINIA
 // ======================= POCZĄTEK ZMIAN =======================
 // Przekaż potrzebne obiekty konfiguracyjne do obu managerów
 fishingManager.tierConfig = FISH_TIER_CONFIG;
@@ -1106,6 +1235,7 @@ const pierSpanImages = {};
 let pierSupportData = [];
 
 const caughtFishAnimations = [];
+const minedGemAnimations = []; // <-- NOWA LINIA
 const FISH_ANIMATION_DURATION = 1200;
 const FISH_DISPLAY_DURATION = 4000;
 
@@ -1164,6 +1294,68 @@ function drawTimedTutorials() {
         ctx.drawImage(image, -drawWidth / 2, -drawHeight / 2, drawWidth, drawHeight);
         ctx.restore();
     });
+}
+function drawTotemPrompt() {
+    // Jeśli alpha jest zerowa, nie ma sensu niczego rysować
+    if (totemPromptAlpha <= 0) return;
+
+    const image = tutorialImages['info6'];
+    if (!image || !image.complete) return;
+
+    const textBefore = "press ";
+    const textAfter = " to use totem"; // <--- ZMIENIONY TEKST
+    const PROMPT_FONT_SIZE = 16;
+    const PROMPT_FONT_FAMILY = `'Segoe UI', sans-serif`;
+    const PROMPT_TEXT_COLOR = 'white';
+    const PROMPT_OUTLINE_COLOR = 'black';
+    const PROMPT_OUTLINE_WIDTH = 4;
+    const SPACING = -24;
+
+    const playerScreenX = (localPlayer.x - cameraX + playerSize / 2) * currentZoomLevel;
+    const playerScreenY = (localPlayer.y - cameraY) * currentZoomLevel;
+    const drawHeight = PROMPT_FONT_SIZE * 6.5;
+    const drawWidth = (image.width / image.height) * drawHeight;
+    ctx.font = `bold ${PROMPT_FONT_SIZE}px ${PROMPT_FONT_FAMILY}`;
+    const textBeforeWidth = ctx.measureText(textBefore).width;
+    const textAfterWidth = ctx.measureText(textAfter).width;
+    const totalWidth = textBeforeWidth + drawWidth + textAfterWidth + SPACING * 2;
+    const promptY = playerScreenY + TUTORIAL_Y_OFFSET - drawHeight;
+    
+    const time = Date.now() / 1000;
+    const mainRockingAngle = Math.sin(time * (TUTORIAL_ROCKING_SPEED * 0.5)) * ((TUTORIAL_ROCKING_ANGLE_DEGREES * 0.4) * Math.PI / 180);
+    const imageRockingAngle = Math.sin(time * (TUTORIAL_ROCKING_SPEED * 1.2)) * ((TUTORIAL_ROCKING_ANGLE_DEGREES * 0.8) * Math.PI / 180);
+    
+    ctx.save();
+    ctx.globalAlpha = totemPromptAlpha; // <--- UŻYWA NOWEJ ZMIENNEJ
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.translate(playerScreenX, promptY + drawHeight / 2);
+    ctx.rotate(mainRockingAngle);
+
+    ctx.font = `bold ${PROMPT_FONT_SIZE}px ${PROMPT_FONT_FAMILY}`;
+    ctx.strokeStyle = PROMPT_OUTLINE_COLOR;
+    ctx.lineWidth = PROMPT_OUTLINE_WIDTH;
+    ctx.fillStyle = PROMPT_TEXT_COLOR;
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'middle';
+
+    let currentX = -totalWidth / 2;
+
+    ctx.strokeText(textBefore, currentX, 0);
+    ctx.fillText(textBefore, currentX, 0);
+    currentX += textBeforeWidth + SPACING;
+
+    ctx.save();
+    ctx.translate(currentX + drawWidth / 2, 0); 
+    ctx.rotate(imageRockingAngle);
+    ctx.drawImage(image, -drawWidth / 2, -drawHeight / 2, drawWidth, drawHeight);
+    ctx.restore(); 
+
+    currentX += drawWidth + SPACING;
+
+    ctx.strokeText(textAfter, currentX, 0);
+    ctx.fillText(textAfter, currentX, 0);
+
+    ctx.restore();
 }
 
 function drawCampPrompt() {
@@ -1307,8 +1499,17 @@ function drawNpcTradePrompt() {
 const npcManager = new NPCManager(drawPlayer);
 
 function loadImages(callback) {
-    // ======================= POCZĄTEK ZMIAN =======================
-    const allPaths = { ...characterImagePaths, ...customizationUIPaths, ...tutorialImagePaths, ...fishingUIPaths, ...baitImagePaths, ...hookImagePaths, ...weatherImagePaths };
+    // ======================= POCZĄTEK ZMIAN - ŁADOWANIE SKINÓW =======================
+    const basePaths = { ...customizationUIPaths, ...tutorialImagePaths, ...fishingUIPaths, ...baitImagePaths, ...hookImagePaths, ...weatherImagePaths, ...mineralImagePaths };
+    const allPaths = { ...basePaths }; // <-- DODAJ TĘ LINIĘ Z POWROTEM
+    
+    // Dodaj wszystkie ścieżki skinów do ogólnej puli
+    SKIN_TONES.forEach(tone => {
+        Object.keys(tone.paths).forEach(key => {
+            allPaths[`${key}_${tone.suffix || 'default'}`] = tone.paths[key];
+        });
+    });
+
     const fishNames = new Set();
     const allFishData = fishingManager.getFishData();
     for (const biome in allFishData) {
@@ -1331,6 +1532,22 @@ function loadImages(callback) {
     };
     for (const biome in biomeDefsForPierSpans) a++;
     
+    // === POCZĄTEK ZMIAN: Dodajemy ścieżki totemów do wczytania ===
+    const biomeDefsForTotems = {
+        jurassic: 'img/world/biome/jurassic/totem.png',
+        grassland: 'img/world/biome/grassland/totem.png'
+    };
+    // === NOWY BLOK: Ścieżki do aktywnych totemów ===
+    const biomeDefsForTotemsActive = {
+        jurassic: 'img/world/biome/jurassic/totem_active.png',
+        grassland: 'img/world/biome/grassland/totem_active.png'
+    };
+    window.totemActiveImages = {};
+
+    for (const biome in biomeDefsForTotems) a++;
+    for (const biome in biomeDefsForTotemsActive) a++; // <-- DODAJ TĘ LINIĘ
+    // === KONIEC ZMIAN ===
+
     a += Object.keys(starImagePaths).length;
 
     if (a === 0) {
@@ -1343,20 +1560,35 @@ function loadImages(callback) {
         if (e === a) {
             starManager.areAssetsLoaded = true;
             starManager.initialize(DEDICATED_GAME_WIDTH, DEDICATED_GAME_HEIGHT);
-            // === ZMODYFIKUJ TĘ LINIĘ ===
             weatherManager.setAssets({
-            fog: weatherImages.fog,
-            fog_main: weatherImages.fog_main,
-            drizzle: weatherImages.drizzle,
-            rain: weatherImages.rain,
-            splash: weatherImages.splash // <-- NOWA LINIA
-        });
-            // ==========================
+                fog: weatherImages.fog,
+                fog_main: weatherImages.fog_main,
+                drizzle: weatherImages.drizzle,
+                rain: weatherImages.rain,
+                splash: weatherImages.splash
+            });
             biomeManager.loadBiomeImages(() => {
                 npcManager.loadCurrentBiomeAssets(biomeManager.currentBiomeName, callback);
             });
         }
     };
+
+    // === POCZĄTEK ZMIAN: Logika wczytywania obrazków totemów ===
+    for (const biomeName in biomeDefsForTotems) {
+        const path = biomeDefsForTotems[biomeName];
+        const img = new Image();
+        img.src = path;
+        img.onload = () => { totemImages[biomeName] = img; f(); };
+        img.onerror = () => { console.error(`Błąd wczytywania obrazka totemu: ${img.src}`); f(); };
+    }
+    // === NOWY BLOK: Logika wczytywania aktywnych totemów ===
+    for (const biomeName in biomeDefsForTotemsActive) {
+        const path = biomeDefsForTotemsActive[biomeName];
+        const img = new Image();
+        img.src = path;
+        img.onload = () => { totemActiveImages[biomeName] = img; f(); };
+        img.onerror = () => { console.error(`Błąd wczytywania aktywnego obrazka totemu: ${img.src}`); f(); };
+    }
 
     for (const key in starImagePaths) {
         const img = new Image();
@@ -1377,29 +1609,46 @@ function loadImages(callback) {
         const i = new Image;
         i.src = allPaths[h];
         i.onload = () => {
-            if (characterImagePaths[h]) characterImages[h] = i;
-            else if (customizationUIPaths[h]) customizationUIImages[h] = i;
-            else if (tutorialImagePaths[h]) tutorialImages[h] = i;
-            else if (fishingUIPaths[h]) fishingUIImages[h] = i;
-            else if (h.startsWith('fish_')) {
+            // Sprawdź, czy to obrazek części ciała
+            let isCharacterPart = false;
+            SKIN_TONES.forEach(tone => {
+                const suffix = tone.suffix || 'default';
+                if (h.endsWith(`_${suffix}`)) {
+                    const partKey = h.substring(0, h.lastIndexOf(`_${suffix}`));
+                    if (tone.paths[partKey]) {
+                        tone.images[partKey] = i;
+                        isCharacterPart = true;
+                    }
+                }
+            });
+
+            if (isCharacterPart) {
+                // Już obsłużone
+            } else if (customizationUIPaths[h]) {
+                customizationUIImages[h] = i;
+            } else if (tutorialImagePaths[h]) {
+                tutorialImages[h] = i;
+            } else if (fishingUIPaths[h]) {
+                fishingUIImages[h] = i;
+            } else if (h.startsWith('fish_')) {
                 const fishName = h.substring(5);
                 allItemImages[fishName] = i;
-            }
-            else if (baitImagePaths[h]) {
-                 allItemImages[h] = i;
-            }
-            // ======================= POCZĄTEK ZMIAN =======================
-            else if (hookImagePaths[h]) {
-                 allItemImages[h] = i;
-            }
-            // === DODAJ NOWY WARUNEK 'ELSE IF' ===
-            else if (weatherImagePaths[h]) {
-                weatherImages[h] = i;
-            }
-            // =====================================
-            // ======================== KONIEC ZMIAN =========================
-            f()
-        }, i.onerror = () => { console.error(`Image loading error: ${i.src}`), f() }
+            } else if (baitImagePaths[h]) {
+                allItemImages[h] = i;
+            } else if (hookImagePaths[h]) {
+                allItemImages[h] = i;
+            } else if (mineralImagePaths[h]) {
+        allItemImages[h] = i;
+    } else if (weatherImagePaths[h]) {
+        // === POCZĄTEK ZMIANY ===
+        if (h === 'char') {
+            window.particleCharImage = i; // Przypisz do zmiennej globalnej
+        } else {
+            weatherImages[h] = i;
+        }}
+            f();
+        };
+        i.onerror = () => { console.error(`Image loading error: ${i.src}`), f() };
     }
     for (const j in exampleCustomItemPaths) {
         if (j === "items") continue;
@@ -1570,8 +1819,8 @@ function drawPierSupports(ctx) {
     });
 }
 
-function drawPlayer(p, imageSet = characterImages) {
-    if (!imageSet.body || !imageSet.body.complete) {
+function drawPlayer(p, baseImageSet = characterImages) {
+    if (!baseImageSet.body || !baseImageSet.body.complete) {
         if (p.color) {
              ctx.fillStyle = p.color;
              ctx.fillRect(p.x, p.y, playerSize, playerSize);
@@ -1580,7 +1829,22 @@ function drawPlayer(p, imageSet = characterImages) {
     }
     ctx.save();
 
-    // ======================= POCZĄTEK ZMIANY =======================
+    // ======================= POCZĄTEK ZMIAN - WYBÓR TEKSTUR SKÓRY =======================
+    let imageSet = baseImageSet; // Domyślnie używamy przekazanego zestawu (ważne dla NPC)
+
+// Jeśli rysujemy gracza (a nie NPC), sprawdźmy jego personalizację skóry.
+// NPC mają ID zaczynające się od "npc_", więc dla nich ten blok się nie wykona.
+if (p.id && !p.id.startsWith('npc_') && p.customizations && p.customizations.skin) { // <-- KLUCZOWA ZMIANA W WARUNKU
+    const selectedSkin = SKIN_TONES.find(tone => tone.name === p.customizations.skin);
+    if (selectedSkin && selectedSkin.images.body) { // Sprawdź, czy obrazki dla tego odcienia są załadowane
+        imageSet = selectedSkin.images;
+    } else {
+        // Jeśli coś pójdzie nie tak, użyj domyślnego odcienia
+        imageSet = SKIN_TONES[0].images;
+    }
+}
+    // ======================== KONIEC ZMIAN - WYBÓR TEKSTUR SKÓRY =========================
+    
     // Efekt wizualny (podświetlenie) jest teraz kontrolowany przez nową flagę.
     if (p.isHighlighted === true) {
         ctx.filter = 'brightness(1.6)';
@@ -2185,6 +2449,64 @@ function updateAndDrawCaughtFishAnimations() {
     }
     ctx.restore();
 }
+function updateAndDrawMinedGemAnimations() {
+    ctx.save();
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+
+    const now = Date.now();
+
+    for (let i = minedGemAnimations.length - 1; i >= 0; i--) {
+        const anim = minedGemAnimations[i];
+        const player = playersInRoom[anim.playerId];
+
+        if (!player || now > anim.startTime + FISH_ANIMATION_DURATION + FISH_DISPLAY_DURATION) {
+            minedGemAnimations.splice(i, 1);
+            continue;
+        }
+
+        const startScreenPos = { x: (anim.startPos.x - cameraX) * currentZoomLevel, y: (anim.startPos.y - cameraY) * currentZoomLevel };
+        const targetScreenPos = { x: (player.x + playerSize / 2 - cameraX) * currentZoomLevel, y: (player.y - 60 - cameraY) * currentZoomLevel };
+        let currentPos;
+        const elapsed = now - anim.startTime;
+
+        if (elapsed < FISH_ANIMATION_DURATION) {
+            const progress = elapsed / FISH_ANIMATION_DURATION;
+            const easeProgress = 1 - Math.pow(1 - progress, 3);
+            currentPos = { x: lerp(startScreenPos.x, targetScreenPos.x, easeProgress), y: lerp(startScreenPos.y, targetScreenPos.y, easeProgress) };
+        } else {
+            currentPos = targetScreenPos;
+        }
+
+        const gemImg = allItemImages[anim.itemName];
+        if (gemImg && gemImg.complete) {
+            const BASE_SCALE = 1.8;
+            const itemWidth = gemImg.width * BASE_SCALE;
+            const itemHeight = gemImg.height * BASE_SCALE;
+            ctx.drawImage(gemImg, currentPos.x - itemWidth / 2, currentPos.y - itemHeight / 2, itemWidth, itemHeight);
+        }
+
+        if (elapsed >= FISH_ANIMATION_DURATION) {
+            const tierConfig = FISH_TIER_CONFIG[anim.tier] || FISH_TIER_CONFIG[0];
+            const text = anim.itemName;
+
+            const displayElapsed = elapsed - FISH_ANIMATION_DURATION;
+            const FADE_TIME = 700;
+            let textAlpha = (displayElapsed < FADE_TIME) ? (displayElapsed / FADE_TIME) : 1;
+            if (displayElapsed > FISH_DISPLAY_DURATION - FADE_TIME) {
+                textAlpha = (FISH_DISPLAY_DURATION - displayElapsed) / FADE_TIME;
+            }
+
+            ctx.font = tierConfig.font;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'bottom';
+            ctx.fillStyle = `rgba(0, 0, 0, ${0.7 * textAlpha})`;
+            ctx.fillText(text, currentPos.x, currentPos.y - 42);
+            ctx.fillStyle = tierConfig.color.replace(', 1)', `, ${textAlpha})`);
+            ctx.fillText(text, currentPos.x, currentPos.y - 40);
+        }
+    }
+    ctx.restore();
+}
 
 
 
@@ -2194,6 +2516,21 @@ function updateAndDrawCaughtFishAnimations() {
 // ====================================================================
 
 function createFullItemObject(itemName) {
+
+// I WSTAW NA SAMEJ GÓRZE WEWNĄTRZ NIEJ:
+    const mineralData = {
+        'echo crystal': { tier: 4, description: 'Resonates with faint sounds.' },
+        'amethyst': { tier: 3, description: 'A beautiful purple gemstone.' },
+        'ocean heart': { tier: 4, description: 'Seems to hold the depth of the sea.' }
+    };
+    if (mineralData[itemName]) {
+        return {
+            name: itemName,
+            image: allItemImages[itemName],
+            tier: mineralData[itemName].tier,
+            description: mineralData[itemName].description
+        };
+    }
     const baitData = fishingManager.baitData[itemName];
     if (baitData) {
         return {
@@ -2237,7 +2574,7 @@ function createFullItemObject(itemName) {
 }
 
 function initializeSignaling() {
-    signalingSocket = io();
+    signalingSocket = io({ transports: ['polling'] });
     signalingSocket.on('connect', () => {
         console.log('Connected to the signaling server.', signalingSocket.id);
         showNotification('Connected to the signaling server.', 'success');
@@ -2325,7 +2662,41 @@ function onSuccessfulJoin(roomData, hostPeerId = null) {
         biomeManager.initializeGroundPlants(roomData.gameData.groundPlants || []);
         biomeManager.initializeTrees(roomData.gameData.trees || []);
         if (biomeManager.initializePiers) biomeManager.initializePiers(roomData.gameData.piers || []);
+        if (biomeManager.initializeObstacles) biomeManager.initializeObstacles(roomData.gameData.obstacles || []);
         
+        // === POCZĄTEK ZMIAN: Tworzenie obiektu totemu na kliencie ===
+        if (roomData.gameData.totem) {
+        const totemData = roomData.gameData.totem;
+        const totemImg = totemImages[roomData.gameData.biome];
+        const totemActiveImg = totemActiveImages[roomData.gameData.biome];
+
+        worldTotem = new Totem(totemData.x, totemData.y, totemImg, totemActiveImg);
+
+        if (!totemImg || !totemActiveImg) {
+            console.warn('Dane totemu otrzymane, ale jeden z obrazków nie jest załadowany!');
+        }
+    }
+    
+    // I ZASTĄP go tym:
+    if (roomData.gameData.totem) {
+        const totemData = roomData.gameData.totem;
+        const biomeName = roomData.gameData.biome;
+        const totemImg = totemImages[biomeName];
+        
+        // Tworzymy obiekt Totem
+        worldTotem = new Totem(totemData.x, totemData.y, totemImg, biomeName);
+
+        // KLUCZOWA ZMIANA: Natychmiast ustawiamy stan otrzymany z serwera
+        if (totemData.state !== 'IDLE') {
+            worldTotem.setStateFromServer(totemData.state, totemData.stateTimer);
+        }
+
+        if (!totemImg) {
+            console.warn('Dane totemu otrzymane, ale jego bazowy obrazek nie jest załadowany!');
+        }
+    }
+        // === KONIEC ZMIAN ===
+
         pierSupportData = [];
         const serverPiers = roomData.gameData.piers || [];
         const SCALED_TILE_SIZE = 120;
@@ -2497,6 +2868,8 @@ function changeWeather() {
 }
 
 function gameLoop(currentTime) {
+    // === POCZĄTEK ZMIAN: Okresowe logowanie pozycji ===
+    
     function updateLocalPlayerMovement() {
         const PLAYER_WALK_SPEED = 5;
         const DECELERATION_FACTOR = 0.9;
@@ -2521,9 +2894,44 @@ function gameLoop(currentTime) {
         return;
     }
 
+    // === NOWY BLOK: Aktualizacja logiki totemu ===
+    if (worldTotem) {
+        worldTotem.update(deltaTime);
+    }
+
+    // ================== NOWA LOGIKA DŹWIĘKÓW POGODY ==================
+    soundManager.update(deltaTime); // Aktualizuj płynne przejścia głośności
+    const weatherState = weatherManager.targetWeather;
+    let targetWeatherSound = null;
+    if (weatherState === 'drizzle') {
+        targetWeatherSound = 'drizzle';
+    } else if (weatherState === 'rain') {
+        targetWeatherSound = 'rain';
+    } else if (weatherState === 'rainstorm') {
+        targetWeatherSound = 'storm';
+    }
+    soundManager.setWeatherSound(targetWeatherSound);
+    // ===============================================================
+
      if (currentRoom && currentRoom.gameData) {
         const playerRect = { x: localPlayer.x, y: localPlayer.y, width: playerSize, height: playerSize };
         const playerCenterX = localPlayer.x + playerSize / 2;
+
+        // === POCZĄTEK NOWEJ LOGIKI INTERAKCJI ===
+        const TOTEM_INTERACTION_RADIUS = 150;
+        let isPlayerInTotemZone = false;
+
+        // Sprawdź odległość od totemu, jeśli istnieje
+        if (worldTotem) {
+            const totemCenterX = worldTotem.x + worldTotem.width / 2;
+            const distanceToTotem = Math.abs(playerCenterX - totemCenterX);
+            if (distanceToTotem < TOTEM_INTERACTION_RADIUS) {
+                isPlayerInTotemZone = true;
+            }
+            // Zaktualizuj stan podświetlenia totemu
+            worldTotem.isHighlighted = isPlayerInTotemZone;
+        }
+        // === KONIEC NOWEJ LOGIKI INTERAKCJI ===
 
         const campRect = {
             x: biomeManager.campsiteX || 0,
@@ -2536,12 +2944,8 @@ function gameLoop(currentTime) {
                               playerRect.y < campRect.y + campRect.height &&
                               playerRect.y + playerRect.height > campRect.y);
         
-        // =================================================================
-        // === POCZĄTEK ZMIAN: UJEDNOLICONA LOGIKA AKTYWNEJ INTERAKCJI ===
-        // =================================================================
         let activeInteraction = { type: 'none', distance: Infinity };
 
-        // Krok 1: Sprawdź obóz
         if (isPlayerInCampZone && tutorial.state === 'finished') {
             const campCenterX = campRect.x + campRect.width / 2;
             activeInteraction = {
@@ -2549,10 +2953,7 @@ function gameLoop(currentTime) {
                 distance: Math.abs(playerCenterX - campCenterX)
             };
         }
-
-        // Krok 2: Znajdź najbliższego NPC
         
-        // WAŻNA POPRAWKA: Resetujemy globalną zmienną bez `let`, aby nie tworzyć nowej lokalnej.
         closestNpc = null; 
         let isPlayerStillNearTradingNpc = false;
 
@@ -2566,24 +2967,22 @@ function gameLoop(currentTime) {
 
             if (distance < npcManager.INTERACTION_RADIUS && distance < activeInteraction.distance) {
                 activeInteraction = { type: 'npc', distance: distance };
-                closestNpc = npc; // Tutaj przypisujemy do globalnej zmiennej
+                closestNpc = npc;
             }
         });
 
-        // Automatyczne zamykanie handlu
         if (tradingManager.isTradeWindowOpen && !isPlayerStillNearTradingNpc) {
             tradingManager.stopTrading();
         }
 
-        // Krok 3: Ustaw stany podświetlenia i interakcji dla wszystkich NPC
         npcManager.npcs.forEach(npc => {
             npc.isHighlighted = (npc === closestNpc);
             npc.isInteracting = (tradingManager.isTradeWindowOpen && tradingManager.activeNpc?.id === npc.id);
         });
 
-        // Krok 4: Ustaw komunikaty
         showCampPrompt = (activeInteraction.type === 'camp');
         let showNpcTradePrompt = (activeInteraction.type === 'npc');
+        let showTotemPrompt = isPlayerInTotemZone; // <-- NOWA ZMIENNA
 
         if (biomeManager.setPlayerProximity) {
             biomeManager.setPlayerProximity(showCampPrompt);
@@ -2600,11 +2999,14 @@ function gameLoop(currentTime) {
         } else {
             npcPromptAlpha = Math.max(0, npcPromptAlpha - PROMPT_FADE_SPEED * deltaTime);
         }
-        // ===============================================================
-        // === KONIEC ZMIAN: UJEDNOLICONA LOGIKA AKTYWNEJ INTERAKCJI ===
-        // ===============================================================
-    }
 
+        // === NOWA LOGIKA DLA PRZEZROCZYSTOŚCI KOMUNIKATU TOTEMU ===
+        if (showTotemPrompt) {
+            totemPromptAlpha = Math.min(1, totemPromptAlpha + PROMPT_FADE_SPEED * deltaTime);
+        } else {
+            totemPromptAlpha = Math.max(0, totemPromptAlpha - PROMPT_FADE_SPEED * deltaTime);
+        }
+    }
     if (insectsInRoom.length > 0 && currentRoom.gameData) {
         const worldWidth = currentRoom.gameData.worldWidth || 0;
         insectsInRoom.forEach(insect => {
@@ -2624,20 +3026,28 @@ function gameLoop(currentTime) {
         const groundY_target_for_player_top = DEDICATED_GAME_HEIGHT - currentRoom.gameData.groundLevel - playerSize;
         for (const id in playersInRoom) {
             const p = playersInRoom[id];
-            const isOnGround = (p.y >= groundY_target_for_player_top - 1 && p.y <= groundY_target_for_player_top + 1);
-            p.isWalking = Math.abs(p.velocityX || 0) > MIN_VELOCITY_FOR_WALK_ANIMATION && isOnGround;
-            
-            if (p.meActionText && Date.now() >= p.meActionExpiry) {
-        p.meActionText = null;
-        p.meActionExpiry = null;
-    }
 
-     if (p.chatMessageText && Date.now() >= p.chatMessageExpiry) {
+            // --- NOWA LOGIKA ANIMACJI ---
+            // Polegamy teraz wyłącznie na stanie `isJumping` od serwera,
+            // który wie, czy gracz stoi na ziemi, czy na przeszkodzie.
+            
+            // Gracz chodzi, jeśli ma prędkość w poziomie i NIE jest w powietrzu.
+            p.isWalking = Math.abs(p.velocityX || 0) > MIN_VELOCITY_FOR_WALK_ANIMATION && !p.isJumping;
+            
+            // Gracz stoi w miejscu (idle), jeśli nie chodzi i NIE jest w powietrzu.
+            p.isIdle = !p.isWalking && !p.isJumping;
+            // --- KONIEC NOWEJ LOGIKI ---
+
+            if (p.meActionText && Date.now() >= p.meActionExpiry) {
+                p.meActionText = null;
+                p.meActionExpiry = null;
+            }
+
+            if (p.chatMessageText && Date.now() >= p.chatMessageExpiry) {
                 p.chatMessageText = null;
                 p.chatMessageExpiry = null;
             }
-            const isStationaryHorizontal = Math.abs(p.velocityX || 0) < MIN_VELOCITY_FOR_WALK_ANIMATION;
-            p.isIdle = !p.isWalking && !p.isJumping && isStationaryHorizontal && isOnGround;
+
             if (p.isWalking) {
                  const speedFactor = Math.abs((p.velocityX || 0) / PLAYER_WALK_SPEED);
                  p.animationFrame = ((p.animationFrame || 0) + (1 * speedFactor)) % animationCycleLength;
@@ -2646,23 +3056,20 @@ function gameLoop(currentTime) {
                  p.animationFrame = 0;
                  p.idleAnimationFrame = ((p.idleAnimationFrame || 0) + 1) % IDLE_ANIM_CYCLE_LENGTH;
             } else {
-                 p.animationFrame = 0; p.idleAnimationFrame = 0;
+                 p.animationFrame = 0; 
+                 p.idleAnimationFrame = 0;
             }
-        }
-    }
+        }}
 
     bobberAnimationTime += BOBBER_ANIMATION_SPEED;
     biomeManager.updateAnimations(deltaTime, localPlayer, currentRoom.gameData.groundLevel, cameraX, DEDICATED_GAME_WIDTH);
     cycleManager.update(deltaTime);
     starManager.update(deltaTime);
     npcManager.update(deltaTime);
-    cloudManager.update(deltaTime); // <-- DODAJ LINIĘ AKTUALIZACJI
-    // Przekazujemy teraz więcej danych do weatherManager
+    cloudManager.update(deltaTime);
     const groundY = currentRoom.gameData ? (DEDICATED_GAME_HEIGHT - currentRoom.gameData.groundLevel) : DEDICATED_GAME_HEIGHT;
-// Przekaż pozycję gruntu jako nowy argument do managera pogody
-weatherManager.update(deltaTime, cameraX, canvas.width, canvas.height, currentZoomLevel, biomeManager.WATER_TOP_Y_WORLD, groundY);
+    weatherManager.update(deltaTime, cameraX, canvas.width, canvas.height, currentZoomLevel, biomeManager.WATER_TOP_Y_WORLD, groundY);
 
-    // === DYNAMICZNA MGŁA I POGODA (NOWA WERSJA) ===
     const rotationDegrees = (cycleManager.rotation * (180 / Math.PI)) % 360;
     const angle = rotationDegrees < 0 ? rotationDegrees + 360 : rotationDegrees;
     let timeBasedFogAlpha = 0.08; 
@@ -2680,8 +3087,7 @@ weatherManager.update(deltaTime, cameraX, canvas.width, canvas.height, currentZo
     }
     
     let targetFogAlpha = timeBasedFogAlpha;
-    const weatherState = weatherManager.targetWeather;
-
+    
     if (weatherState === 'rainstorm') {
         targetFogAlpha = 0.8;
     } else if (weatherState === 'rain') {
@@ -2697,33 +3103,27 @@ weatherManager.update(deltaTime, cameraX, canvas.width, canvas.height, currentZo
     sendPlayerInput();
     updateLocalPlayerMovement();
     reconcilePlayerPosition();
-    updatePlayerAudio(); // <--- DODAJ TĘ LINIĘ TUTAJ
+    updatePlayerAudio();
     updateCamera();
-    
-
     
     const playerCenterScreenX = (localPlayer.x + playerSize / 2 - cameraX) * currentZoomLevel;
     const playerCenterScreenY = (localPlayer.y + playerSize / 2 - cameraY) * currentZoomLevel;
 
-    // Zmieniono z 3 na 4 sloty i z 2 na 3 przerwy w obliczeniach
     const inventoryWidth = 4 * inventoryManager.SLOT_SIZE + 3 * inventoryManager.GRID_GAP;
     const inventoryHeight = 4 * inventoryManager.SLOT_SIZE + 3 * inventoryManager.GRID_GAP;
 
-    // Ustaw pozycję ekwipunku względem stabilnego środka gracza, a nie jego lewego górnego rogu.
-    // Odejmujemy szerokość ekwipunku i dodatkowy margines, aby umieścić go po lewej stronie gracza.
     invX = playerCenterScreenX - inventoryWidth - 140; 
-    if (invX < 10) invX = 10; // Upewnij się, że ekwipunek nie wychodzi poza lewą krawędź ekranu.
+    if (invX < 10) invX = 10;
 
-    // Wyśrodkowujemy ekwipunek w pionie względem środka gracza.
     invY = playerCenterScreenY - (inventoryHeight / 2); 
-    if (invY < 10) invY = 10; // Upewnij się, że ekwipunek nie wychodzi poza górną krawędź.
-    if (invY + inventoryHeight > canvas.height - 10) invY = canvas.height - inventoryHeight - 10; // Sprawdź dolną krawędź.
+    if (invY < 10) invY = 10;
+    if (invY + inventoryHeight > canvas.height - 10) invY = canvas.height - inventoryHeight - 10;
     
-    const inventoryOrigin = { x: invX, y: invY };
+     const inventoryOrigin = { x: invX, y: invY };
     inventoryManager.origin = inventoryOrigin;
-    // ======================== KONIEC ZMIAN ========================
     tradingManager.update(deltaTime);
     inventoryManager.update(deltaTime);
+    totemManager.update(deltaTime); // <-- DODAJ TĘ LINIĘ
     if (localPlayer.isCasting) {
         localPlayer.fishingBarTime += FISHING_SLIDER_SPEED;
         localPlayer.fishingBarSliderPosition = (Math.sin(localPlayer.fishingBarTime) + 1) / 2;
@@ -2736,12 +3136,9 @@ weatherManager.update(deltaTime, cameraX, canvas.width, canvas.height, currentZo
         inventoryManager.getHookItem()
     );
 
-    // =======================================================
-    // === POCZĄTEK ZMIAN: SEKWENCJA SAMOUCZKA WĘDKOWANIA ===
-    // =======================================================
     const now = Date.now();
     const firstInfo7Start = now + 1000;
-    const firstInfo7Duration = 4000; // 2s fade in, 2s fade out
+    const firstInfo7Duration = 4000;
     const pause = 2000;
     const secondInfo7Start = firstInfo7Start + firstInfo7Duration + pause;
     const info1Start = secondInfo7Start + firstInfo7Duration;
@@ -2751,9 +3148,6 @@ weatherManager.update(deltaTime, cameraX, canvas.width, canvas.height, currentZo
         { key: 'info8', startTime: secondInfo7Start, duration: 4000, endTime: secondInfo7Start + 4000 },
         { key: 'info1', startTime: info1Start, duration: 4000, endTime: info1Start + 4000 }
     ];
-    // =======================================================
-    // === KONIEC ZMIAN: SEKWENCJA SAMOUCZKA WĘDKOWANIA ===
-    // =======================================================
 }
     
     if (!localPlayer.hasLineCast && previousHasLineCast) {
@@ -2783,11 +3177,22 @@ weatherManager.update(deltaTime, cameraX, canvas.width, canvas.height, currentZo
     cycleManager.drawMoon(ctx);
     ctx.restore();
 
-    ctx.save();
+       ctx.save();
     ctx.scale(currentZoomLevel, currentZoomLevel);
-    ctx.translate(-cameraX, -cameraY);
+
+    // --- POCZĄTEK POPRAWKI: Zastosowanie globalnego wstrząsu ekranu ---
+    // Pobieramy wstrząs z obiektu totemu, jeśli istnieje. Domyślnie wstrząs jest zerowy.
+    const shakeX = worldTotem ? worldTotem.screenShakeX : 0;
+    const shakeY = worldTotem ? worldTotem.screenShakeY : 0;
+
+    // Przesuwamy cały świat o pozycję kamery ORAZ o wartość wstrząsu.
+    // To jest kluczowa zmiana, która sprawi, że świat zacznie się trząść.
+    ctx.translate(-cameraX + shakeX, -cameraY + shakeY);
+    // --- KONIEC POPRAWKI ---
+    
     biomeManager.drawClouds(ctx, cameraX, cameraY);
-    cloudManager.draw(ctx); // <-- DODAJ LINIĘ RYSUJĄCĄ ZACHMURZENIE TUTAJ
+
+    cloudManager.draw(ctx);
     biomeManager.drawParallaxBackground(ctx, cameraX, cameraY, DEDICATED_GAME_WIDTH / currentZoomLevel);
             
     if (currentRoom?.gameData?.biome) {
@@ -2799,29 +3204,39 @@ weatherManager.update(deltaTime, cameraX, canvas.width, canvas.height, currentZo
         biomeManager.drawBackgroundTrees(ctx);
     }
     
+    // === POCZĄTEK ZMIAN: Rysowanie totemu ===
+    if (worldTotem) {
+        worldTotem.draw(ctx);
+    }
+    // === KONIEC ZMIAN ===
+    
     const allCharacters = [...Object.values(playersInRoom), ...npcManager.npcs];
     allCharacters.sort((a,b)=>(a.y+playerSize)-(b.y+playerSize)).forEach(p => {
-    if (p.username) drawPlayer(p);
-    else npcManager.drawPlayer(p, npcManager.npcAssets);
+        if (p.username) drawPlayer(p);
+        else npcManager.drawPlayer(p, npcManager.npcAssets);
     });
     drawWorldItems(ctx);
 
     if(currentRoom?.gameData?.biome){
         const {biome:b,groundLevel:g} = currentRoom.gameData;
 
-        biomeManager.drawLeaves(ctx); // <-- DODAJ TĘ LINIĘ TUTAJ
+        
+
+        biomeManager.drawLeaves(ctx);
 
         biomeManager.drawForegroundTrees(ctx);
         biomeManager.drawFireplaceParticles(ctx);
         biomeManager.drawFireplace(ctx);
+        biomeManager.drawObstacles(ctx); // <-- DODAJ TĘ LINIĘ
         biomeManager.drawLightEffect(ctx);
         biomeManager.drawForegroundPlants(ctx);
+        
 
         drawInsects();
                 
         biomeManager.drawForegroundBiomeGround(ctx,b,g);
         
-         biomeManager.drawSwimmingFish(ctx); // <--- DODAJ TĘ LINIĘ TUTAJ
+         biomeManager.drawSwimmingFish(ctx);
 
         drawPierSupports(ctx);
 
@@ -2830,17 +3245,13 @@ weatherManager.update(deltaTime, cameraX, canvas.width, canvas.height, currentZo
         biomeManager.drawWater(ctx,b,cameraX);
        
        
-        weatherManager.drawRain(ctx); // Rysowanie deszczu (w przestrzeni świata)
- weatherManager.drawFog(ctx); // Rysowanie mgły
-
-
-        // === POCZĄTEK TWOJEJ POPRAWKI ===
-        // Dodaj tę jedną linię, aby narysować chmury na pierwszym planie
-
-        // Usunęliśmy particleManager.draw(ctx); - teraz robi to fishingManager
+        weatherManager.drawRain(ctx);
+        weatherManager.drawFog(ctx);
     }
-
+    
     ctx.restore();
+
+
     weatherManager.drawLightning(ctx);
     for(const id in playersInRoom) drawFishingLine(playersInRoom[id]);
     
@@ -2849,16 +3260,20 @@ weatherManager.update(deltaTime, cameraX, canvas.width, canvas.height, currentZo
     drawTutorialHelper();
     drawCampPrompt();
     drawNpcTradePrompt();
-    drawTimedTutorials(); // <-- DODAJ TĘ LINIĘ
-    if(isCustomizationMenuOpen) drawCustomizationMenu();
+    drawTotemPrompt(); // <-- DODAJ TĘ LINIĘ
+    drawTimedTutorials();
+    if (isCustomizationMenuOpen) {
+drawCustomizationMenu();
+} else {
+totemManager.draw(ctx); // Rysuj UI totemu tylko, gdy menu kustomizacji jest zamknięte
+}
     if(localPlayer.isCasting) drawFishingBar(localPlayer);
-    
-    inventoryManager.draw(ctx, PIXEL_FONT);
-    tradingManager.draw(ctx);
 
-// ======================= POCZĄTEK KODU DEBUGUJĄCEGO =======================
+inventoryManager.draw(ctx, PIXEL_FONT);
+tradingManager.draw(ctx);
+
 ctx.save();
-ctx.setTransform(1, 0, 0, 1, 0, 0); // Resetuj wszystkie transformacje, aby rysować w przestrzeni ekranu
+ctx.setTransform(1, 0, 0, 1, 0, 0);
 
     let bobberScreenPos = null;
 if (localPlayer.hasLineCast && localPlayer.floatWorldX !== null) {
@@ -2868,17 +3283,17 @@ if (localPlayer.hasLineCast && localPlayer.floatWorldX !== null) {
     };
 }
 
-// Zaktualizowane wywołanie z dodatkowym parametrem bobberScreenPos
 fishingManager.update(deltaTime, localPlayer, bobberScreenPos);
 
 fishingManager.draw(ctx, localPlayer, bobberScreenPos, cameraX, currentZoomLevel);
 
     updateAndDrawCaughtFishAnimations();
+    updateAndDrawMinedGemAnimations();
 
     fishingManager.updateAndDrawDugBaitAnimations(ctx, playersInRoom, cameraX, cameraY, currentZoomLevel);
-
-    requestAnimationFrame(gameLoop);
-
+     biomeManager.drawFrontLayer(ctx, cameraX, DEDICATED_GAME_WIDTH, currentZoomLevel, MIN_ZOOM, MAX_ZOOM);
+    scoreboardManager.draw(ctx); 
+     requestAnimationFrame(gameLoop);
 }
 
 
@@ -3110,11 +3525,10 @@ function createNewRoom() {
 
 function resetMenuUI() {
     joinGameBtn.disabled = false;
-    // optionsBtn pozostaje nieaktywny zgodnie z założeniem, ale można go tu włączyć w przyszłości
+    // Upewnij się, że przycisk opcji jest zawsze aktywny
     optionsBtn.disabled = false;
     menuStatus.textContent = '';
 }
-
 
 // --- FUNKCJE OBSŁUGI SIECI I STANU GRY ---
 
@@ -3203,7 +3617,20 @@ function onSuccessfulJoin(roomData, hostPeerId = null) {
         biomeManager.initializeGroundPlants(roomData.gameData.groundPlants || []);
         biomeManager.initializeTrees(roomData.gameData.trees || []);
         if (biomeManager.initializePiers) biomeManager.initializePiers(roomData.gameData.piers || []);
+        if (biomeManager.initializeObstacles) biomeManager.initializeObstacles(roomData.gameData.obstacles || []);
         
+        // === POCZĄTEK POPRAWKI: Logika tworzenia totemu ===
+        if (roomData.gameData.totem) {
+            const totemData = roomData.gameData.totem;
+            const biomeName = roomData.gameData.biome; // <-- NOWA LINIA
+            const totemImg = totemImages[biomeName];
+            // ZAWSZE twórz obiekt Totem, jeśli są dane z serwera
+            worldTotem = new Totem(totemData.x, totemData.y, totemImg, biomeName); // <-- ZMIANA
+
+            if (!totemImg) { 
+                console.warn('Dane totemu otrzymane, ale jego bazowy obrazek nie jest załadowany!');
+            }
+        }
         pierSupportData = [];
         const serverPiers = roomData.gameData.piers || [];
         const SCALED_TILE_SIZE = 120;
@@ -3279,6 +3706,14 @@ function handleDataFromServer(data) {
         }
         break;
     }
+
+    case 'totemStateUpdate': {
+            if (worldTotem && typeof worldTotem.setStateFromServer === 'function') {
+                const { newState, remainingTime } = data.payload;
+                worldTotem.setStateFromServer(newState, remainingTime);
+            }
+            break;
+        }
 
     case 'weatherUpdate': { // Nowy case dla klientów
             const { newWeather } = data.payload;
@@ -3493,6 +3928,49 @@ function handleDataFromServer(data) {
         case 'grassSwaying':
             if (biomeManager) biomeManager.startSwayAnimation(data.payload.grassId, data.payload.direction);
             break;
+
+        // <-- DODAJ NOWY BLOK 'case' PONIŻEJ -->
+        case 'scoreboardUpdate': {
+            scoreboardManager.updateScores(data.payload);
+            break;
+        }
+
+// I WSTAW PRZED NIM NOWY `case`:
+        case 'obstacleMined': {
+            soundManager.play('stone_breaking');
+            if (biomeManager && typeof biomeManager.startObstacleShake === 'function') {
+                biomeManager.startObstacleShake(data.payload.obstacleId);
+            }
+            break;
+        }
+
+// I DODAJ POD NIM NOWE `case`:
+        case 'gemMinedBroadcast': {
+            const { playerId, gemData, startPos } = data.payload;
+            const miningPlayer = playersInRoom[playerId];
+            if (miningPlayer && allItemImages[gemData.name]) {
+                minedGemAnimations.push({
+                    playerId: playerId,
+                    itemName: gemData.name,
+                    tier: gemData.tier,
+                    startTime: Date.now(),
+                    startPos: startPos
+                });
+            }
+            break;
+        }
+        case 'gemAwarded': {
+            const { gemData } = data.payload;
+            const fullGemObject = createFullItemObject(gemData.name);
+            if (fullGemObject) {
+                const wasAdded = inventoryManager.addItem(fullGemObject);
+                showNotification(wasAdded ? `Found: ${gemData.name}` : 'Inventory full!', wasAdded ? 'success' : 'warning');
+                if (wasAdded) {
+                    soundManager.play('gem_found');
+                }
+            }
+            break;
+        }
     }
 }
 
@@ -3553,26 +4031,22 @@ function leaveCurrentRoomUI() {
         weatherChangeInterval = null;
     }
 
-    // Zamknij połączenie P2P z hostem (TYLKO jeśli jesteśmy gościem)
     if (!isHost && hostConnection && typeof hostConnection.close === 'function') {
         hostConnection.close();
     }
     hostConnection = null;
 
-    // === POCZĄTEK KLUCZOWEJ POPRAWKI ===
-    // Jeśli byliśmy hostem, najpierw zamknij wszystkie połączenia z klientami
     if (isHost) {
         Object.values(hostPeerConnections).forEach(conn => conn.close());
         hostPeerConnections = {};
     }
     
-    // Zatrzymaj i usuń worker (jeśli byliśmy hostem)
     if (gameHostWorker) {
         gameHostWorker.terminate();
-        gameHostWorker = null; // Ustaw na null OD RAZU po terminacji
+        gameHostWorker = null;
     }
 
-    // Usuń WSZYSTKIE listenery z obiektu peer, aby uniknąć wywołań "zombie"
+    scoreboardManager.updateScores([]); // <-- DODAJ TĘ LINIĘ
     if (peer) {
         peer.off('connection');
         peer.off('open');
@@ -3580,24 +4054,20 @@ function leaveCurrentRoomUI() {
         peer.off('disconnected');
         peer.off('close');
     }
-    // === KONIEC KLUCZOWEJ POPRAWKI ===
-
-    // Zniszcz obiekt PeerJS, aby uzyskać nowe, czyste ID przy następnym połączeniu
     if (peer && !peer.destroyed) {
         peer.destroy();
     }
     peer = null;
 
-    // Resetuj stan gry
     isHost = false;
     currentRoom = null;
     playersInRoom = {};
     insectsInRoom = [];
     pierSupportData = [];
     worldItems = [];
+    worldTotem = null; // <-- NOWA LINIA: Resetowanie totemu przy wyjściu z pokoju
     npcManager.clear();
 
-    // Resetuj UI i stan lokalny
     resetMenuUI();
     currentWorldWidth = DEDICATED_GAME_WIDTH * 2;
     biomeManager.worldWidth = currentWorldWidth;
@@ -3608,6 +4078,10 @@ function leaveCurrentRoomUI() {
     isCustomizationMenuOpen = false;
     chatManager.hide();
     
+    // === DODANA LINIA DO ZATRZYMANIA DŹWIĘKÓW ===
+    soundManager.stopAllLoops();
+    // ===========================================
+
     console.log('Cleanup complete. Returned to lobby.');
     showNotification('You left the room.', 'warning');
 }
@@ -3681,27 +4155,35 @@ document.addEventListener('keydown', (event) => {
     // ======================== KONIEC ZMIAN =========================
 
     if (event.code === 'KeyF' && tutorial.state === 'finished') {
-        // Używamy globalnej zmiennej `closestNpc`, która jest aktualizowana w gameLoop
-        if (closestNpc) {
+        const playerCenterX = localPlayer.x + playerSize / 2;
+        let isPlayerInTotemZone = false;
+        if (worldTotem) {
+            const totemCenterX = worldTotem.x + worldTotem.width / 2;
+            const distanceToTotem = Math.abs(playerCenterX - totemCenterX);
+            if (distanceToTotem < 150) { // Użyj tego samego promienia co w gameLoop
+                isPlayerInTotemZone = true;
+            }
+        }
+
+        // === NOWA LOGIKA INTERAKCJI Z TOTEMEM ===
+        if (isPlayerInTotemZone) {
             event.preventDefault();
-
-            // ======================= POCZĄTEK ZMIANY =======================
-            // Stare wywołanie:
-            // tradingManager.toggleTrading(closestNpc);
-
-            // Nowe wywołanie z przekazaniem nazwy biomu:
-            tradingManager.toggleTrading(closestNpc, biomeManager.currentBiomeName);
-            // ======================== KONIEC ZMIANY =========================
-
+            totemManager.toggleUI(); // To jest prawidłowe wywołanie
             return;
         }
 
-        // Jeśli nie ma aktywnego NPC, sprawdź obóz
+        // Używamy globalnej zmiennej `closestNpc`, która jest aktualizowana w gameLoop
+        if (closestNpc) {
+            event.preventDefault();
+            tradingManager.toggleTrading(closestNpc, biomeManager.currentBiomeName);
+            return;
+        }
+
+        // Jeśli nie ma aktywnego NPC ani totemu, sprawdź obóz
         if (isPlayerInCampZone && !isCustomizationMenuOpen) {
             if (loadingManager.isVisible) return;
-
             event.preventDefault();
-            soundManager.play('camp'); // <--- DODAJ TĘ LINIĘ
+            soundManager.play('camp');
             transitionToNewRoom();
             return;
         }
@@ -3711,6 +4193,8 @@ document.addEventListener('keydown', (event) => {
         event.preventDefault();
         if (tradingManager.isTradeWindowOpen) {
             tradingManager.stopTrading();
+        } else if (totemManager.isOpen) { // <-- NOWY WARUNEK
+            totemManager.toggleUI();
         } else if (isCustomizationMenuOpen) {
             isCustomizationMenuOpen = false;
             inventoryManager.isOpen = false;
@@ -3718,7 +4202,7 @@ document.addEventListener('keydown', (event) => {
         return;
     }
 
-    if (event.code === 'KeyE' && !fishingManager.isFishHooked && !tradingManager.isTradeWindowOpen) {
+    if (event.code === 'KeyE' && !fishingManager.isFishHooked && !tradingManager.isTradeWindowOpen && !totemManager.isOpen) {
         event.preventDefault();
         soundManager.play('inventory'); // <--- DODAJ TĘ LINIĘ
 
@@ -3849,6 +4333,17 @@ document.addEventListener('keydown', (event) => {
         return;
     }
 
+if (event.code === 'KeyT') {
+    event.preventDefault();
+    if (tutorial.state === 4) {
+        soundManager.play('info');
+        advanceTutorialStep(5);
+    } else {
+        chatManager.focusChat(); // Po prostu wywołaj funkcję
+    }
+    return;
+}
+
     if (tutorial.state !== 'finished') {
         switch (tutorial.state) {
             case 1:
@@ -3864,17 +4359,12 @@ document.addEventListener('keydown', (event) => {
                 }
                 break;
             case 3:
-                if (['Digit1', 'Numpad1', 'Digit2', 'Numpad2', 'Digit3', 'Numpad3'].includes(event.code)) {
-                    soundManager.play('info'); // <-- DODANE
-                    advanceTutorialStep(4);
-                }
-                break;
-            case 4:
-                if (event.code === 'KeyT') {
-                    soundManager.play('info'); // <-- DODANE
-                    advanceTutorialStep(5);
-                }
-                break;
+            if (['Digit1', 'Numpad1', 'Digit2', 'Numpad2', 'Digit3', 'Numpad3', 'Digit4', 'Numpad4'].includes(event.code)) {
+                soundManager.play('info'); // <-- DODANE
+                advanceTutorialStep(4);
+            }
+            break;
+            
         }
     }
 
@@ -3883,6 +4373,7 @@ document.addEventListener('keydown', (event) => {
         if (event.code.includes('1')) item = ITEM_NONE;
         if (event.code.includes('2')) item = ITEM_ROD;
         if (event.code.includes('3')) item = ITEM_SHOVEL;
+        if (event.code.includes('4')) item = ITEM_PICKAXE; // <-- DODANA LINIA
 
         // Sprawdzamy, czy przedmiot faktycznie się zmienia
         if (localPlayer.customizations.rightHandItem !== item) {
@@ -3989,7 +4480,26 @@ canvas.addEventListener('mousedown', (event) => {
     }
     
     // --- Koniec logiki ekwipunku ---
+if (!isCustomizationMenuOpen && localPlayer.customizations.rightHandItem === ITEM_PICKAXE) {
+        const pos = getMousePosOnCanvas(canvas, event);
+        const worldX = pos.x / currentZoomLevel + cameraX;
+        const worldY = pos.y / currentZoomLevel + cameraY;
 
+        // Znajdź klikniętą przeszkodę
+        if (currentRoom && currentRoom.gameData && currentRoom.gameData.obstacles) {
+            const clickedObstacle = currentRoom.gameData.obstacles.find(obs =>
+                worldX >= obs.x && worldX <= obs.x + obs.width &&
+                worldY >= obs.y && worldY <= obs.y + obs.height &&
+                (obs.typeIndex === 0 || obs.typeIndex === 1) // Sprawdź, czy to kamień
+            );
+
+            if (clickedObstacle) {
+                sendPlayerAction('mineObstacle', { obstacleId: clickedObstacle.id });
+                event.preventDefault();
+                return; // Zakończ, aby nie wykonywać innych akcji
+            }
+        }
+    }
 
     // Logika kopania łopatą
     if (!isCustomizationMenuOpen && localPlayer.customizations.rightHandItem === ITEM_SHOVEL) {
@@ -4122,6 +4632,7 @@ const soundPaths = {
     'menuNavigate': 'sound/menu_navigate.mp3',
     'clothNavigate': 'sound/cloth_navigate.mp3',
     'walk': 'sound/walk.mp3',
+    'walking_wood': 'sound/walking_wood.mp3', // <-- DODAJ TĘ LINIĘ
     'jump': 'sound/jump.mp3',
     'land': 'sound/land.mp3',
     'itemChange': 'sound/change.mp3',
@@ -4141,8 +4652,21 @@ const soundPaths = {
     'fish': 'sound/fish.mp3',
     'hook': 'sound/hook.mp3',
     'bait': 'sound/bait.mp3',
-    'strike_2': 'sound/strike_2.mp3' // <-- DODANA LINIA
+    'strike_2': 'sound/strike_2.mp3',
+    'drizzle': 'sound/drizzle.mp3',
+    'rain': 'sound/rain.mp3',
+    'storm': 'sound/storm.mp3',
+    // === NOWE DŹWIĘKI GRZMOTÓW ===
+    'thunder': 'sound/thunder.mp3',
+    'thunder_2': 'sound/thunder_2.mp3',
+    'thunder_3': 'sound/thunder_3.mp3',
+
+// I DODAJ POD NIM LINIĘ:
+    'stone_breaking': 'sound/stone_breaking.mp3', // <-- DODANA LINIA
+    'gem_found': 'sound/gem_found.mp3',
+    
 };
+
 soundManager.loadSounds(soundPaths);
 
 // WAŻNE: W tym miejscu nic nie zmieniamy. loadImages wciąż jest potrzebne,
@@ -4161,12 +4685,42 @@ loadImages(() => {
 
     fishingManager.onFishingResetCallback = () => sendPlayerAction('reelInFishingLine');
 
-    fishingManager.onBaitConsumedCallback = () => {
+fishingManager.onBaitConsumedCallback = () => {
         inventoryManager.consumeBait();
     };
+
+    // === NOWA LINIA ŁĄCZĄCA MANAGERY ===
+    weatherManager.soundManager = soundManager;
+    // ===================================
+
     updatePlayerAudio();
     requestAnimationFrame(gameLoop);
 });
+
+function isPlayerOnPier() {
+    if (!biomeManager || !biomeManager.placedPiers || biomeManager.placedPiers.length === 0) {
+        return false;
+    }
+
+    const playerCenterX = localPlayer.x + playerSize / 2;
+    const playerFeetY = localPlayer.y + playerSize;
+
+    for (const pier of biomeManager.placedPiers) {
+        const pierWidth = pier.sections.length * biomeManager.scaledTileSize;
+        const pierTopY = pier.y; // 'y' w definicji pomostu to jego górna krawędź
+
+        const isHorizontallyAligned = playerCenterX >= pier.x && playerCenterX <= (pier.x + pierWidth);
+        
+        // Sprawdzamy, czy stopy gracza są bardzo blisko górnej powierzchni pomostu
+        const isVerticallyAligned = Math.abs(playerFeetY - pierTopY) < 5; // 5 pikseli tolerancji
+
+        if (isHorizontallyAligned && isVerticallyAligned) {
+            return true; // Znaleziono pomost pod graczem
+        }
+    }
+
+    return false; // Gracz nie jest na żadnym pomoście
+}
 
 function updatePlayerAudio() {
     if (!currentRoom || !currentRoom.gameData) return;
@@ -4175,17 +4729,29 @@ function updatePlayerAudio() {
     const isPlayerOnGround = localPlayer.y >= groundLevel - 1;
 
     // --- Lądowanie ---
-    // Jeśli gracz jest teraz na ziemi, a w poprzedniej klatce nie był, to znaczy, że wylądował.
     if (isPlayerOnGround && !wasPlayerOnGround) {
-    soundManager.play('land');
+        soundManager.play('land');
     }
+
     // --- Chodzenie ---
-    // Dźwięk chodzenia jest odtwarzany tylko, gdy gracz idzie I jest na ziemi.
-    const isWalkingOnGround = localPlayer.isWalking && isPlayerOnGround;
-    if (isWalkingOnGround) {
-        soundManager.startLoop('walk');
+    const isWalkingOnSolidSurface = localPlayer.isWalking && isPlayerOnGround;
+    
+    if (isWalkingOnSolidSurface) {
+        const onPier = isPlayerOnPier(); // Sprawdź, czy gracz jest na pomoście
+
+        if (onPier) {
+            // Gracz idzie po pomoście
+            soundManager.stopLoop('walk'); // Upewnij się, że zwykły dźwięk jest wyłączony
+            soundManager.startLoop('walking_wood'); // Odtwarzaj dźwięk drewna
+        } else {
+            // Gracz idzie po ziemi
+            soundManager.stopLoop('walking_wood'); // Upewnij się, że dźwięk drewna jest wyłączony
+            soundManager.startLoop('walk'); // Odtwarzaj zwykły dźwięk chodzenia
+        }
     } else {
-        soundManager.stopLoop('walk'); // Zatrzymaj dźwięk, jeśli gracz się zatrzymał lub skoczył
+        // Gracz nie idzie (stoi w miejscu lub jest w powietrzu)
+        soundManager.stopLoop('walk');
+        soundManager.stopLoop('walking_wood');
     }
 
     // Zaktualizuj stan z poprzedniej klatki na potrzeby następnej iteracji
@@ -4196,6 +4762,8 @@ function updatePlayerAudio() {
 // Inicjalizacja Chatu
 const chatManager = new ChatManager();
 setupFlagSelection();
+setupMobileControls();
+setupMobileControlsToggle();
 
 function setupFlagSelection() {
     const selectedFlagImg = document.getElementById('selectedFlagImg');
@@ -4252,4 +4820,110 @@ function setupFlagSelection() {
     flagListContainer.addEventListener('click', (event) => {
         event.stopPropagation();
     });
+}
+
+function setupMobileControls() {
+    const buttonMapping = {
+        'mobile-up': 'ArrowUp',
+        'mobile-down': 'ArrowDown',
+        'mobile-left': 'ArrowLeft',
+        'mobile-right': 'ArrowRight',
+        'mobile-space': 'Space',
+        'mobile-e': 'KeyE',
+        'mobile-t': 'KeyT',
+        'mobile-f': 'KeyF',
+        'mobile-1': 'Digit1',
+        'mobile-2': 'Digit2',
+        'mobile-3': 'Digit3',
+        'mobile-4': 'Digit4',
+        'mobile-lmb': 'RMB' // Zmieniono na "RMB" dla jasności (Right Mouse Button)
+    };
+
+    for (const buttonId in buttonMapping) {
+        const button = document.getElementById(buttonId);
+        if (button) {
+            const code = buttonMapping[buttonId];
+
+            const handlePress = (e) => {
+                e.preventDefault();
+                
+                // === ZMIENIONA LOGIKA: Specjalna obsługa dla PPM ===
+                if (code === 'RMB') {
+                    // Tworzymy i wysyłamy syntetyczne zdarzenie "contextmenu" (prawy przycisk)
+                    const fakeEvent = new MouseEvent('contextmenu', { bubbles: true, cancelable: true });
+                    canvas.dispatchEvent(fakeEvent);
+                } else {
+                    // Standardowa obsługa klawiszy
+                    keys[code] = true;
+                    const event = new KeyboardEvent('keydown', { code: code });
+                    document.dispatchEvent(event);
+                }
+            };
+
+            const handleRelease = (e) => {
+                e.preventDefault();
+
+                // === ZMIENIONA LOGIKA: Dla PPM nic nie robimy przy puszczeniu ===
+                if (code === 'RMB') {
+                    // Prawy przycisk myszy (contextmenu) to pojedyncze zdarzenie,
+                    // więc nie potrzebujemy symulować "mouseup".
+                    return; 
+                } else {
+                    // Standardowa obsługa klawiszy
+                    delete keys[code];
+                    const event = new KeyboardEvent('keyup', { code: code });
+                    document.dispatchEvent(event);
+                }
+            };
+
+            button.addEventListener('touchstart', handlePress, { passive: false });
+            button.addEventListener('touchend', handleRelease, { passive: false });
+            
+            button.addEventListener('mousedown', handlePress, { passive: false });
+            button.addEventListener('mouseup', handleRelease, { passive: false });
+            button.addEventListener('mouseleave', handleRelease, { passive: false });
+        }
+    }
+}
+
+
+
+function setupMobileControlsToggle() {
+    const toggleButton = document.getElementById('toggleMobileControlsBtn');
+    const mobileControlsContainer = document.getElementById('mobile-controls');
+    
+    // Dodajemy też opcję w menu ustawień, aby oba działały
+    const settingsToggleLeft = document.getElementById('mobile-controls-left');
+    const settingsToggleRight = document.getElementById('mobile-controls-right');
+
+
+    if (toggleButton && mobileControlsContainer) {
+        const toggleVisibility = () => {
+            // Przełącz klasę 'hidden', która jest zdefiniowana w CSS
+            mobileControlsContainer.classList.toggle('hidden');
+            
+            // Opcjonalnie: Odtwórz dźwięk
+            if (soundManager) {
+                soundManager.play('menuClick');
+            }
+        };
+
+        toggleButton.addEventListener('click', toggleVisibility);
+
+        // Podpinamy również pod strzałki w menu, aby zachować spójność
+        if(settingsToggleLeft && settingsToggleRight) {
+            settingsToggleLeft.addEventListener('click', () => {
+                // Sprawdzamy, czy stan się zgadza przed przełączeniem
+                if (!mobileControlsContainer.classList.contains('hidden')) {
+                    toggleVisibility();
+                }
+            });
+            settingsToggleRight.addEventListener('click', () => {
+                 // Sprawdzamy, czy stan się zgadza przed przełączeniem
+                if (mobileControlsContainer.classList.contains('hidden')) {
+                     toggleVisibility();
+                }
+            });
+        }
+    }
 }

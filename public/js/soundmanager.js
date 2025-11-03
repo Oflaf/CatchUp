@@ -4,9 +4,17 @@ class SoundManager {
     constructor() {
         this.sounds = {};
         this.isReady = false;
-        this.masterVolume = 0.4; // Domyślna głośność (0.0 to 1.0)
+        // Zmieniamy domyślną głośność na 1.0 (100%), aby pasowała do ustawień
+        this.masterVolume = 1.0; 
         this.exclusiveInstances = {};
-        this.strikeSoundInstance = null; // <-- NOWA WŁAŚCIWOŚĆ
+        this.strikeSoundInstance = null;
+
+        this.weatherSounds = {
+            drizzle: { instance: null, targetVolume: 0 },
+            rain: { instance: null, targetVolume: 0 },
+            storm: { instance: null, targetVolume: 0 },
+        };
+        this.FADE_SPEED = 0.33;
     }
 
     async loadSounds(soundPaths) {
@@ -16,6 +24,14 @@ class SoundManager {
                 const audio = new Audio(path);
                 audio.addEventListener('canplaythrough', () => {
                     this.sounds[name] = audio;
+                    
+                    if (this.weatherSounds[name]) {
+                        const instance = audio.cloneNode();
+                        instance.loop = true;
+                        instance.volume = 0;
+                        this.weatherSounds[name].instance = instance;
+                    }
+
                     resolve();
                 });
                 audio.addEventListener('error', (e) => {
@@ -34,70 +50,96 @@ class SoundManager {
         }
     }
 
-    play(name) {
-        if (!this.isReady || !this.sounds[name]) {
-            return;
+    update(deltaTime) {
+        if (!this.isReady) return;
+
+        for (const soundName in this.weatherSounds) {
+            const soundData = this.weatherSounds[soundName];
+            if (!soundData.instance) continue;
+
+            const currentVolume = soundData.instance.volume;
+            // Cel głośności jest teraz mnożony przez masterVolume
+            const targetVolume = soundData.targetVolume * this.masterVolume;
+
+            if (currentVolume !== targetVolume) {
+                const difference = targetVolume - currentVolume;
+                const change = this.FADE_SPEED * deltaTime * Math.sign(difference);
+
+                let newVolume;
+                if (Math.abs(difference) > Math.abs(change)) {
+                    newVolume = currentVolume + change;
+                } else {
+                    newVolume = targetVolume;
+                }
+                
+                // Głośność instancji nie może przekroczyć masterVolume
+                soundData.instance.volume = Math.max(0, Math.min(this.masterVolume, newVolume));
+
+                if (soundData.instance.volume > 0 && soundData.instance.paused) {
+                    soundData.instance.play().catch(e => {});
+                }
+                else if (soundData.instance.volume <= 0 && !soundData.instance.paused) {
+                    soundData.instance.pause();
+                }
+            }
         }
-        const soundClone = this.sounds[name].cloneNode();
-        soundClone.volume = this.masterVolume;
-        soundClone.play().catch(error => {
-            // Błędy są normalne, jeśli użytkownik nie wszedł w interakcję ze stroną
-        });
+    }
+    
+    setWeatherSound(weatherType) {
+        if (!this.isReady) return;
+
+        for (const soundName in this.weatherSounds) {
+            if (soundName === weatherType) {
+                // Ustawiamy cel na 1 (100%), który potem będzie skalowany przez masterVolume
+                this.weatherSounds[soundName].targetVolume = 1.0;
+            } else {
+                this.weatherSounds[soundName].targetVolume = 0;
+            }
+        }
     }
 
-    playWithVolume(name, volumeMultiplier) {
-        if (!this.isReady || !this.sounds[name]) {
-            return;
-        }
-
+    play(name) {
+        if (!this.isReady || !this.sounds[name]) return;
         const soundClone = this.sounds[name].cloneNode();
+        soundClone.volume = this.masterVolume;
+        soundClone.play().catch(error => {});
+    }
+    
+    playRandomThunder() {
+        if (!this.isReady) return;
         
+        const thunderSounds = ['thunder', 'thunder_2', 'thunder_3'];
+        const randomSound = thunderSounds[Math.floor(Math.random() * thunderSounds.length)];
+        
+        this.play(randomSound);
+    }
+    
+    playWithVolume(name, volumeMultiplier) {
+        if (!this.isReady || !this.sounds[name]) return;
+        const soundClone = this.sounds[name].cloneNode();
         const finalVolume = Math.max(0, Math.min(1, this.masterVolume * volumeMultiplier));
         soundClone.volume = finalVolume;
-
-        soundClone.play().catch(error => {
-            // Błędy są normalne, jeśli użytkownik nie wszedł w interakcję ze stroną
-        });
+        soundClone.play().catch(error => {});
     }
 
     playExclusive(name) {
-        if (!this.isReady || !this.sounds[name]) {
-            return;
-        }
-
+        if (!this.isReady || !this.sounds[name]) return;
         const currentInstance = this.exclusiveInstances[name];
-        if (currentInstance && !currentInstance.ended) {
-            return;
-        }
-
+        if (currentInstance && !currentInstance.ended) return;
         const soundClone = this.sounds[name].cloneNode();
         soundClone.volume = this.masterVolume;
-        soundClone.play().catch(error => {
-            // Obsługa błędu
-        });
-
+        soundClone.play().catch(error => {});
         this.exclusiveInstances[name] = soundClone;
     }
 
-    // ======================= POCZĄTEK NOWEGO KODU =======================
     playStrikeSound() {
-        if (!this.isReady || !this.sounds['strike']) {
-            return;
-        }
-        // Nie odtwarzaj, jeśli dźwięk już gra
-        if (this.strikeSoundInstance && !this.strikeSoundInstance.ended) {
-            return;
-        }
-
+        if (!this.isReady || !this.sounds['strike']) return;
+        if (this.strikeSoundInstance && !this.strikeSoundInstance.ended) return;
         const soundClone = this.sounds['strike'].cloneNode();
         soundClone.volume = this.masterVolume;
-        soundClone.play().catch(error => { /* Błędy są normalne */ });
+        soundClone.play().catch(error => {});
         this.strikeSoundInstance = soundClone;
-
-        // Wyczyść instancję, gdy dźwięk się skończy naturalnie
-        this.strikeSoundInstance.onended = () => {
-            this.strikeSoundInstance = null;
-        };
+        this.strikeSoundInstance.onended = () => { this.strikeSoundInstance = null; };
     }
 
     stopStrikeSound() {
@@ -107,12 +149,9 @@ class SoundManager {
             this.strikeSoundInstance = null;
         }
     }
-    // ======================== KONIEC NOWEGO KODU ========================
 
     startLoop(name) {
-        if (!this.isReady || !this.sounds[name]) {
-            return;
-        }
+        if (!this.isReady || !this.sounds[name]) return;
         const sound = this.sounds[name];
         if (sound.paused) {
             sound.loop = true;
@@ -128,7 +167,29 @@ class SoundManager {
         }
     }
 
-    setVolume(level) {
-        this.masterVolume = Math.max(0, Math.min(1, level));
+    stopAllLoops() {
+        this.stopLoop('walk');
+        this.setWeatherSound(null);
     }
+    
+    // ================== POCZĄTEK NOWEGO KODU ==================
+    /**
+     * Ustawia główną głośność i aktualizuje wszystkie aktywne dźwięki.
+     * @param {number} level - Głośność w zakresie od 0.0 do 1.0.
+     */
+    setMasterVolume(level) {
+        this.masterVolume = Math.max(0, Math.min(1, level));
+
+        // Aktualizacja dźwięków w pętli (np. chodzenie)
+        if (this.sounds['walk'] && !this.sounds['walk'].paused) {
+            this.sounds['walk'].volume = this.masterVolume;
+        }
+        if (this.sounds['walking_wood'] && !this.sounds['walking_wood'].paused) {
+            this.sounds['walking_wood'].volume = this.masterVolume;
+        }
+        
+        // Aktualizacja głośności dźwięków pogody (które mają własną logikę fade)
+        // wywoła się automatycznie w następnej klatce pętli `update`
+    }
+    // =================== KONIEC NOWEGO KODU ===================
 }
