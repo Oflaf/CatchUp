@@ -2625,7 +2625,7 @@ function initializePeer(callback) {
     // === KONFIGURACJA PRODUKCYJNA (dla serwera Render) ===
     
     const peerConfig = {
-        host: 'https://server-port-yxen.onrender.com', 
+        host: 'server-port-yxen.onrender.com', 
         path: '/peerjs',
         secure: true,
         debug: 3
@@ -4980,4 +4980,5 @@ function setupMobileControlsToggle() {
             });
         }
     }
+
 }
