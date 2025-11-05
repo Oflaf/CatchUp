@@ -2607,52 +2607,29 @@ function createFullItemObject(itemName) {
     };
 }
 
-function initializeSignaling() {
-    signalingSocket = io({ transports: ['polling'] });
-    signalingSocket.on('connect', () => {
-        console.log('Connected to the signaling server.', signalingSocket.id);
-        showNotification('Connected to the signaling server.', 'success');
-    });
-    signalingSocket.on('roomListUpdate', (hosts) => {
-        availableRooms = hosts;
-        if (!currentRoom) {
-            roomListUl.innerHTML = '';
-            if (Object.keys(hosts).length === 0) {
-                roomListUl.innerHTML = '<li>No available rooms. Create one!</li>';
-            } else {
-                for (let peerId in hosts) {
-                    if (isHost && peerId === peer?.id) continue;
 
-                    const room = hosts[peerId];
-                    const li = document.createElement('li');
-                    li.innerHTML = `<span>${room.name} (Players: ${room.playerCount})</span><button data-peer-id="${peerId}">Join</button>`;
-                    li.querySelector('button').addEventListener('click', () => joinRoom(peerId));
-                    roomListUl.appendChild(li);
-                }
-            }
-        }
-    });
-    signalingSocket.on('roomRemoved', (removedRoomId) => {
-        if (hostConnection && hostConnection.peer === removedRoomId) {
-            showNotification('The room you were in has been removed by the host.', 'warning');
-            leaveCurrentRoomUI();
-        }
-    });
-}
 
 
 function initializePeer(callback) {
     if (peer && !peer.destroyed) return callback(peer.id);
-    const peerConfig = {
-        // Zamiast 'localhost', wpisz nazwę swojej aplikacji na Render.
-        // Render sam zajmie się resztą.
-        // WAŻNE: Render używa standardowego portu 443 dla bezpiecznych
-        // połączeń, więc nie musimy go podawać.
-        host: 'catchin-club.onrender.com', 
-        path: '/peerjs', // Musimy zdefiniować ścieżkę
-        secure: true, // Włącz bezpieczne połączenie (WSS)
+    // === KONFIGURACJA LOKALNA (do testów na komputerze) ===
+    /*const peerConfig = {
+        host: 'localhost',
+        port: 9000,
+        path: '/',
         debug: 3
     };
+*/
+    // === KONFIGURACJA PRODUKCYJNA (dla serwera Render) ===
+    
+    const peerConfig = {
+        host: 'catchin-club.onrender.com', 
+        path: '/peerjs',
+        secure: true,
+        debug: 3
+    };
+    
+    
     // =======================
 
     peer = new Peer(undefined, peerConfig);
@@ -3613,30 +3590,7 @@ function initializeSignaling() {
     });
 }
 
-function initializePeer(callback) {
-    if (peer && !peer.destroyed) return callback(peer.id);
-    const peerConfig = {
-        host: 'localhost', // Wskazujemy na nasz komputer
-        port: 9000,        // Wskazujemy na port, na którym działa PeerServer
-        path: '/',         // Domyślna ścieżka
-        debug: 3
-    };
-    peer = new Peer(undefined, peerConfig);
-    // Reszta funkcji pozostaje bez zmian
-    
-    peer.on('open', (id) => {
-        console.log('My ID in the P2P network (from MY OWN PeerJS server): ' + id);
-        if (callback) callback(id);
-    });
-    peer.on('error', (err) => {
-        console.error("MAIN PEER OBJECT ERROR: ", err);
-        showNotification(`A fatal PeerJS error occurred: ${err.type}`, 'error');
-    });
-    peer.on('close', () => {
-        showNotification('Connection to PeerJS server closed permanently.', 'error');
-        resetMenuUI();
-    });
-}
+
 
 function onSuccessfulJoin(roomData, hostPeerId = null) {
     if (!roomData || !roomData.name) {
