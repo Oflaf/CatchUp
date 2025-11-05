@@ -17,7 +17,6 @@ const io = socketIo(server, {
 
 app.use(express.static('public'));
 app.use(helmet({
-    contentSecurityPolicy: { /* ... Twoje zasady ... */ },
     hsts: false, 
 }));
 
