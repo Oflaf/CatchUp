@@ -3573,6 +3573,7 @@ function resetMenuUI() {
 
 function initializeSignaling() {
     signalingSocket = io("https://catchin-club.onrender.com");
+    //signalingSocket = io("http://localhost:3000"); 
     signalingSocket.on('connect', () => {
         console.log('Connected to the signaling server.', signalingSocket.id);
         showNotification('Connected to the signaling server.', 'success');
