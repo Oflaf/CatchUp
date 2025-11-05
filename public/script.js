@@ -2644,12 +2644,22 @@ function initializeSignaling() {
 function initializePeer(callback) {
     if (peer && !peer.destroyed) return callback(peer.id);
     const peerConfig = {
-        debug: 3,
-        config: { 'iceServers': [ { urls: 'stun:stun.l.google.com:19302' }, { urls: 'stun:stun1.l.google.com:19302' }, { urls: "turn:openrelay.metered.ca:80", username: "openrelayproject", credential: "openrelayproject" }, { urls: "turn:openrelay.metered.ca:443", username: "openrelayproject", credential: "openrelayproject" } ] }
+        // Zamiast 'localhost', wpisz nazwę swojej aplikacji na Render.
+        // Render sam zajmie się resztą.
+        // WAŻNE: Render używa standardowego portu 443 dla bezpiecznych
+        // połączeń, więc nie musimy go podawać.
+        host: 'catchin-club.onrender.com', 
+        path: '/peerjs', // Musimy zdefiniować ścieżkę
+        secure: true, // Włącz bezpieczne połączenie (WSS)
+        debug: 3
     };
+    // =======================
+
     peer = new Peer(undefined, peerConfig);
+    
+    // Reszta funkcji bez zmian...
     peer.on('open', (id) => {
-        console.log('My ID in the P2P network (from the PeerJS cloud server): ' + id);
+        console.log('My ID in the P2P network (from RENDER PeerJS server): ' + id);
         if (callback) callback(id);
     });
     peer.on('error', (err) => {
