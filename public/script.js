@@ -2613,13 +2613,15 @@ function createFullItemObject(itemName) {
 function initializePeer(callback) {
     if (peer && !peer.destroyed) return callback(peer.id);
     // === KONFIGURACJA LOKALNA (do testów na komputerze) ===
-    /*const peerConfig = {
+    /*
+    const peerConfig = {
         host: 'localhost',
         port: 9000,
         path: '/',
         debug: 3
     };
-*/
+    */
+
     // === KONFIGURACJA PRODUKCYJNA (dla serwera Render) ===
     
     const peerConfig = {
@@ -2634,7 +2636,7 @@ function initializePeer(callback) {
 
     peer = new Peer(undefined, peerConfig);
     
-    // Reszta funkcji bez zmian...
+
     peer.on('open', (id) => {
         console.log('My ID in the P2P network (from RENDER PeerJS server): ' + id);
         if (callback) callback(id);
@@ -3570,7 +3572,7 @@ function resetMenuUI() {
 // --- FUNKCJE OBSŁUGI SIECI I STANU GRY ---
 
 function initializeSignaling() {
-    signalingSocket = io();
+    signalingSocket = io("https://catchin-club.onrender.com");
     signalingSocket.on('connect', () => {
         console.log('Connected to the signaling server.', signalingSocket.id);
         showNotification('Connected to the signaling server.', 'success');
