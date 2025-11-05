@@ -1,13 +1,14 @@
 #!/bin/bash
+set -e
 
-# Ten skrypt uruchamia DWA serwery jednocześnie
+# Uruchom główny serwer gry w tle. 
+# On automatycznie użyje portu $PORT (10000)
+echo "Starting Game Server..."
+npm start &
 
-# 1. Uruchom swój serwer gry w TLE (znak '&' na końcu).
-# To sprawi, że będzie on działał, a skrypt przejdzie do następnej komendy.
-echo "Uruchamianie serwera gry w tle..."
-npm run start &
+# Uruchom serwer PeerJS na INNYM, wewnętrznym porcie, np. 9000
+echo "Starting PeerJS Server..."
+npx peerjs --port 9000 --path /peerjs
 
-# 2. Uruchom serwer PeerJS na PIERWSZYM PLANIE.
-# Ten proces utrzyma kontener Render przy życiu.
-echo "Uruchamianie serwera PeerJS na porcie 10000..."
-npx peerjs --port 10000 --path /peerjs
+# Czekaj na zakończenie procesu PeerJS
+wait -n
