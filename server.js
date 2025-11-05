@@ -15,6 +15,8 @@ const io = socketIo(server, {
 
 const PORT = process.env.PORT || 3000;
 
+
+
 app.use(express.static('public'));
 app.use(helmet({
     contentSecurityPolicy: {
@@ -135,7 +137,6 @@ setInterval(() => {
 
 server.listen(PORT, () => {
     console.log(`Serwer SYGNALIZACYJNY Socket.IO działa na porcie ${PORT}`);
-    console.log(`INFO: Railway assigned port: ${process.env.PORT || 'undefined'}`);
 });
 
 process.on('SIGTERM', () => {
