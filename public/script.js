@@ -2625,7 +2625,7 @@ function initializePeer(callback) {
     // === KONFIGURACJA PRODUKCYJNA (dla serwera Render) ===
     
     const peerConfig = {
-        host: 'catchin-club.onrender.com', 
+        host: 'https://server-port-yxen.onrender.com', 
         path: '/peerjs',
         secure: true,
         debug: 3
