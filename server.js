@@ -2,6 +2,7 @@ const express = require('express');
 const http = require('http');
 const socketIo = require('socket.io');
 const helmet = require('helmet');
+const { PeerServer } = require('peer')
 
 const app = express();
 const server = http.createServer(app);
