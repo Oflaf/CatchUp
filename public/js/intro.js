@@ -2,20 +2,20 @@ document.addEventListener('DOMContentLoaded', () => {
     // === Konfiguracja animacji ===
     const TEXT = "Solendz Caravan";
     const IMAGE_PATH = 'img/intro/';
-    const FINAL_LETTER_HEIGHT = 80;
+    const MAX_FINAL_LETTER_HEIGHT = 80; // Maksymalna wysokość litery w pixelach
     const START_SCALE_MULTIPLIER = 35;
     const ANIMATION_DURATION_MS = 150;
     const IMPACT_BOUNCE_MS = 300;
     const DELAY_BETWEEN_LETTERS_MS = 10;
-    const LETTER_SPACING = 0.2;
+    const LETTER_SPACING = 0.2; // Odstęp jako mnożnik wysokości litery
     const MAX_ROTATION_DEGREES = 4;
     const FADE_OUT_DELAY_MS = 800;
     const FADE_OUT_DURATION_MS = 800;
 
     // === Konfiguracja dla animacji "z", logo i rozsuwania ===
     const LOGO_PATH = 'img/intro/logo.png';
-    const LOGO_FINAL_HEIGHT = FINAL_LETTER_HEIGHT * 3;
-    const LOGO_VERTICAL_OFFSET_PX = -80;
+    const LOGO_HEIGHT_MULTIPLIER = 3;
+    const LOGO_VERTICAL_OFFSET_MULTIPLIER = -1;
     const Z_FALL_TRIGGER_CHAR_INDEX = 7;
     const Z_NUDGE_Y_PX = 5;
     const Z_NUDGE_ROTATION_DEG = 3;
@@ -26,10 +26,10 @@ document.addEventListener('DOMContentLoaded', () => {
     const SPREAD_DELAY_MS = 100;
 
     // === Konfiguracja dla animacji końcowej: rozjazd i zoom logo ===
-    const FINAL_SPLIT_DURATION_MS = 1200; // Czas rozjeżdżania się napisów
-    const LOGO_ZOOM_DURATION_MS = 1200;   // Czas powiększania się logo
-    const LOGO_ZOOM_HOLD_MS = 2000;       // Czas, przez który logo jest na pełnym ekranie
-    const LOGO_WOBBLE_DEG = 2;            // Stopnie obrotu logo na boki
+    const FINAL_SPLIT_DURATION_MS = 1200;
+    const LOGO_ZOOM_DURATION_MS = 1200;
+    const LOGO_ZOOM_HOLD_MS = 2000;
+    const LOGO_WOBBLE_DEG = 2;
 
     // === Elementy DOM ===
     const introContainer = document.getElementById('intro-container');
@@ -40,50 +40,21 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     
     let isSkipped = false;
-    let skipMessageElement = null;
     const allTimeouts = [];
+    const imageMap = new Map();
 
     const style = document.createElement('style');
-    // ZMIANA: Zaktualizowano style w poniższym bloku
     style.textContent = `
-        /* Import czcionki pikselowej z Google Fonts */
-        @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
-
         .letter-z-inner {
             transition: transform ${Z_NUDGE_TRANSITION_MS}ms ease-out;
         }
         .intro-logo {
             transition: width ${SPREAD_DURATION_MS}ms ease-in-out, 
+                        height ${SPREAD_DURATION_MS}ms ease-in-out,
                         left ${SPREAD_DURATION_MS}ms ease-in-out,
                         top ${SPREAD_DURATION_MS}ms ease-in-out,
                         opacity ${SPREAD_DURATION_MS * 0.7}ms ease-in-out;
         }
-
-        /* Definicja animacji kołysania */
-        @keyframes sway {
-            0%, 100% {
-                transform: translateX(-50%) rotate(-2deg);
-            }
-            50% {
-                transform: translateX(-50%) rotate(2deg);
-            }
-        }
-
-        /* Style dla wiadomości o pominięciu */
-.skip-intro-message {
-            position: absolute;
-            bottom: 30px; /* ZMIANA: Obniżono napis */
-            right: -80px; /* ZMIANA: Przesunięto napis na prawą stronę */
-            color: rgba(255, 255, 255, 0.8);
-            font-family: 'Press Start 2P', monospace; 
-            font-size: 9px; 
-            opacity: 0;
-            transition: opacity 0.5s ease-in-out;
-            pointer-events: none;
-            animation: sway 3s ease-in-out infinite; 
-            z-index: -5;
-        }
-
     `;
     document.head.append(style);
 
@@ -94,6 +65,7 @@ document.addEventListener('DOMContentLoaded', () => {
         animationFrameId: null,
         zLetterIndex: -1,
         zRotationMultiplier: 1,
+        baseTextWidthRatio: 0, // NOWOŚĆ: Przechowuje łączny stosunek szerokości do wysokości całego tekstu
     };
 
     function setSafeTimeout(callback, delay) {
@@ -113,14 +85,11 @@ document.addEventListener('DOMContentLoaded', () => {
         console.log("Intro skipped!");
         document.removeEventListener('keydown', skipIntro);
         document.removeEventListener('mousedown', skipIntro);
+        window.removeEventListener('resize', handleResize);
 
         cancelAnimationFrame(animationState.animationFrameId);
         animationState.animationFrameId = null;
         clearAllTimeouts();
-
-        if (skipMessageElement) {
-            skipMessageElement.style.opacity = '0';
-        }
 
         fadeOutIntro();
     }
@@ -145,26 +114,15 @@ document.addEventListener('DOMContentLoaded', () => {
     async function startIntro() {
         try {
             const loadedImages = await loadLetterImages();
-            const imageMap = new Map(loadedImages.map(item => [item.char, item.img]));
-            prepareLetters(imageMap);
+            loadedImages.forEach(item => imageMap.set(item.char, item.img));
+            
+            calculateBaseTextMetrics(); // NOWOŚĆ: Oblicz proporcje tekstu
+            prepareLettersAndLayout();
             startNextLetterAnimation();
 
-            setSafeTimeout(() => {
-                if (isSkipped) return;
-                
-                skipMessageElement = document.createElement('div');
-                skipMessageElement.textContent = 'press any key to skip intro';
-                skipMessageElement.className = 'skip-intro-message';
-                introContainer.appendChild(skipMessageElement);
-                
-                requestAnimationFrame(() => {
-                     skipMessageElement.style.opacity = '1';
-                });
-                
-                document.addEventListener('keydown', skipIntro);
-                document.addEventListener('mousedown', skipIntro);
-
-            }, 2000);
+            document.addEventListener('keydown', skipIntro);
+            document.addEventListener('mousedown', skipIntro);
+            window.addEventListener('resize', handleResize);
 
         } catch (error) {
             console.error("Failed to start intro:", error);
@@ -172,36 +130,109 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    function prepareLetters(imageMap) {
+    // NOWA FUNKCJA: Oblicza i zapamiętuje "naturalny" stosunek szerokości do wysokości całego tekstu.
+    function calculateBaseTextMetrics() {
+        let totalWidthRatio = 0;
         const textChars = TEXT.split('');
-        const totalWidth = textChars.reduce((width, char) => {
-            if (char === ' ') return width + (FINAL_LETTER_HEIGHT * 0.5);
+        for (const char of textChars) {
+            if (char === ' ') {
+                totalWidthRatio += 0.5; // Szerokość spacji
+                continue;
+            }
             const img = imageMap.get(char.toLowerCase());
-            const aspectRatio = img.naturalWidth / img.naturalHeight;
-            return width + (FINAL_LETTER_HEIGHT * aspectRatio) + (FINAL_LETTER_HEIGHT * LETTER_SPACING);
-        }, -FINAL_LETTER_HEIGHT * LETTER_SPACING);
+            if (img) {
+                const aspectRatio = img.naturalWidth / img.naturalHeight;
+                totalWidthRatio += aspectRatio + LETTER_SPACING;
+            }
+        }
+        totalWidthRatio -= LETTER_SPACING; // Usuń ostatni odstęp
+        animationState.baseTextWidthRatio = totalWidthRatio;
+    }
 
+    // ZMIENIONA FUNKCJA: Teraz inteligentnie skaluje animację, aby zmieściła się na ekranie
+    function recalculateLayout() {
+        // 1. Oblicz maksymalną wysokość litery na podstawie wysokości ekranu (zostaw 10% marginesu)
+        const heightBasedLetterHeight = window.innerHeight * 0.90 / LOGO_HEIGHT_MULTIPLIER;
+
+        // 2. Oblicz maksymalną wysokość litery na podstawie szerokości ekranu (zostaw 5% marginesu)
+        const widthBasedLetterHeight = (window.innerWidth * 0.95) / animationState.baseTextWidthRatio;
+
+        // 3. Wybierz MNIEJSZĄ z tych dwóch wartości, aby mieć pewność, że animacja zmieści się w obu wymiarach.
+        const finalLetterHeight = Math.min(MAX_FINAL_LETTER_HEIGHT, heightBasedLetterHeight, widthBasedLetterHeight);
+        const finalLogoHeight = finalLetterHeight * LOGO_HEIGHT_MULTIPLIER;
+        
+        // Oblicz całkowitą szerokość i punkt startowy na podstawie nowej, bezpiecznej wysokości liter
+        const totalWidth = finalLetterHeight * animationState.baseTextWidthRatio;
         const startX = (window.innerWidth - totalWidth) / 2;
         let currentX = startX;
+
+        animationState.letters.forEach(letterData => {
+            if (letterData.isSpace) {
+                currentX += (finalLetterHeight * 0.5);
+                return;
+            }
+            
+            const img = imageMap.get(letterData.char.toLowerCase());
+            const aspectRatio = img.naturalWidth / img.naturalHeight;
+            const finalWidth = finalLetterHeight * aspectRatio;
+
+            letterData.targetX = currentX;
+            letterData.targetY = (window.innerHeight - finalLetterHeight) / 2;
+            letterData.targetW = finalWidth;
+            letterData.targetH = finalLetterHeight;
+
+            if (letterData.state === 'finished' || letterData.state === 'impact') {
+                 letterData.element.style.transform = `translate(${letterData.targetX}px, ${letterData.targetY}px) scale(1) rotate(${letterData.rotation}deg)`;
+                 letterData.element.style.width = `${letterData.targetW}px`;
+                 letterData.element.style.height = `${letterData.targetH}px`;
+            }
+
+            if (letterData.isZ) {
+                const zCenterX = currentX + finalWidth / 2;
+                const logoTargetY = letterData.targetY + (finalLetterHeight * LOGO_VERTICAL_OFFSET_MULTIPLIER);
+                
+                animationState.logo.targetWidth = finalLogoHeight; // Logo jest kwadratowe
+                animationState.logo.targetHeight = finalLogoHeight;
+                animationState.logo.targetLeft = zCenterX - (finalLogoHeight / 2);
+                animationState.logo.targetTop = logoTargetY;
+
+                if (animationState.logo.wrapper.style.opacity === '1') {
+                    animationState.logo.wrapper.style.left = `${animationState.logo.targetLeft}px`;
+                    animationState.logo.wrapper.style.top = `${animationState.logo.targetTop}px`;
+                    animationState.logo.wrapper.style.width = `${animationState.logo.targetWidth}px`;
+                    animationState.logo.wrapper.style.height = `${animationState.logo.targetHeight}px`;
+                }
+            }
+            
+            currentX += finalWidth + (finalLetterHeight * LETTER_SPACING);
+        });
+    }
+    
+    let resizeTimeout;
+    function handleResize() {
+        clearTimeout(resizeTimeout);
+        resizeTimeout = setTimeout(recalculateLayout, 150);
+    }
+
+    function prepareLettersAndLayout() {
+        const textChars = TEXT.split('');
         let letterIndexWithoutSpaces = 0;
 
         for (const char of textChars) {
             if (char === ' ') {
-                currentX += (FINAL_LETTER_HEIGHT * 0.5);
+                animationState.letters.push({ isSpace: true });
                 continue;
             }
 
             const isZ = char.toLowerCase() === 'z';
             const imgData = imageMap.get(char.toLowerCase());
-            const aspectRatio = imgData.naturalWidth / imgData.naturalHeight;
-            const finalWidth = FINAL_LETTER_HEIGHT * aspectRatio;
 
             const letterData = {
-                targetX: currentX,
-                targetY: (window.innerHeight - FINAL_LETTER_HEIGHT) / 2,
-                targetW: finalWidth, targetH: FINAL_LETTER_HEIGHT,
+                char: char,
                 rotation: (Math.random() - 0.5) * 2 * MAX_ROTATION_DEGREES,
                 state: 'waiting', progress: 0,
+                isZ: isZ,
+                isSpace: false,
             };
 
             if (isZ) {
@@ -211,8 +242,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 const wrapper = document.createElement('div');
                 wrapper.style.position = 'absolute';
-                wrapper.style.width = `${finalWidth}px`;
-                wrapper.style.height = `${FINAL_LETTER_HEIGHT}px`;
                 
                 const innerImg = document.createElement('img');
                 innerImg.src = imgData.src;
@@ -226,11 +255,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 letterData.innerElement = innerImg;
                 
                 const logoWrapper = document.createElement('div');
-                const logoImg = document.createElement('img');
-                const finalLogoWidth = LOGO_FINAL_HEIGHT;
-                const zCenterX = currentX + finalWidth / 2;
-                const logoTargetY = letterData.targetY + LOGO_VERTICAL_OFFSET_PX;
-
+                const logoImg = new Image();
                 logoImg.src = LOGO_PATH;
                 logoImg.style.width = '100%';
                 logoImg.style.height = '100%';
@@ -238,20 +263,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 logoWrapper.appendChild(logoImg);
                 logoWrapper.classList.add('intro-logo');
                 logoWrapper.style.position = 'absolute';
-                logoWrapper.style.height = `${LOGO_FINAL_HEIGHT}px`;
                 logoWrapper.style.opacity = '0';
                 logoWrapper.style.width = '0px';
-                logoWrapper.style.left = `${zCenterX}px`;
-                logoWrapper.style.top = `${logoTargetY}px`;
+                logoWrapper.style.height = '0px';
                 introContainer.appendChild(logoWrapper);
 
-                animationState.logo = {
-                    wrapper: logoWrapper,
-                    element: logoImg,
-                    targetWidth: finalLogoWidth,
-                    targetLeft: zCenterX - (finalLogoWidth / 2),
-                };
-
+                animationState.logo = { wrapper: logoWrapper, element: logoImg };
             } else {
                 const imgElement = document.createElement('img');
                 imgElement.src = imgData.src;
@@ -262,21 +279,37 @@ document.addEventListener('DOMContentLoaded', () => {
             
             letterData.element.style.opacity = '0';
             animationState.letters.push(letterData);
-            currentX += finalWidth + (FINAL_LETTER_HEIGHT * LETTER_SPACING);
             letterIndexWithoutSpaces++;
         }
+        recalculateLayout();
     }
+
 
     function startNextLetterAnimation() {
         if (isSkipped) return;
-        if (animationState.currentLetterIndex >= animationState.letters.length) {
+        
+        let letterToAnimateIndex = -1;
+        let currentIndex = 0;
+        for(let i = 0; i < animationState.letters.length; i++){
+            if(!animationState.letters[i].isSpace){
+                if(currentIndex === animationState.currentLetterIndex){
+                    letterToAnimateIndex = i;
+                    break;
+                }
+                currentIndex++;
+            }
+        }
+
+        if (letterToAnimateIndex === -1) {
             setSafeTimeout(finalZFallAnimation, Z_FINAL_FALL_DELAY_MS);
             return;
         }
+
         if (animationState.currentLetterIndex >= Z_FALL_TRIGGER_CHAR_INDEX && animationState.zLetterIndex !== -1) {
             updateZNudge();
         }
-        const letter = animationState.letters[animationState.currentLetterIndex];
+        
+        const letter = animationState.letters[letterToAnimateIndex];
         letter.state = 'animating';
         letter.startTime = performance.now();
         if (!animationState.animationFrameId) {
@@ -285,7 +318,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     
     function updateZNudge() {
-        const zLetter = animationState.letters[animationState.zLetterIndex];
+        const zLetter = animationState.letters.find(l => l.isZ);
         if (!zLetter || !zLetter.innerElement) return;
         zLetter.fallY += Z_NUDGE_Y_PX;
         zLetter.fallRotation += Z_NUDGE_ROTATION_DEG * animationState.zRotationMultiplier;
@@ -295,25 +328,33 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function animate(currentTime) {
         let stillAnimating = false;
-        for (let i = 0; i < animationState.letters.length; i++) {
-            const letter = animationState.letters[i];
-            if (letter.state === 'waiting') continue;
+        let currentNonSpaceIndex = 0;
+
+        animationState.letters.forEach((letter) => {
+            if (letter.isSpace || letter.state === 'waiting') return;
+
             const elapsed = currentTime - letter.startTime;
             let baseTransform = '';
+            
             if (letter.state === 'animating') {
                 stillAnimating = true;
                 letter.progress = Math.min(elapsed / ANIMATION_DURATION_MS, 1);
                 const easeOutProgress = 1 - Math.pow(1 - letter.progress, 3);
+                
                 const startScale = START_SCALE_MULTIPLIER;
                 const currentScale = startScale + (1 - startScale) * easeOutProgress;
+                
                 const initialX = window.innerWidth / 2 - (letter.targetW * currentScale) / 2;
                 const initialY = window.innerHeight / 2 - (letter.targetH * currentScale) / 2;
+                
                 const x = initialX + (letter.targetX - initialX) * easeOutProgress;
                 const y = initialY + (letter.targetY - initialY) * easeOutProgress;
+                
                 letter.element.style.opacity = letter.progress;
                 letter.element.style.width = `${letter.targetW * currentScale}px`;
                 letter.element.style.height = `${letter.targetH * currentScale}px`;
                 baseTransform = `translate(${x}px, ${y}px) rotate(${letter.rotation}deg)`;
+                
                 if (letter.progress >= 1) {
                     letter.state = 'impact';
                     letter.startTime = currentTime;
@@ -323,11 +364,13 @@ document.addEventListener('DOMContentLoaded', () => {
                 const impactProgress = Math.min(elapsed / IMPACT_BOUNCE_MS, 1);
                 const bounce = impactProgress < 0.5 ? 1 + 0.2 * (impactProgress * 2) : 1 + 0.2 * (1 - (impactProgress - 0.5) * 2);
                 baseTransform = `translate(${letter.targetX}px, ${letter.targetY}px) scale(${bounce}) rotate(${letter.rotation}deg)`;
+                
                 if (impactProgress >= 1) {
                     letter.state = 'finished';
                     letter.element.style.width = `${letter.targetW}px`;
                     letter.element.style.height = `${letter.targetH}px`;
-                    if (i === animationState.currentLetterIndex) {
+                    
+                    if (currentNonSpaceIndex === animationState.currentLetterIndex) {
                        animationState.currentLetterIndex++;
                        setSafeTimeout(startNextLetterAnimation, DELAY_BETWEEN_LETTERS_MS);
                     }
@@ -335,8 +378,11 @@ document.addEventListener('DOMContentLoaded', () => {
             } else if (letter.state === 'finished') {
                 baseTransform = `translate(${letter.targetX}px, ${letter.targetY}px) scale(1) rotate(${letter.rotation}deg)`;
             }
+            
             letter.element.style.transform = baseTransform;
-        }
+            currentNonSpaceIndex++;
+        });
+
         if (stillAnimating) {
             animationState.animationFrameId = requestAnimationFrame(animate);
         } else {
@@ -346,38 +392,41 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     
     function finalZFallAnimation() {
-        if (animationState.zLetterIndex === -1) {
+        const zLetterData = animationState.letters.find(l => l.isZ);
+        if (!zLetterData) {
             setSafeTimeout(spreadLettersAnimation, SPREAD_DELAY_MS);
             return;
         }
-        const zLetter = animationState.letters[animationState.zLetterIndex];
-        const finalY = window.innerHeight + zLetter.targetH;
-        const finalRotation = zLetter.rotation + zLetter.fallRotation + 90;
-        zLetter.element.style.transition = `transform ${Z_FINAL_FALL_DURATION_MS}ms ease-in, opacity ${Z_FINAL_FALL_DURATION_MS}ms linear`;
-        zLetter.element.style.transform = `translate(${zLetter.targetX}px, ${finalY}px) rotate(${finalRotation}deg)`;
-        zLetter.element.style.opacity = '0';
+        
+        const finalY = window.innerHeight + zLetterData.targetH;
+        const finalRotation = zLetterData.rotation + zLetterData.fallRotation + 90;
+        zLetterData.element.style.transition = `transform ${Z_FINAL_FALL_DURATION_MS}ms ease-in, opacity ${Z_FINAL_FALL_DURATION_MS}ms linear`;
+        zLetterData.element.style.transform = `translate(${zLetterData.targetX}px, ${finalY}px) rotate(${finalRotation}deg)`;
+        zLetterData.element.style.opacity = '0';
         setSafeTimeout(() => spreadLettersAnimation(), Z_FINAL_FALL_DURATION_MS + SPREAD_DELAY_MS);
     }
     
     function spreadLettersAnimation() {
-        if (animationState.zLetterIndex === -1) {
+        const zLetterIndex = animationState.letters.findIndex(l => l.isZ);
+        if (zLetterIndex === -1) {
             setSafeTimeout(finalSplitAndZoom, FADE_OUT_DELAY_MS);
             return;
         }
         
-        const zLetter = animationState.letters[animationState.zLetterIndex];
+        const zLetter = animationState.letters[zLetterIndex];
         const zWidth = zLetter.targetW;
         const logoWidth = animationState.logo.targetWidth;
         const widthDifference = logoWidth - zWidth;
         const shiftAmount = widthDifference / 2;
 
         animationState.letters.forEach((letter, index) => {
-            if (index === animationState.zLetterIndex) return;
+            if (letter.isSpace || index === zLetterIndex) return;
+            
             let newTargetX = letter.targetX;
-            if (index < animationState.zLetterIndex) {
-                newTargetX -= shiftAmount + 30;
+            if (index < zLetterIndex) {
+                newTargetX -= shiftAmount + (letter.targetH * 0.1);
             } else {
-                newTargetX += shiftAmount - 10;
+                newTargetX += shiftAmount + (letter.targetH * 0.1);
             }
             letter.targetX = newTargetX;
             letter.element.style.transition = `transform ${SPREAD_DURATION_MS}ms ease-in-out`;
@@ -388,7 +437,9 @@ document.addEventListener('DOMContentLoaded', () => {
             const logo = animationState.logo;
             logo.wrapper.style.opacity = '1';
             logo.wrapper.style.left = `${logo.targetLeft}px`;
+            logo.wrapper.style.top = `${logo.targetTop}px`;
             logo.wrapper.style.width = `${logo.targetWidth}px`;
+            logo.wrapper.style.height = `${logo.targetHeight}px`;
         }
 
         setSafeTimeout(finalSplitAndZoom, SPREAD_DURATION_MS + FADE_OUT_DELAY_MS);
@@ -406,17 +457,19 @@ document.addEventListener('DOMContentLoaded', () => {
         finalStyle.textContent = wobbleKeyframes;
         document.head.appendChild(finalStyle);
 
-        const solendLetters = animationState.letters.slice(0, animationState.zLetterIndex);
-        const caravanLetters = animationState.letters.slice(animationState.zLetterIndex + 1);
+        const zLetterIndex = animationState.letters.findIndex(l => l.isZ);
+        const solendLetters = animationState.letters.slice(0, zLetterIndex);
+        const caravanLetters = animationState.letters.slice(zLetterIndex + 1);
 
         const moveLetters = (letters, direction) => {
             letters.forEach(letter => {
+                if(letter.isSpace) return;
                 const finalX = direction === 'left' 
-                    ? letter.targetX - (window.innerWidth + letter.targetW) 
-                    : letter.targetX + window.innerWidth + letter.targetW;
+                    ? - (letter.targetW + 100)
+                    : window.innerWidth + 100;
                 
                 letter.element.style.transition = `transform ${FINAL_SPLIT_DURATION_MS}ms ease-in`;
-                letter.element.style.transform = `translate(${finalX}px, ${letter.targetY}px) rotate(${letter.rotation}deg)`;
+                letter.element.style.transform = `translate(${finalX}px, ${letter.targetY}px) rotate(${letter.rotation + (direction === 'left' ? -30 : 30)}deg)`;
             });
         };
 
@@ -429,7 +482,6 @@ document.addEventListener('DOMContentLoaded', () => {
             
             const totalWobbleTime = LOGO_ZOOM_DURATION_MS + LOGO_ZOOM_HOLD_MS;
             logoElement.style.animation = `gentleWobble ${totalWobbleTime}ms ease-in-out infinite`;
-
             logoWrapper.style.transformOrigin = 'center center';
             
             const rect = logoWrapper.getBoundingClientRect();
@@ -441,10 +493,10 @@ document.addEventListener('DOMContentLoaded', () => {
             const deltaX = screenCenterX - logoCenterX;
             const deltaY = screenCenterY - logoCenterY;
 
-            const scale = Math.max(
+            const scale = Math.min(
                 window.innerWidth / rect.width, 
                 window.innerHeight / rect.height
-            ) * 0.3;
+            ) * 0.95; // Skaluj do 95% mniejszego wymiaru ekranu
             
             logoWrapper.style.transition = `transform ${LOGO_ZOOM_DURATION_MS}ms cubic-bezier(0.4, 0, 0.2, 1)`;
             logoWrapper.style.transform = `translate(${deltaX}px, ${deltaY}px) scale(${scale})`;
@@ -462,6 +514,7 @@ document.addEventListener('DOMContentLoaded', () => {
     function cleanupAndShowLoadingPanel() {
         document.removeEventListener('keydown', skipIntro);
         document.removeEventListener('mousedown', skipIntro);
+        window.removeEventListener('resize', handleResize);
         clearAllTimeouts();
         
         introContainer.style.display = 'none';

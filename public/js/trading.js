@@ -7,39 +7,38 @@ class TradingManager {
         this.slots = [];
         this.lastPlayerOffer = null; // Do śledzenia zmian w ofercie gracza
 
-        // ======================= POCZĄTEK ZMIAN =======================
+        // Dynamicznie pobierz wszystkie unikalne nazwy ryb z FishingManager.
+        const allFishData = this.fishingManager.getFishData();
+        const allTradableFishSet = new Set();
+
+        // Przejdź przez każdy biom i dodaj wszystkie ryby do zbioru, aby uniknąć duplikatów.
+        for (const biome in allFishData) {
+            for (const fishName in allFishData[biome]) {
+                allTradableFishSet.add(fishName);
+            }
+        }
         
-        // Tworzymy jedną, kompletną listę wszystkich ryb z obu biomów.
-        const allTradableFish = [
-            'roach', 'great roach', 'crucian', 'great crucian', 'carp', 'great carp',
-            'catfish', 'great catfish', 'olympic catfish', 'perch', 'great perch',
-            'longear sunfish', 'great longear sunfish', 'rudd', 'great rudd',
-            'spined loach', 'european chub', 'great european chub', 'bream', 'great bream', 'tench',
-            'great tench', 'common bleak', 'piranha', 'great piranha', 'peacock bass',
-            'great peacock bass', 'redtail catfish', 'great redtail catfish', 'payara',
-            'great payara', 'pacu', 'great pacu', 'silver dollar fish', 'green oscar', 'tiger oscar'
-        ];
-        
+        // Konwertuj zbiór (Set) z powrotem na tablicę (Array).
+        const allTradableFish = Array.from(allTradableFishSet);
+
         // Definiujemy, czym można handlować w poszczególnych biomach.
         this.tradableItemsByBiome = {
             'grassland': {
-                // NPC w Grassland akceptuje WSZYSTKIE ryby.
+                // NPC w Grassland akceptuje WSZYSTKIE ryby z dynamicznie utworzonej listy.
                 playerCanOffer: allTradableFish,
                 // W zamian oferuje przedmioty typowe dla tego biomu.
-                npcWillGive: ['red chubby wobbler', 'green kavasaki wobbler', 'beaked', 'double', 'treble', 'walker', 'high contrast wobbler', 'spoon']
+                npcWillGive: ['red chubby wobbler', 'green kavasaki wobbler', 'beaked', 'double', 'treble', 'golden octopus', 'walker', 'high contrast wobbler', 'spoon']
             },
             'jurassic': {
                 // NPC w Jurassic również akceptuje WSZYSTKIE ryby.
                 playerCanOffer: allTradableFish,
                 // W zamian oferuje przedmioty typowe dla biomu jurajskiego.
-                npcWillGive: ['wooden two-jointed wobbler', 'handmade jig', 'soft lure painted with oil', 'beaked', 'double', 'treble']
+                npcWillGive: ['wooden two-jointed wobbler', 'handmade jig', 'soft lure painted with oil', 'beaked', 'double', 'treble', 'golden octopus']
             }
             // Możesz dodać tutaj kolejne biomy w przyszłości
         };
         
         this.activeBiome = null; // Będzie przechowywać nazwę aktualnego biomu podczas handlu
-
-        // ======================== KONIEC ZMIAN =========================
 
         this.SLOT_SIZE = inventoryManager.SLOT_SIZE;
         this.GRID_GAP = inventoryManager.GRID_GAP;
@@ -120,7 +119,7 @@ class TradingManager {
         if (this.isTradeWindowOpen) {
             this.stopTrading();
         } else {
-            soundManager.play('inventory'); // <-- DODANA LINIA
+            soundManager.play('inventory');
             this.startTrading(npc, biomeName);
         }
     }
@@ -158,41 +157,66 @@ class TradingManager {
     }
 
     /**
-     * Generuje ofertę NPC na podstawie oferty gracza i aktualnego biomu.
+     * Generuje ofertę NPC na podstawie oferty gracza, aktualnego biomu i tieru przedmiotu.
      */
     _generateNpcOffer(offeredItem) {
         const npcOfferSlot = this.slots.find(s => s.id === 'npc_offer');
         if (!npcOfferSlot) return;
 
-        // Krok 1: Wyczyść ofertę NPC na starcie
+        // Krok 1: Wyczyść ofertę NPC na starcie.
         npcOfferSlot.item = null;
 
-        // Krok 2: Sprawdź, czy gracz cokolwiek oferuje i czy mamy aktywny biom
+        // Krok 2: Sprawdź, czy gracz cokolwiek oferuje i czy mamy aktywny biom.
         if (!offeredItem || !this.activeBiome) {
             return;
         }
 
-        // Krok 3: Pobierz zasady handlu dla bieżącego biomu
+        // Krok 3: Sprawdź, czy oferowany przedmiot ma zdefiniowany tier.
+        if (typeof offeredItem.tier !== 'number') {
+            console.warn(`Oferowany przedmiot "${offeredItem.name}" nie ma zdefiniowanego tieru.`);
+            return; // Nie generuj oferty, jeśli przedmiot nie ma tieru.
+        }
+
+        const playerItemTier = offeredItem.tier;
+        const maxRewardTier = playerItemTier + 1; // Nagroda może być maksymalnie o 1 tier wyższa.
+
+        // Krok 4: Pobierz zasady handlu i listę potencjalnych nagród.
         const tradeRules = this.tradableItemsByBiome[this.activeBiome];
         if (!tradeRules) {
             console.warn(`Brak zdefiniowanych zasad handlu dla biomu: ${this.activeBiome}`);
             return;
         }
-
-        // Krok 4: Sprawdź, czy oferowany przedmiot jest na liście akceptowalnych
+        
         const isItemTradable = tradeRules.playerCanOffer.includes(offeredItem.name);
 
         if (isItemTradable) {
-            // Krok 5: Jeśli przedmiot jest akceptowalny, wylosuj nagrodę z puli dla tego biomu
-            const potentialRewards = tradeRules.npcWillGive;
-            if (potentialRewards.length > 0) {
-                const chosenRewardName = potentialRewards[Math.floor(Math.random() * potentialRewards.length)];
+            const potentialRewardNames = tradeRules.npcWillGive;
+
+            // Krok 5: Filtruj nagrody na podstawie tieru.
+            const eligibleRewards = potentialRewardNames.filter(rewardName => {
+                // Musimy znaleźć dane przedmiotu, aby sprawdzić jego tier.
+                // Sprawdzamy w przynętach (baitData) i haczykach (hookData) w FishingManager.
+                const baitData = this.fishingManager.baitData[rewardName];
+                const hookData = this.fishingManager.hookData[rewardName];
+                const itemData = baitData || hookData; // Wybierz ten, który nie jest pusty.
+
+                if (itemData && typeof itemData.tier === 'number') {
+                    // Zwróć prawdę tylko, jeśli tier przedmiotu jest mniejszy lub równy maksymalnemu dozwolonemu.
+                    return itemData.tier <= maxRewardTier;
+                }
                 
-                // Użyj istniejącej globalnej funkcji do stworzenia pełnego obiektu przedmiotu
+                // Jeśli przedmiot nie został znaleziony lub nie ma tieru, odrzuć go.
+                return false;
+            });
+
+            // Krok 6: Jeśli są dostępne jakieś kwalifikujące się nagrody, wylosuj jedną.
+            if (eligibleRewards.length > 0) {
+                const chosenRewardName = eligibleRewards[Math.floor(Math.random() * eligibleRewards.length)];
                 npcOfferSlot.item = createFullItemObject(chosenRewardName);
             }
+            // Jeśli tablica `eligibleRewards` jest pusta (np. ryba tier 0, a wszystkie nagrody tier 2+), 
+            // oferta NPC pozostanie pusta (null), co jest prawidłowym zachowaniem.
         }
-        // Jeśli przedmiot nie jest akceptowalny (isItemTradable === false), oferta NPC pozostaje pusta (null)
     }
 
 

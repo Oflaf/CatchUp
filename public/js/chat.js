@@ -49,7 +49,7 @@ class ChatManager {
         this.chatInput = document.createElement('input');
         this.chatInput.id = 'chat-input';
         this.chatInput.type = 'text';
-        this.chatInput.placeholder = 'Naciśnij Enter, aby wysłać...';
+        this.chatInput.placeholder = 'Press ENTER to send message...';
         this.chatInput.maxLength = 100;
 
         // === NOWOŚĆ: Przycisk wysyłania ===

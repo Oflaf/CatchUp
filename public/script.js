@@ -1,5 +1,7 @@
 'use strict';
 
+
+
 // ====================================================================
 // === SEKCJA 0: NOWY SYSTEM POWIADOMIEŃ ===
 // ====================================================================
@@ -190,7 +192,6 @@ class CloudManager {
     setWeather(weatherType) {
         const nextIsCloudy = ['drizzle', 'rain', 'rainstorm'].includes(weatherType);
 
-        // Jeśli stan "pochmurny" się nie zmienia (np. z deszczu na burzę), nie rób przejścia.
         if (this.isCloudy && nextIsCloudy) {
             this.targetAlpha = 1;
             this.currentAlpha = 1; // Ustaw natychmiast, bez fade'u
@@ -221,18 +222,27 @@ class CloudManager {
     /**
      * Rysuje na canvasie warstwę zachmurzenia z gradientem.
      * @param {CanvasRenderingContext2D} ctx - Kontekst rysowania.
+     * @param {number} nightAlpha - Współczynnik nocy (0 = dzień, 1 = noc).
      */
-    draw(ctx) {
+    draw(ctx, nightAlpha = 0) {
         if (this.currentAlpha <= 0) return;
 
         ctx.save();
-        // Rysujemy w przestrzeni ekranu, ignorując kamerę i zoom
         ctx.setTransform(1, 0, 0, 1, 0, 0);
         ctx.globalAlpha = this.currentAlpha;
 
+        // Dynamiczne kolory gradientu w zależności od pory dnia
+        const dayTopColor = '#6c757d';
+        const dayBottomColor = '#adb5bd';
+        const nightTopColor = '#0d1b2a';    // Ciemny granat
+        const nightBottomColor = '#1b263b'; // Bardzo ciemny granat
+
+        const topColor = lerpColor(dayTopColor, nightTopColor, nightAlpha);
+        const bottomColor = lerpColor(dayBottomColor, nightBottomColor, nightAlpha);
+
         const gradient = ctx.createLinearGradient(0, 0, 0, ctx.canvas.height * 0.7);
-        gradient.addColorStop(0, '#6c757d'); // Ciemniejszy szary u góry
-        gradient.addColorStop(1, '#adb5bd'); // Jaśniejszy szary na dole
+        gradient.addColorStop(0, topColor);
+        gradient.addColorStop(1, bottomColor);
 
         ctx.fillStyle = gradient;
         ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height);
@@ -878,6 +888,7 @@ const hookImagePaths = {
     'beaked': 'img/hook/beaked.png',
     'double': 'img/hook/double.png',
     'treble': 'img/hook/treble.png',
+    'golden octopus': 'img/hook/golden octopus.png',
 };
 
 const mineralImagePaths = {
@@ -1211,11 +1222,13 @@ const TIER_NAMES = {
 const inventoryManager = new InventoryManager();
 const fishingManager = new FishingManager();
 const tradingManager = new TradingManager(inventoryManager, fishingManager);
-const totemManager = new TotemManager(inventoryManager); // <-- NOWA LINIA
+const totemManager = new TotemManager(inventoryManager);
 const soundManager = new SoundManager(); 
 const weatherManager = new WeatherManager(); 
-const cloudManager = new CloudManager(); // <-- DODAJ TĘ LINIĘ
+const cloudManager = new CloudManager();
 const scoreboardManager = new ScoreboardManager();
+const dynamicObjectManager = new DynamicObjectManager(soundManager); // <-- DODANA LINIA
+const dynamicObjectImages = {}; // <-- DODANA LINIA
 // ======================== KONIEC ZMIANY =========================
 
 // Teraz, gdy oba managery istnieją, możemy je ze sobą połączyć
@@ -1499,9 +1512,15 @@ function drawNpcTradePrompt() {
 const npcManager = new NPCManager(drawPlayer);
 
 function loadImages(callback) {
-    // ======================= POCZĄTEK ZMIAN - ŁADOWANIE SKINÓW =======================
-    const basePaths = { ...customizationUIPaths, ...tutorialImagePaths, ...fishingUIPaths, ...baitImagePaths, ...hookImagePaths, ...weatherImagePaths, ...mineralImagePaths };
-    const allPaths = { ...basePaths }; // <-- DODAJ TĘ LINIĘ Z POWROTEM
+    // NOWY BLOK - definicje ścieżek do grafik obiektów
+    const dynamicObjectImagePaths = {};
+    for (let i = 1; i <= 8; i++) {
+        dynamicObjectImagePaths[`dynamic_${i}`] = `img/world/dynamic/${i}.png`;
+    }
+
+    // Zmodyfikuj tę linię, aby zawierała nowe ścieżki
+    const basePaths = { ...customizationUIPaths, ...tutorialImagePaths, ...fishingUIPaths, ...baitImagePaths, ...hookImagePaths, ...weatherImagePaths, ...mineralImagePaths, ...dynamicObjectImagePaths };
+    const allPaths = { ...basePaths };
     
     // Dodaj wszystkie ścieżki skinów do ogólnej puli
     SKIN_TONES.forEach(tone => {
@@ -1639,6 +1658,9 @@ function loadImages(callback) {
                 allItemImages[h] = i;
             } else if (mineralImagePaths[h]) {
         allItemImages[h] = i;
+    } else if (dynamicObjectImagePaths[h]) { // NOWY BLOK
+        const key = h.split('_')[1]; // Wyciąga numer z klucza 'dynamic_1'
+        dynamicObjectImages[key] = i;
     } else if (weatherImagePaths[h]) {
         // === POCZĄTEK ZMIANY ===
         if (h === 'char') {
@@ -1682,6 +1704,18 @@ function mapFromDisplayRange(value, min, max) {
 }
 
 const RECONCILIATION_FACTOR = 0.1;
+
+function lerpColor(a, b, amount) {
+    const ah = parseInt(a.replace(/#/g, ''), 16),
+          ar = ah >> 16, ag = ah >> 8 & 0xff, ab = ah & 0xff,
+          bh = parseInt(b.replace(/#/g, ''), 16),
+          br = bh >> 16, bg = bh >> 8 & 0xff, bb = bh & 0xff,
+          rr = ar + amount * (br - ar),
+          rg = ag + amount * (bg - ag),
+          rb = ab + amount * (bb - ab);
+
+    return '#' + ((1 << 24) + (rr << 16) + (rg << 8) + rb | 0).toString(16).slice(1);
+}
 
 function reconcilePlayerPosition() {
     const serverState = playersInRoom[localPlayer.id];
@@ -3067,6 +3101,7 @@ function gameLoop(currentTime) {
     starManager.update(deltaTime);
     npcManager.update(deltaTime);
     cloudManager.update(deltaTime);
+    dynamicObjectManager.update(deltaTime); // NOWA LINIA
     const groundY = currentRoom.gameData ? (DEDICATED_GAME_HEIGHT - currentRoom.gameData.groundLevel) : DEDICATED_GAME_HEIGHT;
     weatherManager.update(deltaTime, cameraX, canvas.width, canvas.height, currentZoomLevel, biomeManager.WATER_TOP_Y_WORLD, groundY);
 
@@ -3184,17 +3219,27 @@ function gameLoop(currentTime) {
     // Pobieramy wstrząs z obiektu totemu, jeśli istnieje. Domyślnie wstrząs jest zerowy.
     const shakeX = worldTotem ? worldTotem.screenShakeX : 0;
     const shakeY = worldTotem ? worldTotem.screenShakeY : 0;
-
-    // Przesuwamy cały świat o pozycję kamery ORAZ o wartość wstrząsu.
-    // To jest kluczowa zmiana, która sprawi, że świat zacznie się trząść.
     ctx.translate(-cameraX + shakeX, -cameraY + shakeY);
-    // --- KONIEC POPRAWKI ---
     
     biomeManager.drawClouds(ctx, cameraX, cameraY);
 
-    cloudManager.draw(ctx);
+    // Oblicz współczynnik nocy
+    const rotationDegreesDraw = (cycleManager.rotation * (180 / Math.PI)) % 360;
+    const angleDraw = rotationDegreesDraw < 0 ? rotationDegreesDraw + 360 : rotationDegreesDraw;
+    let nightAlpha = 0;
+    const FADE_IN_START = 85, FADE_IN_END = 135, FADE_OUT_START = 240, FADE_OUT_END = 270;
+    if (angleDraw > FADE_IN_START && angleDraw < FADE_IN_END) {
+        nightAlpha = (angleDraw - FADE_IN_START) / (FADE_IN_END - FADE_IN_START);
+    } else if (angleDraw >= FADE_IN_END && angleDraw <= FADE_OUT_START) {
+        nightAlpha = 1;
+    } else if (angleDraw > FADE_OUT_START && angleDraw < FADE_OUT_END) {
+        nightAlpha = 1 - ((angleDraw - FADE_OUT_START) / (FADE_OUT_END - FADE_OUT_START));
+    }
+
+    // Przekaż współczynnik nocy do funkcji rysującej chmury
+    cloudManager.draw(ctx, nightAlpha);
+    
     biomeManager.drawParallaxBackground(ctx, cameraX, cameraY, DEDICATED_GAME_WIDTH / currentZoomLevel);
-            
     if (currentRoom?.gameData?.biome) {
         const { biome: b, groundLevel: g } = currentRoom.gameData;
         biomeManager.drawBuildings(ctx,g,cameraX,DEDICATED_GAME_WIDTH/currentZoomLevel);
@@ -3215,6 +3260,8 @@ function gameLoop(currentTime) {
         if (p.username) drawPlayer(p);
         else npcManager.drawPlayer(p, npcManager.npcAssets);
     });
+
+    
     drawWorldItems(ctx);
 
     if(currentRoom?.gameData?.biome){
@@ -3228,8 +3275,11 @@ function gameLoop(currentTime) {
         biomeManager.drawFireplaceParticles(ctx);
         biomeManager.drawFireplace(ctx);
         biomeManager.drawObstacles(ctx); // <-- DODAJ TĘ LINIĘ
+        
         biomeManager.drawLightEffect(ctx);
+        
         biomeManager.drawForegroundPlants(ctx);
+        dynamicObjectManager.draw(ctx); // NOWA LINIA
         
 
         drawInsects();
@@ -3556,20 +3606,21 @@ function initializeSignaling() {
 function initializePeer(callback) {
     if (peer && !peer.destroyed) return callback(peer.id);
     const peerConfig = {
-        debug: 2, // Poziom logowania dla PeerJS
-        config: { 'iceServers': [ { urls: 'stun:stun.l.google.com:19302' }, { urls: 'stun:stun1.l.google.com:19302' } ] }
+        host: 'localhost', // Wskazujemy na nasz komputer
+        port: 9000,        // Wskazujemy na port, na którym działa PeerServer
+        path: '/',         // Domyślna ścieżka
+        debug: 3
     };
     peer = new Peer(undefined, peerConfig);
+    // Reszta funkcji pozostaje bez zmian
+    
     peer.on('open', (id) => {
-        console.log('My ID in the P2P network: ' + id);
+        console.log('My ID in the P2P network (from MY OWN PeerJS server): ' + id);
         if (callback) callback(id);
     });
     peer.on('error', (err) => {
         console.error("MAIN PEER OBJECT ERROR: ", err);
-        resetMenuUI();
-    });
-    peer.on('disconnected', () => {
-        showNotification('Disconnected from PeerJS server. Reconnecting...', 'warning');
+        showNotification(`A fatal PeerJS error occurred: ${err.type}`, 'error');
     });
     peer.on('close', () => {
         showNotification('Connection to PeerJS server closed permanently.', 'error');
@@ -3854,72 +3905,60 @@ function handleDataFromServer(data) {
             onSuccessfulJoin(data.payload, hostConnection?.peer);
             break;
         case 'gameStateUpdate': {
-    const { players: playersData, worldItems: worldItemsData } = data.payload;
+            const { players: playersData, worldItems: worldItemsData, dynamicObjects: dynamicObjectsData } = data.payload;
 
-    // Aktualizuj dane graczy, ale zachowaj stan /me
-    playersData.forEach(serverPlayer => {
-        const clientPlayer = playersInRoom[serverPlayer.id];
-        
-        if (clientPlayer) {
-            // === POCZĄTEK FINALNEJ POPRAWKI ===
-            if (serverPlayer.hasLineCast) {
-                const isBobberOnWater = serverPlayer.floatWorldY >= (biomeManager.WATER_TOP_Y_WORLD - 15);
-                const wasBobberOnWater = clientPlayer.wasBobberOnWater || false;
-
-                // --- Logika DŹWIĘKU (jednorazowa) ---
-                // Odtwarzamy dźwięk tylko w momencie, gdy spławik ląduje na wodzie.
-                if (isBobberOnWater && !wasBobberOnWater) {
-                    soundManager.play('waterSplash');
-                }
-
-                // --- Logika ANIMACJI (ciągła, gdy spławik się rusza) ---
-                // Przywracamy oryginalną logikę animacji, która była zależna od ruchu.
-                const isBobberMoving = Math.abs(serverPlayer.floatWorldX - clientPlayer.floatWorldX) > 0.1 || Math.abs(serverPlayer.floatWorldY - clientPlayer.floatWorldY) > 0.1;
-                if (isBobberOnWater && isBobberMoving) {
-                    fishingManager.createWaterSplash(serverPlayer.floatWorldX, serverPlayer.floatWorldY, 5, 0.5);
-                }
-                
-                // Zapisz stan na potrzeby następnej klatki (kluczowe dla dźwięku)
-                clientPlayer.wasBobberOnWater = isBobberOnWater;
-            } else {
-                // Resetuj flagę, gdy wędka jest zwinięta
-                clientPlayer.wasBobberOnWater = false;
+            // Synchronizuj obiekty dynamiczne na samym początku, używając aktualnej listy graczy
+            if (dynamicObjectsData) {
+                dynamicObjectManager.syncObjects(dynamicObjectsData, playersInRoom);
             }
-            // === KONIEC FINALNEJ POPRAWKI ===
 
-            // Zachowaj aktualny stan /me, który jest zarządzany tylko po stronie klienta
-            const meText = clientPlayer.meActionText;
-            const meExpiry = clientPlayer.meActionExpiry;
-            // ======================= POCZĄTEK ZMIAN =======================
-            const chatText = clientPlayer.chatMessageText;
-            const chatExpiry = clientPlayer.chatMessageExpiry;
-            // ======================== KONIEC ZMIAN =========================
+            // Aktualizuj dane graczy, ale zachowaj stan /me
+            playersData.forEach(serverPlayer => {
+                const clientPlayer = playersInRoom[serverPlayer.id];
+                
+                if (clientPlayer) {
+                    if (serverPlayer.hasLineCast) {
+                        const isBobberOnWater = serverPlayer.floatWorldY >= (biomeManager.WATER_TOP_Y_WORLD - 15);
+                        const wasBobberOnWater = clientPlayer.wasBobberOnWater || false;
 
+                        if (isBobberOnWater && !wasBobberOnWater) {
+                            soundManager.play('waterSplash');
+                        }
 
-            // Zaktualizuj gracza danymi z serwera
-            Object.assign(clientPlayer, serverPlayer);
+                        const isBobberMoving = Math.abs(serverPlayer.floatWorldX - clientPlayer.floatWorldX) > 0.1 || Math.abs(serverPlayer.floatWorldY - clientPlayer.floatWorldY) > 0.1;
+                        if (isBobberOnWater && isBobberMoving) {
+                            fishingManager.createWaterSplash(serverPlayer.floatWorldX, serverPlayer.floatWorldY, 5, 0.5);
+                        }
+                        
+                        clientPlayer.wasBobberOnWater = isBobberOnWater;
+                    } else {
+                        clientPlayer.wasBobberOnWater = false;
+                    }
 
-            // Przywróć stan /me, nadpisując ewentualne `null` z serwera
-            clientPlayer.meActionText = meText;
-            clientPlayer.meActionExpiry = meExpiry;
-            // ======================= POCZĄTEK ZMIAN =======================
-            clientPlayer.chatMessageText = chatText;
-            clientPlayer.chatMessageExpiry = chatExpiry;
-            // ======================== KONIEC ZMIAN =========================
-        } else {
-            // Jeśli gracz jest nowy, po prostu go dodaj
-            playersInRoom[serverPlayer.id] = serverPlayer;
+                    const meText = clientPlayer.meActionText;
+                    const meExpiry = clientPlayer.meActionExpiry;
+                    const chatText = clientPlayer.chatMessageText;
+                    const chatExpiry = clientPlayer.chatMessageExpiry;
+
+                    Object.assign(clientPlayer, serverPlayer);
+
+                    clientPlayer.meActionText = meText;
+                    clientPlayer.meActionExpiry = meExpiry;
+                    clientPlayer.chatMessageText = chatText;
+                    clientPlayer.chatMessageExpiry = chatExpiry;
+                } else {
+                    playersInRoom[serverPlayer.id] = serverPlayer;
+                }
+            });
+
+            worldItems = worldItemsData;
+            if (playersInRoom[localPlayer.id]) {
+                const castingState = { isCasting: localPlayer.isCasting, castingPower: localPlayer.castingPower };
+                Object.assign(localPlayer, playersInRoom[localPlayer.id]);
+                Object.assign(localPlayer, castingState);
+            }
+            break;
         }
-    });
-
-    worldItems = worldItemsData;
-    if (playersInRoom[localPlayer.id]) {
-        const castingState = { isCasting: localPlayer.isCasting, castingPower: localPlayer.castingPower };
-        Object.assign(localPlayer, playersInRoom[localPlayer.id]);
-        Object.assign(localPlayer, castingState);
-    }
-    break;
-}
         
 
         case 'playerCustomizationUpdated':
@@ -4123,8 +4162,14 @@ function getMousePosOnCanvas(canvas, evt) {
 document.addEventListener('keydown', (event) => {
     if (!currentRoom) return;
 
-
     if (chatManager && chatManager.isFocused) {
+        return;
+    }
+
+    // NOWY BLOK - Dodaj go na początku, zaraz po powyższych warunkach
+    if (event.code === 'KeyI' && !isCustomizationMenuOpen) {
+        event.preventDefault();
+        sendPlayerAction('createDynamicObject');
         return;
     }
 
@@ -4674,6 +4719,7 @@ soundManager.loadSounds(soundPaths);
 // Nasz drugi ekran ładowania symuluje wczytywanie stanu pokoju, nie plików.
 loadImages(() => {
     console.log("All images loaded, starting render loop.");
+    dynamicObjectManager.setImages(dynamicObjectImages); // NOWA LINIA
     
     fishingManager.strikeImage = fishingUIImages.strike;
     fishingManager.fishFrameImage = fishingUIImages.fishframe;
@@ -4821,7 +4867,6 @@ function setupFlagSelection() {
         event.stopPropagation();
     });
 }
-
 function setupMobileControls() {
     const buttonMapping = {
         'mobile-up': 'ArrowUp',
@@ -4847,13 +4892,10 @@ function setupMobileControls() {
             const handlePress = (e) => {
                 e.preventDefault();
                 
-                // === ZMIENIONA LOGIKA: Specjalna obsługa dla PPM ===
                 if (code === 'RMB') {
-                    // Tworzymy i wysyłamy syntetyczne zdarzenie "contextmenu" (prawy przycisk)
                     const fakeEvent = new MouseEvent('contextmenu', { bubbles: true, cancelable: true });
                     canvas.dispatchEvent(fakeEvent);
                 } else {
-                    // Standardowa obsługa klawiszy
                     keys[code] = true;
                     const event = new KeyboardEvent('keydown', { code: code });
                     document.dispatchEvent(event);
@@ -4863,13 +4905,9 @@ function setupMobileControls() {
             const handleRelease = (e) => {
                 e.preventDefault();
 
-                // === ZMIENIONA LOGIKA: Dla PPM nic nie robimy przy puszczeniu ===
                 if (code === 'RMB') {
-                    // Prawy przycisk myszy (contextmenu) to pojedyncze zdarzenie,
-                    // więc nie potrzebujemy symulować "mouseup".
                     return; 
                 } else {
-                    // Standardowa obsługa klawiszy
                     delete keys[code];
                     const event = new KeyboardEvent('keyup', { code: code });
                     document.dispatchEvent(event);
@@ -4884,8 +4922,57 @@ function setupMobileControls() {
             button.addEventListener('mouseleave', handleRelease, { passive: false });
         }
     }
-}
 
+    // ================== POCZĄTEK NOWEGO KODU ==================
+    let zoomInterval = null;
+
+    const startZoom = (direction) => {
+        if (zoomInterval) clearInterval(zoomInterval);
+
+        const performZoom = () => {
+            // Używamy nieco mniejszej czułości, aby zoom był płynniejszy
+            const zoomDelta = direction * ZOOM_SENSITIVITY * 0.5;
+            currentZoomLevel = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, currentZoomLevel + zoomDelta));
+        };
+
+        performZoom(); // Wykonaj jeden krok od razu
+        zoomInterval = setInterval(performZoom, 50); // Powtarzaj co 50ms
+    };
+
+    const stopZoom = () => {
+        if (zoomInterval) {
+            clearInterval(zoomInterval);
+            zoomInterval = null;
+        }
+    };
+
+    const zoomInBtn = document.getElementById('mobile-scale-up');
+    if (zoomInBtn) {
+        const handlePress = (e) => { e.preventDefault(); startZoom(1); }; // Zoom in
+        const handleRelease = (e) => { e.preventDefault(); stopZoom(); };
+
+        zoomInBtn.addEventListener('touchstart', handlePress, { passive: false });
+        zoomInBtn.addEventListener('mousedown', handlePress, { passive: false });
+
+        zoomInBtn.addEventListener('touchend', handleRelease, { passive: false });
+        zoomInBtn.addEventListener('mouseup', handleRelease, { passive: false });
+        zoomInBtn.addEventListener('mouseleave', handleRelease, { passive: false });
+    }
+
+    const zoomOutBtn = document.getElementById('mobile-scale-down');
+    if (zoomOutBtn) {
+        const handlePress = (e) => { e.preventDefault(); startZoom(-1); }; // Zoom out
+        const handleRelease = (e) => { e.preventDefault(); stopZoom(); };
+
+        zoomOutBtn.addEventListener('touchstart', handlePress, { passive: false });
+        zoomOutBtn.addEventListener('mousedown', handlePress, { passive: false });
+
+        zoomOutBtn.addEventListener('touchend', handleRelease, { passive: false });
+        zoomOutBtn.addEventListener('mouseup', handleRelease, { passive: false });
+        zoomOutBtn.addEventListener('mouseleave', handleRelease, { passive: false });
+    }
+    // =================== KONIEC NOWEGO KODU ===================
+}
 
 
 function setupMobileControlsToggle() {

@@ -1,3 +1,5 @@
+// host-worker.js
+
 console.log('[DEBUG] Plik host-worker.js został załadowany i uruchomiony.');
 
 const GUEST_TIMEOUT = 15000;
@@ -479,6 +481,7 @@ class GameHost {
         }
 
         this.room = {
+            dynamicObjects: [], // NOWA LINIA
             worldItems: [],
             roomScoreboard: [] ,
             id: roomId,
@@ -712,10 +715,14 @@ class GameHost {
          // === KLUCZOWA POPRAWKA ===
          // Musimy rozgłosić nie tylko notyfikację na czacie,
          // ale też informację dla klienta, aby FIZYCZNIE usunął gracza ze swojej lokalnej kopii stanu.
-         this.broadcast({ 
-             type: 'playerLeftRoom', // Nowy, dedykowany typ wiadomości!
-             payload: { peerId: peerId, username: username }
-         });
+         this.broadcast({
+            type: 'gameStateUpdate',
+            payload: {
+                players: Object.values(this.room.players), // Poprawiono `room` na `this.room`
+                worldItems: this.room.worldItems,
+                dynamicObjects: this.room.dynamicObjects 
+            }
+        });
     }
 }
     
@@ -963,6 +970,40 @@ class GameHost {
             }
             break;
         }
+
+        // === POCZĄTEK ZMIAN ===
+        case 'createDynamicObject': {
+            if (!player) return;
+
+            // Znajdź wszystkie obiekty należące do gracza
+            const ownedObjects = this.room.dynamicObjects.filter(obj => obj.ownerId === peerId);
+            
+            // Jeśli gracz ma 4 lub więcej obiektów, usuń najstarszy
+            if (ownedObjects.length >= 4) {
+                // Najstarszy to pierwszy obiekt w odfiltrowanej tablicy
+                const oldestObjectId = ownedObjects[0].id;
+                const indexToRemove = this.room.dynamicObjects.findIndex(obj => obj.id === oldestObjectId);
+                
+                if (indexToRemove > -1) {
+                    this.room.dynamicObjects.splice(indexToRemove, 1);
+                }
+            }
+            
+            // Zawsze twórz nowy obiekt
+            const direction = Math.random() < 0.5 ? -1 : 1;
+            const offset = 60 + Math.random() * 40;
+            
+            const newObject = {
+                id: `dyn_${peerId}_${Date.now()}`,
+                ownerId: peerId,
+                type: Math.floor(Math.random() * 8) + 1, // Losowy typ od 1 do 8
+                x: player.x + (PLAYER_SIZE / 2) + (offset * direction),
+                y: DEDICATED_GAME_HEIGHT - this.room.gameData.groundLevel, // Finalna pozycja Y na ziemi
+            };
+            this.room.dynamicObjects.push(newObject);
+            break;
+        }
+        // === KONIEC ZMIAN ===
             case 'digForBait': {
                 const now = Date.now();
                 const lastDigTime = this.digCooldowns[peerId] || 0;
@@ -1275,11 +1316,12 @@ class GameHost {
             }
         }
 
-        this.broadcast({
+this.broadcast({
             type: 'gameStateUpdate',
             payload: {
                 players: Object.values(room.players),
-                worldItems: room.worldItems
+                worldItems: room.worldItems,
+                dynamicObjects: room.dynamicObjects // <-- DODAJ TĘ LINIĘ
             }
         });
     }}
@@ -1340,4 +1382,3 @@ self.onmessage = function(event) {
             break;
     }
 };
-

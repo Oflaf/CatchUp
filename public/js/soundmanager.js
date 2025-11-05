@@ -171,12 +171,7 @@ class SoundManager {
         this.stopLoop('walk');
         this.setWeatherSound(null);
     }
-    
-    // ================== POCZĄTEK NOWEGO KODU ==================
-    /**
-     * Ustawia główną głośność i aktualizuje wszystkie aktywne dźwięki.
-     * @param {number} level - Głośność w zakresie od 0.0 do 1.0.
-     */
+
     setMasterVolume(level) {
         this.masterVolume = Math.max(0, Math.min(1, level));
 
