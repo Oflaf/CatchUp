@@ -4,19 +4,24 @@ class SettingsManager {
     constructor(soundManager) {
         this.soundManager = soundManager;
 
-        // Domyślne wartości
         this.settings = {
             masterVolume: 100,
             world: 100,
             music: 100,
-            mobileControls: false
+            player: 100,
+            ui: 100,
+            mobile: false,
+            fastKeyResponse: false
         };
 
         this.isVisible = false;
+        this.activeTab = 'sound';
+
         this._bindElements();
         this._setupEventListeners();
         this.updateAllDisplays();
         this._applyMobileControlsVisibility();
+        this._switchTab(this.activeTab);
     }
 
     _bindElements() {
@@ -26,18 +31,50 @@ class SettingsManager {
         this.inGameSettingsBtn = document.getElementById('inGameSettingsBtn');
         this.mobileControlsContainer = document.getElementById('mobile-controls');
 
+        this.tabs = {
+            sound: document.getElementById('tab-sound'),
+            console: document.getElementById('tab-console'),
+            graphics: document.getElementById('tab-graphics')
+        };
+
+        this.panels = {
+            sound: document.getElementById('sound-settings-panel'),
+            console: document.getElementById('console-settings-panel'),
+            graphics: document.getElementById('graphics-settings-panel')
+        };
+
         this.valueDisplays = {
             masterVolume: document.getElementById('master-volume-value'),
             world: document.getElementById('world-value'),
             music: document.getElementById('music-value'),
-            mobileControls: document.getElementById('mobile-controls-value')
+            player: document.getElementById('player-volume-value'),
+            ui: document.getElementById('ui-volume-value'),
+        };
+
+        this.muteIcons = {
+            masterVolume: document.getElementById('master-volume-mute'),
+            world: document.getElementById('world-mute'),
+            music: document.getElementById('music-mute'),
+            player: document.getElementById('player-mute'),
+            ui: document.getElementById('ui-mute'),
+        };
+
+        this.checkImages = {
+            mobile: document.getElementById('mobile-check-img'),
+            fastKeyResponse: document.getElementById('fast-key-response-check-img')
         };
 
         this.arrows = {
             masterVolume: { left: document.getElementById('master-volume-left'), right: document.getElementById('master-volume-right') },
             world: { left: document.getElementById('world-left'), right: document.getElementById('world-right') },
             music: { left: document.getElementById('music-left'), right: document.getElementById('music-right') },
-            mobileControls: { left: document.getElementById('mobile-controls-left'), right: document.getElementById('mobile-controls-right') }
+            player: { left: document.getElementById('player-volume-left'), right: document.getElementById('player-volume-right') },
+            ui: { left: document.getElementById('ui-volume-left'), right: document.getElementById('ui-volume-right') }
+        };
+
+        this.toggles = {
+            mobile: document.getElementById('mobile-toggle'),
+            fastKeyResponse: document.getElementById('fast-key-response-toggle')
         };
     }
 
@@ -46,9 +83,17 @@ class SettingsManager {
         this.optionsButton.addEventListener('click', () => this.open());
         this.inGameSettingsBtn.addEventListener('click', () => this.open());
 
+        for (const tabName in this.tabs) {
+            this.tabs[tabName].addEventListener('click', () => this._switchTab(tabName));
+        }
+
         for (const key in this.arrows) {
             this.arrows[key].left.addEventListener('click', () => this._changeValue(key, -5));
             this.arrows[key].right.addEventListener('click', () => this._changeValue(key, 5));
+        }
+
+        for (const key in this.toggles) {
+            this.toggles[key].addEventListener('click', () => this._toggleValue(key));
         }
         
         document.addEventListener('keydown', (event) => {
@@ -58,16 +103,28 @@ class SettingsManager {
         });
     }
 
-    _changeValue(key, amount) {
-        // === DODANO DŹWIĘK NAWIGACJI ===
+    _switchTab(tabName) {
         this.soundManager.play('menuNavigate');
+        this.activeTab = tabName;
 
-        if (key === 'mobileControls') {
-            this.settings.mobileControls = !this.settings.mobileControls;
-            this.updateDisplay(key);
-            this._applyMobileControlsVisibility();
-            return;
+        for (const key in this.tabs) {
+            this.tabs[key].classList.toggle('active', key === tabName);
+            this.panels[key].classList.toggle('active', key === tabName);
         }
+    }
+
+    _toggleValue(key) {
+        this.soundManager.play('menuNavigate');
+        this.settings[key] = !this.settings[key];
+        this.updateDisplay(key);
+
+        if (key === 'mobile') {
+            this._applyMobileControlsVisibility();
+        }
+    }
+
+    _changeValue(key, amount) {
+        this.soundManager.play('menuNavigate');
 
         let currentValue = this.settings[key];
         let newValue = currentValue + amount;
@@ -77,14 +134,31 @@ class SettingsManager {
             this.settings[key] = newValue;
             this.updateDisplay(key);
 
-            if (key === 'masterVolume') {
-                this.soundManager.setMasterVolume(newValue / 100);
+            const volumeLevel = newValue / 100;
+
+            // === ZMIANA: Podłączenie wszystkich suwaków ===
+            switch (key) {
+                case 'masterVolume':
+                    this.soundManager.setMasterVolume(volumeLevel);
+                    break;
+                case 'world':
+                    this.soundManager.setWorldVolume(volumeLevel);
+                    break;
+                case 'music':
+                    this.soundManager.setMusicVolume(volumeLevel);
+                    break;
+                case 'player':
+                    this.soundManager.setPlayerVolume(volumeLevel);
+                    break;
+                case 'ui':
+                    this.soundManager.setUiVolume(volumeLevel);
+                    break;
             }
         }
     }
 
     _applyMobileControlsVisibility() {
-        if (this.settings.mobileControls) {
+        if (this.settings.mobile) {
             this.mobileControlsContainer.classList.remove('hidden');
         } else {
             this.mobileControlsContainer.classList.add('hidden');
@@ -93,17 +167,27 @@ class SettingsManager {
 
     updateDisplay(key) {
         const value = this.settings[key];
-        const displayElement = this.valueDisplays[key];
 
-        if (key === 'mobileControls') {
-            displayElement.textContent = value ? "ON" : "OFF";
+        if (typeof value === 'boolean') {
+            const imgElement = this.checkImages[key];
+            if (imgElement) {
+                imgElement.src = value ? 'img/ui/tick.png' : 'img/ui/cross.png';
+            }
             return;
         }
+        
+        const displayElement = this.valueDisplays[key];
+        const muteIconElement = this.muteIcons[key];
 
-        if (value === 0) {
-            displayElement.textContent = "MUTE";
-        } else {
-            displayElement.textContent = `${value}%`;
+        if (displayElement && muteIconElement) {
+            if (value === 0) {
+                displayElement.style.display = 'none';
+                muteIconElement.style.display = 'block';
+            } else {
+                displayElement.style.display = 'block';
+                muteIconElement.style.display = 'none';
+                displayElement.textContent = `${value}%`;
+            }
         }
     }
 
@@ -115,25 +199,16 @@ class SettingsManager {
 
     open() {
         if (this.isVisible) return;
-        // === DODANO DŹWIĘK OTWIERANIA ===
         this.soundManager.play('menuClick'); 
         this.isVisible = true;
         this.settingsWindow.classList.add('visible');
+        this._switchTab('sound');
     }
 
     close() {
         if (!this.isVisible) return;
-        // === DODANO DŹWIĘK ZAMYKANIA ===
         this.soundManager.play('menuClick');
         this.isVisible = false;
         this.settingsWindow.classList.remove('visible');
     }
 }
-
-document.addEventListener('DOMContentLoaded', () => {
-    if (typeof soundManager !== 'undefined') {
-        window.settingsManager = new SettingsManager(soundManager);
-    } else {
-        console.error('SoundManager not found for Settings initialization.');
-    }
-});

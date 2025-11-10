@@ -1,11 +1,58 @@
 'use strict';
 
 class SoundManager {
-    constructor() {
+    constructor(soundtrackManager) {
+        this.soundtrackManager = soundtrackManager;
         this.sounds = {};
         this.isReady = false;
-        // Zmieniamy domyślną głośność na 1.0 (100%), aby pasowała do ustawień
-        this.masterVolume = 1.0; 
+
+        this.volumes = {
+            master: 1.0,
+            world: 1.0,
+            player: 1.0,
+            ui: 1.0,
+            music: 1.0
+        };
+
+        this.soundCategories = {
+            'background': 'world',
+            'night': 'world',
+            'bird': 'world',
+            'waterSplash': 'world',
+            'drizzle': 'world',
+            'rain': 'world',
+            'storm': 'world',
+            'thunder': 'world',
+            'thunder_2': 'world',
+            'thunder_3': 'world',
+            'camp': 'world',
+            'walk': 'player',
+            'walking_wood': 'player',
+            'jump': 'player',
+            'land': 'player',
+            'cast': 'player',
+            'reelIn': 'player',
+            'dig': 'player',
+            'stone_breaking': 'player',
+            'strike': 'player',
+            'strike_2': 'player',
+            'fishing': 'player',
+            'catchin': 'player',
+            'catchout': 'player',
+            'catch': 'player',
+            'menuClick': 'ui',
+            'menuNavigate': 'ui',
+            'clothNavigate': 'ui',
+            'info': 'ui',
+            'inventory': 'ui',
+            'throw': 'ui',
+            'fish': 'ui',
+            'hook': 'ui',
+            'bait': 'ui',
+            'itemChange': 'ui',
+            'gem_found': 'ui'
+        };
+
         this.exclusiveInstances = {};
         this.strikeSoundInstance = null;
 
@@ -24,14 +71,12 @@ class SoundManager {
                 const audio = new Audio(path);
                 audio.addEventListener('canplaythrough', () => {
                     this.sounds[name] = audio;
-                    
                     if (this.weatherSounds[name]) {
                         const instance = audio.cloneNode();
                         instance.loop = true;
                         instance.volume = 0;
                         this.weatherSounds[name].instance = instance;
                     }
-
                     resolve();
                 });
                 audio.addEventListener('error', (e) => {
@@ -50,6 +95,12 @@ class SoundManager {
         }
     }
 
+    // === JEDYNA ZMIANA TUTAJ: Użycie operatora `??` zamiast `||` ===
+    _getFinalVolume(category, volumeMultiplier = 1) {
+        const categoryVolume = this.volumes[category] ?? 1.0; // Używamy ?? aby 0 było traktowane jako poprawna wartość
+        return Math.max(0, Math.min(1, this.volumes.master * categoryVolume * volumeMultiplier));
+    }
+    
     update(deltaTime) {
         if (!this.isReady) return;
 
@@ -58,67 +109,49 @@ class SoundManager {
             if (!soundData.instance) continue;
 
             const currentVolume = soundData.instance.volume;
-            // Cel głośności jest teraz mnożony przez masterVolume
-            const targetVolume = soundData.targetVolume * this.masterVolume;
+            const targetVolume = this._getFinalVolume('world', soundData.targetVolume);
 
             if (currentVolume !== targetVolume) {
                 const difference = targetVolume - currentVolume;
                 const change = this.FADE_SPEED * deltaTime * Math.sign(difference);
 
-                let newVolume;
-                if (Math.abs(difference) > Math.abs(change)) {
-                    newVolume = currentVolume + change;
-                } else {
-                    newVolume = targetVolume;
-                }
-                
-                // Głośność instancji nie może przekroczyć masterVolume
-                soundData.instance.volume = Math.max(0, Math.min(this.masterVolume, newVolume));
+                let newVolume = Math.abs(difference) > Math.abs(change) ? currentVolume + change : targetVolume;
+                soundData.instance.volume = newVolume;
 
                 if (soundData.instance.volume > 0 && soundData.instance.paused) {
                     soundData.instance.play().catch(e => {});
-                }
-                else if (soundData.instance.volume <= 0 && !soundData.instance.paused) {
+                } else if (soundData.instance.volume <= 0 && !soundData.instance.paused) {
                     soundData.instance.pause();
                 }
             }
         }
     }
-    
+
     setWeatherSound(weatherType) {
         if (!this.isReady) return;
-
         for (const soundName in this.weatherSounds) {
-            if (soundName === weatherType) {
-                // Ustawiamy cel na 1 (100%), który potem będzie skalowany przez masterVolume
-                this.weatherSounds[soundName].targetVolume = 1.0;
-            } else {
-                this.weatherSounds[soundName].targetVolume = 0;
-            }
+            this.weatherSounds[soundName].targetVolume = (soundName === weatherType) ? 1.0 : 0;
         }
     }
 
     play(name) {
         if (!this.isReady || !this.sounds[name]) return;
+        const category = this.soundCategories[name] || 'world';
         const soundClone = this.sounds[name].cloneNode();
-        soundClone.volume = this.masterVolume;
+        soundClone.volume = this._getFinalVolume(category);
         soundClone.play().catch(error => {});
     }
     
     playRandomThunder() {
         if (!this.isReady) return;
-        
-        const thunderSounds = ['thunder', 'thunder_2', 'thunder_3'];
-        const randomSound = thunderSounds[Math.floor(Math.random() * thunderSounds.length)];
-        
-        this.play(randomSound);
+        this.play('thunder');
     }
     
     playWithVolume(name, volumeMultiplier) {
         if (!this.isReady || !this.sounds[name]) return;
+        const category = this.soundCategories[name] || 'player';
         const soundClone = this.sounds[name].cloneNode();
-        const finalVolume = Math.max(0, Math.min(1, this.masterVolume * volumeMultiplier));
-        soundClone.volume = finalVolume;
+        soundClone.volume = this._getFinalVolume(category, volumeMultiplier);
         soundClone.play().catch(error => {});
     }
 
@@ -126,8 +159,9 @@ class SoundManager {
         if (!this.isReady || !this.sounds[name]) return;
         const currentInstance = this.exclusiveInstances[name];
         if (currentInstance && !currentInstance.ended) return;
+        const category = this.soundCategories[name] || 'player';
         const soundClone = this.sounds[name].cloneNode();
-        soundClone.volume = this.masterVolume;
+        soundClone.volume = this._getFinalVolume(category);
         soundClone.play().catch(error => {});
         this.exclusiveInstances[name] = soundClone;
     }
@@ -136,7 +170,7 @@ class SoundManager {
         if (!this.isReady || !this.sounds['strike']) return;
         if (this.strikeSoundInstance && !this.strikeSoundInstance.ended) return;
         const soundClone = this.sounds['strike'].cloneNode();
-        soundClone.volume = this.masterVolume;
+        soundClone.volume = this._getFinalVolume('player');
         soundClone.play().catch(error => {});
         this.strikeSoundInstance = soundClone;
         this.strikeSoundInstance.onended = () => { this.strikeSoundInstance = null; };
@@ -154,8 +188,9 @@ class SoundManager {
         if (!this.isReady || !this.sounds[name]) return;
         const sound = this.sounds[name];
         if (sound.paused) {
+            const category = this.soundCategories[name] || 'world';
             sound.loop = true;
-            sound.volume = this.masterVolume;
+            sound.volume = this._getFinalVolume(category);
             sound.play().catch(e => console.error(`Loop sound error for '${name}':`, e));
         }
     }
@@ -169,22 +204,49 @@ class SoundManager {
 
     stopAllLoops() {
         this.stopLoop('walk');
+        this.stopLoop('walking_wood');
+        this.stopLoop('night');
+        this.stopLoop('background');
         this.setWeatherSound(null);
     }
 
-    setMasterVolume(level) {
-        this.masterVolume = Math.max(0, Math.min(1, level));
-
-        // Aktualizacja dźwięków w pętli (np. chodzenie)
+    _updateAllVolumes() {
         if (this.sounds['walk'] && !this.sounds['walk'].paused) {
-            this.sounds['walk'].volume = this.masterVolume;
+            this.sounds['walk'].volume = this._getFinalVolume('player');
         }
         if (this.sounds['walking_wood'] && !this.sounds['walking_wood'].paused) {
-            this.sounds['walking_wood'].volume = this.masterVolume;
+            this.sounds['walking_wood'].volume = this._getFinalVolume('player');
         }
-        
-        // Aktualizacja głośności dźwięków pogody (które mają własną logikę fade)
-        // wywoła się automatycznie w następnej klatce pętli `update`
+        if (this.sounds['night'] && !this.sounds['night'].paused) {
+            this.sounds['night'].volume = this._getFinalVolume('world');
+        }
+        if (this.sounds['background'] && !this.sounds['background'].paused) {
+            this.sounds['background'].volume = this._getFinalVolume('world');
+        }
+        if (this.soundtrackManager) {
+            this.soundtrackManager.setVolume(this._getFinalVolume('music'));
+        }
     }
-    // =================== KONIEC NOWEGO KODU ===================
+
+    setMasterVolume(level) {
+        this.volumes.master = level;
+        this._updateAllVolumes();
+    }
+    setWorldVolume(level) {
+        this.volumes.world = level;
+        this._updateAllVolumes();
+    }
+    setPlayerVolume(level) {
+        this.volumes.player = level;
+        this._updateAllVolumes();
+    }
+    setUiVolume(level) {
+        this.volumes.ui = level;
+    }
+    setMusicVolume(level) {
+        this.volumes.music = level;
+        if (this.soundtrackManager) {
+            this.soundtrackManager.setVolume(this._getFinalVolume('music'));
+        }
+    }
 }

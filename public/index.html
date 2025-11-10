@@ -60,55 +60,149 @@
     </script>
 </head>
 <body>
-    <!-- ================== POCZĄTEK NOWEGO KODU ================== -->
     <div id="settings-window">
         <div class="settings-header">
             <h2 class="settings-title">OPTIONS</h2>
+            <div class="settings-tabs">
+                <div id="tab-sound" class="settings-tab active">
+                    <img src="img/ui/sound.png" alt="Sound">
+                </div>
+                <div id="tab-console" class="settings-tab">
+                    <img src="img/ui/console.png" alt="Console">
+                </div>
+                <div id="tab-graphics" class="settings-tab">
+                    <img src="img/ui/graphics.png" alt="Graphics">
+                </div>
+            </div>
             <div id="settings-close-btn" class="settings-close-btn">
                 <img src="img/ui/cross.png" alt="Close">
             </div>
         </div>
         <div class="settings-content">
-            <div class="settings-row">
-                <span>master volume:</span>
-                <div class="settings-control">
-                    <img src="img/ui/arrow.png" id="master-volume-left" class="arrow-left" alt="Decrease">
-                    <span id="master-volume-value" class="settings-value">100%</span>
-                    <img src="img/ui/arrow.png" id="master-volume-right" class="arrow-right" alt="Increase">
+            <!-- Panel Dźwięku -->
+            <div id="sound-settings-panel" class="settings-panel">
+                <div class="settings-row">
+                    <span>master volume</span>
+                    <div class="settings-control">
+                        <img src="img/ui/arrow.png" id="master-volume-left" class="arrow-left" alt="Decrease">
+                        <div class="settings-value">
+                            <span id="master-volume-value">100%</span>
+                            <img id="master-volume-mute" class="mute-icon" src="img/ui/mute.png" alt="Muted">
+                        </div>
+                        <img src="img/ui/arrow.png" id="master-volume-right" class="arrow-right" alt="Increase">
+                    </div>
+                </div>
+                <div class="settings-row">
+                    <span>world volume</span>
+                    <div class="settings-control">
+                        <img src="img/ui/arrow.png" id="world-left" class="arrow-left" alt="Decrease">
+                        <div class="settings-value">
+                            <span id="world-value">100%</span>
+                            <img id="world-mute" class="mute-icon" src="img/ui/mute.png" alt="Muted">
+                        </div>
+                        <img src="img/ui/arrow.png" id="world-right" class="arrow-right" alt="Increase">
+                    </div>
+                </div>
+                <div class="settings-row">
+                    <span>music volume</span>
+                    <div class="settings-control">
+                        <img src="img/ui/arrow.png" id="music-left" class="arrow-left" alt="Decrease">
+                         <div class="settings-value">
+                            <span id="music-value">100%</span>
+                            <img id="music-mute" class="mute-icon" src="img/ui/mute.png" alt="Muted">
+                        </div>
+                        <img src="img/ui/arrow.png" id="music-right" class="arrow-right" alt="Increase">
+                    </div>
+                </div>
+                 <div class="settings-row">
+                    <span>player volume</span>
+                    <div class="settings-control">
+                        <img src="img/ui/arrow.png" id="player-volume-left" class="arrow-left" alt="Decrease">
+                        <div class="settings-value">
+                            <span id="player-volume-value">100%</span>
+                            <img id="player-mute" class="mute-icon" src="img/ui/mute.png" alt="Muted">
+                        </div>
+                        <img src="img/ui/arrow.png" id="player-volume-right" class="arrow-right" alt="Increase">
+                    </div>
+                </div>
+                 <div class="settings-row">
+                    <span>ui volume</span>
+                    <div class="settings-control">
+                        <img src="img/ui/arrow.png" id="ui-volume-left" class="arrow-left" alt="Decrease">
+                        <div class="settings-value">
+                            <span id="ui-volume-value">100%</span>
+                            <img id="ui-mute" class="mute-icon" src="img/ui/mute.png" alt="Muted">
+                        </div>
+                        <img src="img/ui/arrow.png" id="ui-volume-right" class="arrow-right" alt="Increase">
+                    </div>
                 </div>
             </div>
-            <div class="settings-row">
-                <span>world:</span>
-                <div class="settings-control">
-                    <img src="img/ui/arrow.png" id="world-left" class="arrow-left" alt="Decrease">
-                    <span id="world-value" class="settings-value">100%</span>
-                    <img src="img/ui/arrow.png" id="world-right" class="arrow-right" alt="Increase">
+
+            <!-- Panel Konsoli -->
+            <div id="console-settings-panel" class="settings-panel">
+                <div class="settings-row">
+                    <span>mobile</span>
+                    <div id="mobile-toggle" class="settings-checkbox">
+                        <img id="mobile-check-img" src="img/ui/cross.png" alt="check">
+                    </div>
+                </div>
+                 <div class="settings-row">
+                    <span>fast key response</span>
+                    <div id="fast-key-response-toggle" class="settings-checkbox">
+                        <img id="fast-key-response-check-img" src="img/ui/cross.png" alt="check">
+                    </div>
                 </div>
             </div>
-            <div class="settings-row">
-                <span>music:</span>
-                <div class="settings-control">
-                    <img src="img/ui/arrow.png" id="music-left" class="arrow-left" alt="Decrease">
-                    <span id="music-value" class="settings-value">100%</span>
-                    <img src="img/ui/arrow.png" id="music-right" class="arrow-right" alt="Increase">
+            
+            <!-- Panel Grafiki (pusty) -->
+            <div id="graphics-settings-panel" class="settings-panel">
+                <div class="settings-row">
+                    <span>View</span>
+                    <div class="settings-control">
+                        <img src="img/ui/arrow.png" id="resolution-left" class="arrow-left">
+                        <span id="resolution-value" class="settings-value">High</span>
+                        <img src="img/ui/arrow.png" id="resolution-right" class="arrow-right">
+                    </div>
+                </div>
+                <div class="settings-row">
+                    <span>aspect ratio</span>
+                    <div class="settings-control">
+                        <img src="img/ui/arrow.png" id="aspect-ratio-left" class="arrow-left">
+                        <span id="aspect-ratio-value" class="settings-value">16:9</span>
+                        <img src="img/ui/arrow.png" id="aspect-ratio-right" class="arrow-right">
+                    </div>
+                </div>
+                <div class="settings-row">
+                    <span>gamma</span>
+                    <div class="settings-control">
+                        <img src="img/ui/arrow.png" id="gamma-left" class="arrow-left">
+                        <span id="gamma-value" class="settings-value">50%</span>
+                        <img src="img/ui/arrow.png" id="gamma-right" class="arrow-right">
+                    </div>
+                </div>
+                <div class="settings-row">
+                    <span>contrast</span>
+                    <div class="settings-control">
+                        <img src="img/ui/arrow.png" id="contrast-left" class="arrow-left">
+                        <span id="contrast-value" class="settings-value">50%</span>
+                        <img src="img/ui/arrow.png" id="contrast-right" class="arrow-right">
+                    </div>
+                </div>
+                <div class="settings-row">
+                    <span>brightness</span>
+                    <div class="settings-control">
+                        <img src="img/ui/arrow.png" id="brightness-left" class="arrow-left">
+                        <span id="brightness-value" class="settings-value">50%</span>
+                        <img src="img/ui/arrow.png" id="brightness-right" class="arrow-right">
+                    </div>
                 </div>
             </div>
-            <div class="settings-row">
-                <span>mobile:</span>
-                <div class="settings-control">
-                    <img src="img/ui/arrow.png" id="mobile-controls-left" class="arrow-left" alt="Decrease">
-                    <span id="mobile-controls-value" class="settings-value">ON</span>
-                    <img src="img/ui/arrow.png" id="mobile-controls-right" class="arrow-right" alt="Increase">
-                </div>
-            </div>
+            <!-- === KONIEC NOWEGO PANELU GRAFIKI === -->
         </div>
     </div>
-    <!-- =================== KONIEC NOWEGO KODU =================== -->
 
     <div id="intro-container"></div>
-
     <canvas id="menuCanvas"></canvas>
-
     <div id="lobby" style="display: none;">
         <div class="player-input-container">
             <p>Your Name:</p>
@@ -121,7 +215,7 @@
         </div>
         <div id="flagListContainer" class="flag-list-container"></div>
         
-<div class="main-menu">
+        <div class="main-menu">
             <div class="main-menu-stack">
                 <button id="joinGameBtn">Join the Game</button>
                 <button id="optionsBtn">Options</button>
@@ -148,35 +242,31 @@
 
     <div id="mobile-controls">
         <div class="d-pad">
-    <div id="mobile-up" class="control-button d-pad-up"><img src="img/ui/arrow.png" alt="Up"></div>
-    <div id="mobile-left" class="control-button d-pad-left"><img src="img/ui/arrow.png" alt="Left"></div>
-    <div id="mobile-right" class="control-button d-pad-right"><img src="img/ui/arrow.png" alt="Right"></div>
-    <div id="mobile-down" class="control-button d-pad-down"><img src="img/ui/arrow.png" alt="Down"></div>
-</div>
+            <div id="mobile-up" class="control-button d-pad-up"><img src="img/ui/arrow.png" alt="Up"></div>
+            <div id="mobile-left" class="control-button d-pad-left"><img src="img/ui/arrow.png" alt="Left"></div>
+            <div id="mobile-right" class="control-button d-pad-right"><img src="img/ui/arrow.png" alt="Right"></div>
+            <div id="mobile-down" class="control-button d-pad-down"><img src="img/ui/arrow.png" alt="Down"></div>
+        </div>
         <div class="action-buttons">
-    <!-- NOWY GŁÓWNY PRZYCISK AKCJI -->
-    <div id="mobile-lmb" class="control-button action-primary">
-        <img src="img/ui/rod.png" alt="Action">
-    </div>
-
-    <div id="mobile-space" class="control-button action-space">JUMP</div>
-    <div id="mobile-e" class="control-button action-small">E</div>
-    <div id="mobile-t" class="control-button action-small">T</div>
-    <div id="mobile-f" class="control-button action-small">F</div>
-</div>
+            <div id="mobile-lmb" class="control-button action-primary">
+                <img src="img/ui/rod.png" alt="Action">
+            </div>
+            <div id="mobile-space" class="control-button action-space">JUMP</div>
+            <div id="mobile-e" class="control-button action-small">E</div>
+            <div id="mobile-t" class="control-button action-small">T</div>
+            <div id="mobile-f" class="control-button action-small">F</div>
+        </div>
         <div class="item-buttons">
             <div id="mobile-1" class="control-button item-button">1</div>
             <div id="mobile-2" class="control-button item-button">2</div>
             <div id="mobile-3" class="control-button item-button">3</div>
             <div id="mobile-4" class="control-button item-button">4</div>
-            <!-- ================== POCZĄTEK ZMIANY ================== -->
             <div id="mobile-scale-up" class="control-button zoom-button">
                 <img src="img/ui/up.png" alt="Zoom In">
             </div>
             <div id="mobile-scale-down" class="control-button zoom-button">
                 <img src="img/ui/down.png" alt="Zoom Out">
             </div>
-            <!-- =================== KONIEC ZMIANY =================== -->
         </div>
     </div>
 
@@ -197,7 +287,8 @@
     <script src="js/totem.js"></script>
     <script src="js/settings.js"></script>
     <script src="js/dynamic.js"></script>
-    
+    <script src="js/graphics_settings.js"></script>
+    <script src="js/soundtrack.js"></script> <!-- <<< DODAJ TĘ LINIĘ -->
     <script src="script.js"></script>
 </body>
 </html>

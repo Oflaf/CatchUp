@@ -3,12 +3,11 @@ html, body {
     height: 100%;
     margin: 0;
     padding: 0;
-    overflow: hidden; /* Zapobiega paskom przewijania */
-    
+    overflow: hidden;
 }
 
 body {
-    background-color: #333; /* Tło całej strony, widoczne zanim canvas się załaduje */
+    background-color: #333;
     font-family: Arial, sans-serif;
     color: #eee;
 }
@@ -19,13 +18,11 @@ body {
     left: 0;
     width: 100vw;
     height: 100vh;
-    /* Zaczynamy z czarnym tłem, które później zmienimy na przezroczyste */
     background-color: black; 
     z-index: 10000;
     overflow: hidden;
     user-select: none;
     -webkit-user-select: none;
-    /* Dodajemy transition dla tła */
     transition: background-color 0.5s ease-in-out;
 }
 
@@ -35,7 +32,6 @@ body {
     image-rendering: crisp-edges;
 }
 
-/* ZMIEŃ ISTNIEJĄCE REGUŁY DLA #lobby */
 #lobby {
     display: none;
     position: fixed;
@@ -45,14 +41,10 @@ body {
     text-align: center;
     z-index: 1000;
     min-width: 320px;
-    /* NOWOŚĆ: Ustawiamy początkową przezroczystość i przejście */
     opacity: 0;
     transition: opacity 0.5s ease-out;
 }
 
-/* --- KLUCZOWE ZMIANY TUTAJ --- */
-
-/* 1. Nowy styl dla tła menu */
 #menuCanvas {
     position: fixed;
     top: 0;
@@ -62,48 +54,25 @@ body {
     z-index: -1;
     background-color: black;
     object-fit: calc();
-    
-    /* KLUCZOWA POPRAWKA: Mówi przeglądarce, by nie rozmywała pikseli przy skalowaniu */
     image-rendering: pixelated;
-    image-rendering: -moz-crisp-edges; /* Dla starszych wersji Firefox */
-    image-rendering: crisp-edges;     /* Dla innych przeglądarek */
+    image-rendering: -moz-crisp-edges;
+    image-rendering: crisp-edges;
 }
 
 #cycleOverlay {
-    /* Rozciągnij na cały kontener gry */
     position: absolute;
     top: 0;
     left: 0;
     width: 100%;
     height: 100%;
-
-    /* WAŻNE: Ignoruj kliknięcia myszą, aby przechodziły do canvasa poniżej */
     pointer-events: none;
-
-    /* Ustaw domyślny tryb mieszania */
-    mix-blend-mode: soft-light; /* Odpowiednik globalCompositeOperation */
-
-    /* Wygładź przejścia, gdy będziemy zmieniać kolor i filtry */
+    mix-blend-mode: soft-light;
     transition: background-color 0.5s linear, backdrop-filter 0.5s linear;
 }
 
-/* 2. Zmodyfikowany ogólny styl dla obu canvasów */
 #gameCanvas, #menuCanvas {
     display: block;
     image-rendering: crisp-edges;
-}
-
-/* --- Koniec kluczowych zmian --- */
-
-#lobby {
-    position: fixed;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    
-    text-align: center;
-    z-index: 1000;
-    min-width: 320px;
 }
 
 #lobby p {
@@ -111,15 +80,12 @@ body {
     font-size: 1.1em;
 }
 
-
 #myUsername {
     color: #fff;
 }
 
-/* --- NOWE STYLE DLA PRZYCISKÓW MENU --- */
 .main-menu {
     position: relative;
-
 }
 
 .main-menu-stack {
@@ -127,21 +93,18 @@ body {
     flex-direction: column;
     gap: 15px;
 }
-/* Styl dla nowego przycisku przełączania UI */
-#toggleMobileControlsBtn {
-    position: absolute; /* Pozycjonujemy go względem .main-menu */
-    bottom: 5px; /* Wyrównujemy go do dołu przycisku "Options" */
-    right: -70px; /* Przesuwamy go na prawo od głównych przycisków */
-    
-    width: 55px; /* Mały, prostokątny */
-    height: 40px;
-    padding: 5px; /* Mały margines wewnętrzny dla obrazka */
 
-    /* Resetowanie stylów z głównych przycisków */
+#toggleMobileControlsBtn {
+    position: absolute;
+    bottom: 5px;
+    right: -70px;
+    width: 55px;
+    height: 40px;
+    padding: 5px;
     background: rgba(255, 255, 255, 0.1);
     border: 2px solid rgba(255, 255, 255, 0.3);
     box-shadow: none;
-    border-bottom: 2px solid rgba(255, 255, 255, 0.3); /* Ujednolicenie ramki */
+    border-bottom: 2px solid rgba(255, 255, 255, 0.3);
 }
 
 #toggleMobileControlsBtn:hover {
@@ -149,16 +112,15 @@ body {
 }
 
 #toggleMobileControlsBtn:active {
-    transform: translateY(1px); /* Mniejszy efekt wciśnięcia */
+    transform: translateY(1px);
     border-bottom-width: 2px;
     box-shadow: none;
 }
 
-/* Styl dla obrazka wewnątrz przycisku */
 #toggleMobileControlsBtn img {
     width: 100%;
     height: 100%;
-    object-fit: contain; /* Gwarantuje, że obrazek zmieści się w całości */
+    object-fit: contain;
 }
 
 .main-menu button {
@@ -167,12 +129,10 @@ body {
     font-weight: bold;
     color: white;
     border: none;
-    border-radius: 8px; /* Bardziej zaokrąglone rogi */
+    border-radius: 8px;
     cursor: pointer;
-    text-transform: uppercase; /* Wielkie litery */
-    letter-spacing: 1px; /* Odstęp między literami */
-    
-    /* Dodajemy subtelny cień i przejścia dla płynnych animacji */
+    text-transform: uppercase;
+    letter-spacing: 1px;
     box-shadow: 0 3px 10px rgba(0,0,0,0.3);
     transition: background-color 0.2s, transform 0.1s, box-shadow 0.2s;
 }
@@ -186,14 +146,13 @@ body {
     background: linear-gradient(145deg, #2ebf4f, #28a745);
     box-shadow: 0 5px 15px rgba(46, 191, 79, 0.2);
 }
-/* Efekt wciśnięcia przycisku */
+
 .main-menu button:active {
-    transform: translateY(2px); /* Przesuń w dół */
-    border-bottom-width: 1px; /* Zmniejsz ramkę na dole */
+    transform: translateY(2px);
+    border-bottom-width: 1px;
     box-shadow: 0 1px 5px rgba(0,0,0,0.3);
 }
 
-/* Styl dla nieaktywnych/wyłączonych przycisków */
 .main-menu button:disabled {
     background: #555;
     color: #999;
@@ -201,14 +160,14 @@ body {
 }
 
 .main-menu button:disabled:hover {
-     background: #555; /* Bez zmiany koloru na hover */
-     box-shadow: 0 3px 10px rgba(0,0,0,0.3); /* Bez zmiany cienia */
-}
-.main-menu button:disabled:active {
-    transform: none; /* Bez efektu wciśnięcia */
+     background: #555;
+     box-shadow: 0 3px 10px rgba(0,0,0,0.3);
 }
 
-/* Styl dla tekstu statusu pod przyciskami */
+.main-menu button:disabled:active {
+    transform: none;
+}
+
 .menu-status {
     margin-top: 25px;
     margin-bottom: 0;
@@ -219,23 +178,26 @@ body {
 }
 
 #gameContainer {
-    display: none; /* Początkowo ukryty */
-    position: fixed;
+    position: fixed; /* 'fixed', aby było na wierzchu i wypełniało viewport */
     top: 0;
     left: 0;
-    width: 100vw;
-    height: 100vh;
+    width: 100vw; /* 100% szerokości viewportu */
+    height: 100vh; /* 100% wysokości viewportu */
     background-color: black;
-    /* Flexbox jest tutaj OK, bo centruje #gameCanvas wewnątrz #gameContainer */
     display: flex;
     justify-content: center;
     align-items: center;
+    overflow: hidden; /* Ukryj cokolwiek, co wyjdzie poza kontener */
 }
-
 #gameCanvas {
     width: 100%;
     height: 100%;
-    object-fit: calc(); /* Użyj 'contain', aby gra zawsze była w pełni widoczna, dodając czarne pasy jeśli trzeba */
+    display: block;
+    image-rendering: crisp-edges;
+    transition: filter 0.2s ease-in-out;
+    
+    /* Domyślny tryb wyświetlania, JS będzie go zmieniać na 'fill' lub 'contain' */
+    object-fit: calc(); 
 }
 
 #loadingOverlay {
@@ -246,13 +208,10 @@ body {
     height: 100vh;
     background-color: black;
     z-index: 9999;
-    
-    /* Zmieniamy układ na kolumnowy, aby postać była nad tekstem */
     display: flex;
     flex-direction: column; 
     justify-content: center;
     align-items: center;
-
     opacity: 0;
     visibility: hidden;
     transition: opacity 0.5s ease-in-out, visibility 0.5s ease-in-out;
@@ -265,9 +224,7 @@ body {
     pointer-events: auto;
 }
 
-/* NOWY STYL DLA PŁÓTNA POSTACI */
 #loadingCanvas {
-    /* Wyłączamy antyaliasing dla ostrego, pixelartowego wyglądu */
     image-rendering: pixelated;
     image-rendering: crisp-edges;
 }
@@ -275,7 +232,7 @@ body {
 #loadingPercentage {
     color: white;
     font-family: 'Segoe UI', monospace;
-    font-size: 1em; /* Nieco mniejszy, by zrobić miejsce dla postaci */
+    font-size: 1em;
     font-weight: bold;
 }
 
@@ -287,28 +244,25 @@ body {
     margin-bottom: 20px;
 }
 
-/* --- DODANA REGULACJA --- */
 .player-input-container p {
-    margin: 0; /* Zeruje domyślne marginesy akapitu, co rozwiązuje problem przesunięcia */
+    margin: 0;
 }
 
-/* Przeźroczyste tło dla kontenera inputu */
 .input-with-flag {
     display: flex;
     align-items: center;
-    background-color: transparent; /* WAŻNE */
+    background-color: transparent;
     border-radius: 4px;
     padding: 2px 5px;
     gap: 8px;
 }
 
-/* Upewnij się, że sam input jest też przezroczysty */
 .input-with-flag input {
     border: none;
     outline: none;
     padding: 8px 12px;
     font-size: 1.1em;
-    background-color: transparent; /* WAŻNE */
+    background-color: transparent;
     text-align: center;
 }
 
@@ -316,7 +270,6 @@ body {
     cursor: pointer;
 }
 
-/* Nowy, przezroczysty styl dla listy flag z animacją */
 .flag-list-container {
     position: absolute;
     top: 50%;
@@ -325,36 +278,27 @@ body {
     width: 320px;
     height: 250px;
     overflow-y: auto;
-    
-    /* Efekty wizualne */
     background-color: rgba(10, 10, 10, 0.719);
     backdrop-filter: blur(4px);
     -webkit-backdrop-filter: blur(7px);
-    
     border-radius: 8px;
     z-index: 10000;
     padding: 5px;
-
     box-sizing: border-box;
-    
-    /* Ustawienia animacji */
     opacity: 0;
     visibility: hidden;
     pointer-events: none;
     transition: opacity 0.3s ease, visibility 0.8s ease;
 }
 
-/* Klasa .visible, która aktywuje animację pojawienia się */
 .flag-list-container.visible {
     opacity: 1;
     visibility: visible;
     pointer-events: auto;
 }
 
-/* Ukrycie paska przewijania */
 .flag-list-container::-webkit-scrollbar { display: none; }
 .flag-list-container { -ms-overflow-style: none; scrollbar-width: none; }
-
 
 .flag-list-container img {
     cursor: pointer;
@@ -376,35 +320,31 @@ body {
     border: 0px solid #555;
     border-radius: 6px;
     text-align: center;
-    outline: none; /* Usuwa domyślną ramkę po kliknięciu */
+    outline: none;
 }
 
-
-/* Klasa, którą będziemy usuwać/dodawać w JS, aby ukryć ekran */
 #loadingOverlay:not(.visible) {
     opacity: 0;
     visibility: hidden;
-    pointer-events: none; /* Kiedy jest niewidoczny, nie blokuje kliknięć */
+    pointer-events: none;
 }
 
 #loadingLogs {
     position: absolute;
     bottom: 20px;
     right: 20px;
-    color: #a0a0a0; /* Szarawy kolor dla logów */
+    color: #a0a0a0;
     font-family: 'Courier New', Courier, monospace;
     font-size: 14px;
     text-align: right;
     line-height: 1.5;
 }
 
-
-
 #settings-window {
     position: fixed;
     top: 50%;
     left: 50%;
-    transform: translate(-50%, -50%) scale(0.95); /* Lekkie zmniejszenie dla animacji */
+    transform: translate(-50%, -50%) scale(0.95);
     width: 450px;
     background-color: rgba(30, 30, 30, 0.85);
     backdrop-filter: blur(8px);
@@ -415,8 +355,6 @@ body {
     z-index: 10001;
     color: white;
     font-family: 'Segoe UI', sans-serif;
-    
-    /* Ustawienia animacji */
     opacity: 0;
     visibility: hidden;
     pointer-events: none;
@@ -444,6 +382,46 @@ body {
     font-weight: bold;
     text-transform: uppercase;
     letter-spacing: 2px;
+    flex-grow: 1;
+}
+
+.settings-tabs {
+    display: flex;
+    gap: 8px;
+    margin: 0 20px;
+}
+
+.settings-tab {
+    width: 32px;
+    height: 32px;
+    border: 2px solid #555;
+    background-color: rgba(0,0,0,0.3);
+    border-radius: 5px;
+    cursor: pointer;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    transition: background-color 0.2s, border-color 0.2s;
+}
+
+.settings-tab img {
+    width: 24px;
+    height: 24px;
+    opacity: 0.6;
+    transition: opacity 0.2s;
+}
+
+.settings-tab:hover {
+    background-color: rgba(255,255,255,0.1);
+}
+
+.settings-tab.active {
+    border-color: #ffc107;
+    background-color: rgba(255, 193, 7, 0.2);
+}
+
+.settings-tab.active img {
+    opacity: 1;
 }
 
 .settings-close-btn {
@@ -456,6 +434,7 @@ body {
     justify-content: center;
     align-items: center;
     transition: background-color 0.2s;
+    flex-shrink: 0;
 }
 
 .settings-close-btn:hover {
@@ -469,9 +448,17 @@ body {
 
 .settings-content {
     padding: 25px 30px;
-    display: flex;
+    min-height: 250px;
+}
+
+.settings-panel {
+    display: none;
     flex-direction: column;
     gap: 20px;
+}
+
+.settings-panel.active {
+    display: flex;
 }
 
 .settings-row {
@@ -479,6 +466,7 @@ body {
     justify-content: space-between;
     align-items: center;
     font-size: 1.1em;
+    text-transform: capitalize;
 }
 
 .settings-control {
@@ -491,6 +479,37 @@ body {
     width: 80px;
     text-align: center;
     font-weight: bold;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+.mute-icon {
+    display: none; /* Domyślnie ukryta */
+    width: 24px;
+    height: 24px;
+}
+
+.settings-checkbox {
+    width: 32px;
+    height: 32px;
+    border: 2px solid #555;
+    background-color: rgba(0,0,0,0.3);
+    border-radius: 5px;
+    cursor: pointer;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    transition: background-color 0.2s;
+}
+
+.settings-checkbox:hover {
+    background-color: rgba(255,255,255,0.1);
+}
+
+.settings-checkbox img {
+    width: 24px;
+    height: 24px;
 }
 
 .arrow-left, .arrow-right {
@@ -505,7 +524,7 @@ body {
 }
 
 .arrow-right {
-    transform: scaleX(-1); /* Lustrzane odbicie */
+    transform: scaleX(-1);
 }
 
 .arrow-right:active {
@@ -526,21 +545,17 @@ body {
     transform: scale(0.95);
 }
 
-/* Styl dla istniejącego przycisku "Leave" */
 #leaveRoomBtn {
     position: absolute;
     top: 10px;
     left: 10px;
     z-index: 1001;
-    
-    height: 38px; /* Stała wysokość jest kluczowa dla pozycjonowania przycisku pod nim */
+    height: 38px;
     padding: 8px 15px;
-    
-    background-color: #dc3545; /* Kolor czerwony */
+    background-color: #dc3545;
     color: white;
     font-size: 1em;
     font-weight: bold;
-    
     border: none;
     border-radius: 5px;
     cursor: pointer;
@@ -556,25 +571,15 @@ body {
     transform: scale(0.95);
 }
 
-/* 2. Styl TYLKO dla przycisku "Settings" (ID: inGameSettingsBtn) */
 #inGameSettingsBtn {
     position: absolute;
     left: 10px;
     z-index: 1001;
-    
-    /* Pozycjonowanie: 
-       10px (góra przycisku Leave)
-       + 38px (wysokość przycisku Leave)
-       + 20px (Twój wymagany odstęp)
-       = 68px od góry */
     top: 58px; 
-    
     width: 38px;
     height: 38px;
-    padding: 8px; /* Mały wewnętrzny margines, by ikona nie dotykała krawędzi */
-    
-    background-color: #d88407c0; /* Kolor ŻÓŁTY */
-
+    padding: 8px;
+    background-color: #d88407c0;
     border-radius: 5px;
     cursor: pointer;
     box-sizing: border-box;
@@ -589,17 +594,14 @@ body {
     transform: scale(0.95);
 }
 
-/* 3. Styl dla obrazka wewnątrz przycisku "Settings" */
 #inGameSettingsBtn img {
     width: 100%;
     height: 100%;
-    display: block; /* Usuwa ewentualne dodatkowe miejsce pod obrazkiem */
+    display: block;
 }
 
 #mobile-controls {
-    /* Zmienna CSS kontrolująca ogólny rozmiar. 1.0 = 100% */
-    --mobile-ui-scale: 0.75; /* <--- TUTAJ KONTROLUJESZ ROZMIAR! (np. 0.8, 0.9, 1.0) */
-
+    --mobile-ui-scale: 0.75;
     position: fixed;
     bottom: 0;
     left: 0;
@@ -635,7 +637,6 @@ body {
     background-color: rgba(0, 0, 0, 0.7);
 }
 
-/* === D-Pad (przyciski kierunkowe) === */
 .d-pad {
     position: absolute;
     bottom: calc(140px * var(--mobile-ui-scale));
@@ -664,17 +665,14 @@ body {
 #mobile-down img { transform: rotate(-90deg); }
 #mobile-right img { transform: scaleX(-1); }
 
-/* === Przyciski Akcji (prawa strona) === */
 .action-buttons {
     position: absolute;
-    /* Ustawiamy punkt odniesienia, aby łatwiej pozycjonować przyciski */
     bottom: calc(40px * var(--mobile-ui-scale));
     right: calc(30px * var(--mobile-ui-scale));
 }
 
-/* Przycisk PPM (wędka) */
 .action-primary {
-    position: absolute; /* Wszystkie przyciski akcji pozycjonujemy absolutnie */
+    position: absolute;
     width: calc(100px * var(--mobile-ui-scale));
     height: calc(100px * var(--mobile-ui-scale));
     bottom: calc(70px * var(--mobile-ui-scale));
@@ -682,9 +680,9 @@ body {
     border-radius: 50%;
     border-width: 3px;
 }
+
 .action-primary img { width: 70%; height: auto; }
 
-/* Przycisk JUMP */
 .action-space {
     position: absolute;
     width: calc(80px * var(--mobile-ui-scale));
@@ -695,7 +693,6 @@ body {
     font-size: calc(1em * var(--mobile-ui-scale));
 }
 
-/* Małe przyciski akcji (E, T, F) */
 .action-small {
     position: absolute;
     width: calc(60px * var(--mobile-ui-scale));
@@ -707,7 +704,6 @@ body {
 #mobile-t { right: calc(120px * var(--mobile-ui-scale)); bottom: calc(150px * var(--mobile-ui-scale)); }
 #mobile-f { right: calc(128px * var(--mobile-ui-scale)); bottom: calc(225px * var(--mobile-ui-scale)); }
 
-/* === Przyciski przedmiotów (góra) === */
 .item-buttons {
     position: absolute;
     top: 20px;
@@ -715,7 +711,7 @@ body {
     transform: translateX(-50%);
     display: flex;
     gap: calc(15px * var(--mobile-ui-scale));
-    align-items: center; /* Dodane dla lepszego wyrównania */
+    align-items: center;
 }
 
 .item-button {
@@ -727,7 +723,7 @@ body {
 
 .social-link {
     position: absolute;
-    bottom: -60px; /* Pozycjonuje link poniżej przycisków menu */
+    bottom: -60px;
     left: 0;
     display: flex;
     align-items: center;
@@ -746,7 +742,7 @@ body {
 .social-link img {
     width: 40px;
     height: 40px;
-    border-radius: 50%; /* Tworzy kółko */
+    border-radius: 50%;
     border: 2px solid rgba(255, 255, 255, 0.3);
     transition: border-color 0.2s;
 }
@@ -755,7 +751,6 @@ body {
     border-color: #fff;
 }
 
-/* ================== POCZĄTEK ZMIANY ================== */
 .zoom-button {
     position: relative;
     width: calc(50px * var(--mobile-ui-scale));
@@ -769,4 +764,3 @@ body {
     height: 100%;
     object-fit: contain;
 }
-/* =================== KONIEC ZMIANY =================== */

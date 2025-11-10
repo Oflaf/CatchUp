@@ -408,11 +408,10 @@ class GameHost {
         this.room = null;
         this.gameLoopInterval = null;
         this.pingInterval = null;
-        this.weatherInterval = null; // <-- DODAJ TĘ LINIĘ
+        this.latencyPingInterval = null; // <-- DODAJ TĘ LINIĘ
+        this.weatherInterval = null;
         this.digCooldowns = {};
-
-// I DODAJ POD NIM LINIĘ:
-        this.miningCooldowns = {}; // <-- DODANA LINIA
+        this.miningCooldowns = {};
     }
 
     broadcast(message) {
@@ -555,6 +554,7 @@ class GameHost {
         
         this.gameLoopInterval = setInterval(() => this.updateGame(), GAME_TICK_RATE);
         this.pingInterval = setInterval(() => this.checkGuestHeartbeats(), PING_INTERVAL);
+        this.latencyPingInterval = setInterval(() => this._sendLatencyPings(), 2000); // <-- DODAJ TĘ LINIĘ (ping co 2 sekundy)
         this._changeWeather();
         this.weatherInterval = setInterval(() => this._changeWeather(), 60000);
 
@@ -567,14 +567,24 @@ class GameHost {
     stop() {
         if (this.gameLoopInterval) clearInterval(this.gameLoopInterval);
         if (this.pingInterval) clearInterval(this.pingInterval);
-        if (this.weatherInterval) clearInterval(this.weatherInterval); // <-- DODAJ TĘ LINIĘ
+        if (this.latencyPingInterval) clearInterval(this.latencyPingInterval); // <-- DODAJ TĘ LINIĘ
+        if (this.weatherInterval) clearInterval(this.weatherInterval);
         this.gameLoopInterval = null;
         this.pingInterval = null;
-        this.weatherInterval = null; // <-- DODAJ TĘ LINIĘ
+        this.latencyPingInterval = null; // <-- DODAJ TĘ LINIĘ
+        this.weatherInterval = null;
         this.room = null;
         console.log("[HOST-WORKER] Gra zatrzymana i zresetowana.");
     }
 
+    // <-- DODAJ CAŁĄ NOWĄ METODĘ PONIŻEJ -->
+    _sendLatencyPings() {
+        if (!this.room) return;
+        this.broadcast({
+            type: 'latencyPing',
+            payload: { timestamp: Date.now() }
+        });
+    }
     
 
     // <-- DODAJ CAŁĄ NOWĄ METODĘ PONIŻEJ -->
@@ -623,24 +633,23 @@ class GameHost {
     }
 
      addPlayer(peerId, initialPlayerData) {
-    console.log(`[HOST-WORKER] Gracz ${initialPlayerData.username} (${peerId}) dołącza.`);
+        console.log(`[HOST-WORKER] Gracz ${initialPlayerData.username} (${peerId}) dołącza.`);
 
-    const initialY = DEDICATED_GAME_HEIGHT - this.room.gameData.groundLevel - PLAYER_SIZE;
-    
-    this.room.players[peerId] = {
-        id: peerId, x: 50, y: initialY, color: initialPlayerData.color, username: initialPlayerData.username,
-        selectedFlag: initialPlayerData.selectedFlag || 'pl', // <-- DODANA TA LINIA
-        customizations: { ...initialPlayerData.customizations }, isJumping: false, velocityY: 0, 
-        direction: 1, velocityX: 0, hasLineCast: false, floatWorldX: null, floatWorldY: null, 
-        floatVelocityX: 0, floatVelocityY: 0, lineAnchorWorldX: null, lineAnchorWorldY: null, 
-        rodTipWorldX: null, rodTipWorldY: null,
-        meActionText: null, 
-        meActionExpiry: null,
-        // ======================= POCZĄTEK ZMIAN =======================
-        chatMessageText: null,
-        chatMessageExpiry: null
-        // ======================== KONIEC ZMIAN =========================
-    };
+        const initialY = DEDICATED_GAME_HEIGHT - this.room.gameData.groundLevel - PLAYER_SIZE;
+        
+        this.room.players[peerId] = {
+            id: peerId, x: 50, y: initialY, color: initialPlayerData.color, username: initialPlayerData.username,
+            selectedFlag: initialPlayerData.selectedFlag || 'pl',
+            customizations: { ...initialPlayerData.customizations }, isJumping: false, velocityY: 0, 
+            direction: 1, velocityX: 0, hasLineCast: false, floatWorldX: null, floatWorldY: null, 
+            floatVelocityX: 0, floatVelocityY: 0, lineAnchorWorldX: null, lineAnchorWorldY: null, 
+            rodTipWorldX: null, rodTipWorldY: null,
+            meActionText: null, 
+            meActionExpiry: null,
+            chatMessageText: null,
+            chatMessageExpiry: null,
+            latency: 0 // <-- DODAJ TĘ LINIĘ
+        };
         this.room.playerInputs[peerId] = { keys: {} };
         
         this.sendTo(peerId, {
@@ -660,33 +669,37 @@ class GameHost {
                     type: 'scoreboardUpdate',
                     payload: this.room.roomScoreboard
                 });
-            }, 250); // Małe opóźnienie, aby klient był gotowy
+            }, 250);
         }
     
-        
-        // ======================= POCZĄTEK ZMIAN =======================
-        // Wyślij nowemu graczowi informację o starowym haczyku.
-        // Robimy to w małym opóźnieniu, aby klient na pewno zdążył przetworzyć `roomJoined`.
         setTimeout(() => {
             this.sendTo(peerId, {
                 type: 'awardStarterItem',
                 payload: {
                     itemName: 'weedless',
-                    itemTier: 0, // Domyślny tier
+                    itemTier: 0,
                     targetSlot: 'hook'
                 }
             });
         }, 150);
 
         setTimeout(() => {
-        this.broadcast({
-                type: 'playerJoinedRoomNotification', // ZMIANA TUTAJ
+            this.broadcast({
+                type: 'playerJoinedRoomNotification',
                 payload: {
                     username: this.room.players[peerId].username
                 }
             });
         }, 100);
-        // ======================== KONIEC ZMIAN =========================
+        
+        setTimeout(() => {
+            this.sendTo(peerId, {
+                type: 'serverMessage',
+                payload: {
+                    message: 'You joined the room, say hello to others!'
+                }
+            });
+        }, 200);
         
         setTimeout(() => {
              this.broadcast({
@@ -748,14 +761,21 @@ class GameHost {
         if(!player) return;
 
         switch(actionData.type) {
-    // NOWA AKCJA: Obsługa odpowiedzi 'pong' od gościa
-    case 'pong':
-        if (this.room && this.room.players[peerId]) {
-            // === KLUCZOWA POPRAWKA ===
-            // Aktualizujemy czas ostatniej odpowiedzi od gracza.
-            this.room.players[peerId].lastPongTime = Date.now();
-        }
-        break;
+            // NOWA AKCJA: Obsługa odpowiedzi 'pong' od gościa
+            case 'pong':
+                if (this.room && this.room.players[peerId]) {
+                    this.room.players[peerId].lastPongTime = Date.now();
+                }
+                break;
+
+            // <-- DODAJ NOWY CASE PONIŻEJ -->
+            case 'latencyPong': {
+                if (player) {
+                    const rtt = Date.now() - actionData.payload.timestamp;
+                    player.latency = rtt;
+                }
+                break;
+            }
 
         
         case 'changeWeather': {

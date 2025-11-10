@@ -98,8 +98,6 @@ let lastPingTime = 0;
 let isPlayerInCampZone = false;
 let showCampPrompt = false;
 let timedTutorialsQueue = [];
-let isPlayerListVisible = false;
-let isNightSoundPlaying = false; // <-- DODAJ TĘ LINIĘ
 
 let gameHostWorker = null;
 let hostPeerConnections = {};
@@ -586,155 +584,6 @@ const COUNTRIES = [
 // ====================================================================
 // === SEKCJA NPC: Nowa klasa do zarządzania NPC ===
 // ====================================================================
-
-class BirdManager {
-    constructor() {
-        this.birds = [];
-        this.birdImages = {}; // Cache dla obrazków ptaków z różnych biomów
-        this.isAssetLoaded = false;
-        this.currentBiome = null;
-    }
-
-    /**
-     * Ładuje zasób graficzny ptaka dla określonego biomu.
-     * @param {string} biomeName - Nazwa biomu, dla którego ma być załadowany ptak.
-     */
-    loadBirdAsset(biomeName) {
-        if (this.currentBiome === biomeName && this.isAssetLoaded) {
-            return; // Zasób jest już załadowany
-        }
-        
-        this.currentBiome = biomeName;
-        this.isAssetLoaded = false;
-        this.birds = []; // Wyczyść ptaki przy zmianie biomu
-
-        const img = new Image();
-        img.src = `img/world/biome/${biomeName}/bird.png`;
-
-        img.onload = () => {
-            this.birdImages[biomeName] = img;
-            this.isAssetLoaded = true;
-            console.log(`Pomyślnie załadowano zasób ptaka dla biomu: ${biomeName}`);
-        };
-
-        img.onerror = () => {
-            this.isAssetLoaded = false;
-            console.warn(`Nie udało się załadować zasobu ptaka dla biomu: ${biomeName}`);
-        };
-    }
-
-    /**
-     * Tworzy nowego ptaka, który wylatuje zza krzaków.
-     * @param {object} player - Obiekt lokalnego gracza.
-     */
-    spawnBird(player) {
-        if (!this.isAssetLoaded) return;
-
-        const direction = Math.random() < 0.5 ? -1 : 1; // -1 = lewo, 1 = prawo
-        const speed = 430;
-        const angle = 32 * (Math.PI / 180);
-
-        const velocityX = Math.cos(angle) * speed * direction;
-        const velocityY = -Math.sin(angle) * speed;
-
-        const startX = player.x + (playerSize / 2) + (player.direction * 160);
-        const startY = player.y + 40;
-
-        const newBird = {
-            x: startX,
-            y: startY,
-            velocityX: velocityX,
-            velocityY: velocityY,
-            direction: direction,
-            animationFrame: 0,
-            animationTimer: 0,
-            scale: 3.42
-        };
-        
-        this.birds.push(newBird);
-        soundManager.play('bird'); // <-- DODAJ TĘ LINIĘ
-    }
-
-    /**
-     * Aktualizuje pozycję, animację i stan wszystkich ptaków.
-     * @param {number} deltaTime - Czas od ostatniej klatki w sekundach.
-     * @param {number} cameraX - Pozycja X kamery.
-     * @param {number} canvasWidth - Szerokość canvasa.
-     */
-    update(deltaTime, cameraX, canvasWidth) {
-        if (!this.isAssetLoaded) return;
-
-        for (let i = this.birds.length - 1; i >= 0; i--) {
-            const bird = this.birds[i];
-
-            // Aktualizacja pozycji
-            bird.x += bird.velocityX * deltaTime;
-            bird.y += bird.velocityY * deltaTime;
-
-            // Aktualizacja animacji (2 klatki)
-            bird.animationTimer += deltaTime;
-            if (bird.animationTimer > 0.12) { // Zmień klatkę co 120ms
-                bird.animationFrame = (bird.animationFrame + 1) % 2;
-                bird.animationTimer = 0;
-            }
-
-            // Usuń ptaka, jeśli wyleciał daleko poza ekran
-            const screenLeft = cameraX - 100;
-            const screenRight = cameraX + canvasWidth + 100;
-            if (bird.y < -100 || bird.x < screenLeft || bird.x > screenRight) {
-                this.birds.splice(i, 1);
-            }
-        }
-    }
-
-    /**
-     * Rysuje wszystkie aktywne ptaki na canvasie.
-     * @param {CanvasRenderingContext2D} ctx - Kontekst rysowania.
-     */
-    draw(ctx) {
-        const image = this.birdImages[this.currentBiome];
-        if (!this.isAssetLoaded || !image || this.birds.length === 0) return;
-
-        // Rozmiar pojedynczej klatki animacji
-        const FRAME_WIDTH = 32;
-        const FRAME_HEIGHT = 32;
-
-        this.birds.forEach(bird => {
-            // === POPRAWIONA LOGIKA ===
-            // Zmieniamy sourceX, aby poruszać się po klatkach w poziomie.
-            // Animacja ma klatki [0] i [1], więc sourceX będzie wynosić 0 lub 32.
-            const sourceX = bird.animationFrame * FRAME_WIDTH;
-            const sourceY = 0; // Oś Y pozostaje stała, bo klatki są w jednym rzędzie.
-            
-            const scaledSize = FRAME_WIDTH * bird.scale;
-
-            ctx.save();
-            ctx.translate(bird.x + scaledSize / 2, bird.y + scaledSize / 2);
-
-            // Odbicie lustrzane, jeśli ptak leci w prawo
-            if (bird.direction === 1) {
-                ctx.scale(-1, 1);
-            }
-
-            ctx.drawImage(
-                image,
-                sourceX, sourceY,           // sx, sy (źródło)
-                FRAME_WIDTH, FRAME_HEIGHT,  // sWidth, sHeight (rozmiar źródła)
-                -scaledSize / 2, -scaledSize / 2, // dx, dy (cel)
-                scaledSize, scaledSize      // dWidth, dHeight (rozmiar celu)
-            );
-
-            ctx.restore();
-        });
-    }
-
-    /**
-     * Czyści listę aktywnych ptaków.
-     */
-    clear() {
-        this.birds = [];
-    }
-}
 
 class NPCManager {
     constructor(drawPlayerFunc) {
@@ -1235,11 +1084,8 @@ pants_leg: {
 
 },
 shoes: {
-        'classic sneakers': 'img/character/custom/shoes/type1.png',
-        'heavy boots': 'img/character/custom/shoes/type2.png',
-        'red sneakers': 'img/character/custom/shoes/type3.png',
-        'sandals': 'img/character/custom/shoes/type4.png'
-    },
+    'shoes1': 'img/character/custom/shoes/type1.png'
+},
     items: {'rod':{path:'img/item/rod.png',width:playerSize*2,height:playerSize,pivotX_in_img:Math.round(20*(playerSize/128)),pivotY_in_round:(20*(playerSize/128))},'shovel':{path:'img/item/shovel.png',width:playerSize,height:playerSize,pivotX_in_img:playerSize/2,pivotY_in_img:playerSize/2},'pickaxe':{path:'img/item/pickaxe.png',width:playerSize,height:playerSize,pivotX_in_img:playerSize/2,pivotY_in_img:playerSize/2}, 'float':{path:'img/item/float.png',width:32,height:62,pivotX_in_img:FLOAT_SIZE/2,pivotY_in_img:FLOAT_SIZE/2}}
 };
 let localPlayer = { 
@@ -1334,7 +1180,7 @@ const customizationOptions = {
     beard: ['none', 'goatee', 'overgrown goatee', 'mustache', 'overgrown mustache', 'charlie?', 'unshaven', 'sailor'], 
     clothes: ['none', 'white t-shirt', 'black t-shirt', 'hawaii shirt', 'red hoodie', 'blue hoodie', 'skull t-shirt', 'red plaid vest', 'dark blue soccer shirt', 'green soccer shirt', 'light soccer shirt', 'denim vest', 'coquette dress', 'elegant shirt', 'employee shirt', '60s motorcyclist', '80s motorcyclist', 'hippie diy', 'pink nylon', 'orange nylon', 'pink shirt', 'green shirt', 'raincoat', 'purple sweater', 'aqua sweater', 'plaid suit', 'suit', 'black top', 'white top'], 
     pants: ['none', 'blue jeans', 'ripped jeans', 'black jeans', 'black skirt', 'black bell bottom jeans', 'blue bell bottom jeans', 'red shorts', 'black shorts', 'adventure pants', 'camo pants', 'camo shorts', 'fishnet stockings', 'punk pants', 'pink nylon', 'orange nylon', 'classic sweatpants', 'sweatpants', 'sweat shorts'], 
-    shoes: ['none', 'classic sneakers', 'heavy boots', 'red sneakers', 'sandals'],
+    shoes: ['none', 'shoes1'],
     skin: ['white fair tone', 'medium fair tone', 'olive tone', 'dark brown tone', 'black tone', 'pale white', 'warm tone'] // <-- DODANA LINIA
 };
 
@@ -1377,15 +1223,12 @@ const inventoryManager = new InventoryManager();
 const fishingManager = new FishingManager();
 const tradingManager = new TradingManager(inventoryManager, fishingManager);
 const totemManager = new TotemManager(inventoryManager);
-const soundtrackManager = new SoundtrackManager();
-const soundManager = new SoundManager(soundtrackManager); // Przekazujemy soundtrackManager do soundManagera
-const weatherManager = new WeatherManager();
+const soundManager = new SoundManager(); 
+const weatherManager = new WeatherManager(); 
 const cloudManager = new CloudManager();
 const scoreboardManager = new ScoreboardManager();
-
-    const dynamicObjectManager = new DynamicObjectManager(soundManager);
-    const birdManager = new BirdManager(); // <-- DODAJ TĘ LINIĘ
-    const dynamicObjectImages = {}; 
+const dynamicObjectManager = new DynamicObjectManager(soundManager); // <-- DODANA LINIA
+const dynamicObjectImages = {}; // <-- DODANA LINIA
 // ======================== KONIEC ZMIANY =========================
 
 // Teraz, gdy oba managery istnieją, możemy je ze sobą połączyć
@@ -2019,20 +1862,28 @@ function drawPlayer(p, baseImageSet = characterImages) {
         return;
     }
     ctx.save();
-    
-    let imageSet = baseImageSet;
-    if (p.id && !p.id.startsWith('npc_') && p.customizations && p.customizations.skin) {
-        const selectedSkin = SKIN_TONES.find(tone => tone.name === p.customizations.skin);
-        if (selectedSkin && selectedSkin.images.body) {
-            imageSet = selectedSkin.images;
-        } else {
-            imageSet = SKIN_TONES[0].images;
-        }
+
+    // ======================= POCZĄTEK ZMIAN - WYBÓR TEKSTUR SKÓRY =======================
+    let imageSet = baseImageSet; // Domyślnie używamy przekazanego zestawu (ważne dla NPC)
+
+// Jeśli rysujemy gracza (a nie NPC), sprawdźmy jego personalizację skóry.
+// NPC mają ID zaczynające się od "npc_", więc dla nich ten blok się nie wykona.
+if (p.id && !p.id.startsWith('npc_') && p.customizations && p.customizations.skin) { // <-- KLUCZOWA ZMIANA W WARUNKU
+    const selectedSkin = SKIN_TONES.find(tone => tone.name === p.customizations.skin);
+    if (selectedSkin && selectedSkin.images.body) { // Sprawdź, czy obrazki dla tego odcienia są załadowane
+        imageSet = selectedSkin.images;
+    } else {
+        // Jeśli coś pójdzie nie tak, użyj domyślnego odcienia
+        imageSet = SKIN_TONES[0].images;
     }
+}
+    // ======================== KONIEC ZMIAN - WYBÓR TEKSTUR SKÓRY =========================
     
+    // Efekt wizualny (podświetlenie) jest teraz kontrolowany przez nową flagę.
     if (p.isHighlighted === true) {
         ctx.filter = 'brightness(1.6)';
     }
+    // ======================== KONIEC ZMIANY ========================
 
     let a = 0, b = 0, c = 0, d = 0, e = 0, f = 0, g = 0, h = 0;
     const i = (Number(p.animationFrame || 0) % animationCycleLength) / animationCycleLength,
@@ -2076,30 +1927,14 @@ function drawPlayer(p, baseImageSet = characterImages) {
     const v = p.customizations || {};
     const playerClothes = v.clothes;
     const playerPants = v.pants;
-    const playerShoes = v.shoes;
 
-    // --- TYLNA NOGA ---
-    t(imageSet.leg, backLegOffsetX, 0, legPivotInImageX, legPivotInImageY, e); // 1. Rysuj skórę nogi
-    
-    // ======================= POCZĄTEK ZMIAN =======================
-    // 2. Rysuj buty na nodze (PRZED spodniami)
-    if (playerShoes && playerShoes !== 'none') {
-        const shoeImage = characterCustomImages.shoes[playerShoes];
-        if (shoeImage && shoeImage.complete) {
-            t(shoeImage, backLegOffsetX, 0, legPivotInImageX, legPivotInImageY, e);
-        }
-    }
-
-    // 3. Rysuj spodnie (NA butach i nodze)
+    t(imageSet.leg, backLegOffsetX, 0, legPivotInImageX, legPivotInImageY, e);
     if (playerPants && playerPants !== 'none') {
         const pantsLegImage = characterCustomImages.pants_leg[playerPants];
         if (pantsLegImage && pantsLegImage.complete) {
             t(pantsLegImage, backLegOffsetX, 0, legPivotInImageX, legPivotInImageY, e);
         }
     }
-    // ======================== KONIEC ZMIAN =========================
-
-    // --- TYLNA RĘKA I RESZTA ---
     t(imageSet.arm, backArmOffsetX, 0, originalArmPivotInImageX, originalArmPivotInImageY, c);
     
     if (playerClothes && "none" !== playerClothes) {
@@ -2107,28 +1942,13 @@ function drawPlayer(p, baseImageSet = characterImages) {
         if (clothesArmImage && clothesArmImage.complete) t(clothesArmImage, backArmOffsetX, 0, originalArmPivotInImageX, originalArmPivotInImageY, c);
     }
 
-    // --- PRZEDNIA NOGA ---
-    t(imageSet.leg, frontLegOffsetX, 0, legPivotInImageX, legPivotInImageY, d); // 1. Rysuj skórę nogi
-
-    // ======================= POCZĄTEK ZMIAN =======================
-    // 2. Rysuj buty na nodze (PRZED spodniami)
-    if (playerShoes && playerShoes !== 'none') {
-        const shoeImage = characterCustomImages.shoes[playerShoes];
-        if (shoeImage && shoeImage.complete) {
-            t(shoeImage, frontLegOffsetX, 0, legPivotInImageX, legPivotInImageY, d);
-        }
-    }
-
-    // 3. Rysuj spodnie (NA butach i nodze)
+    t(imageSet.leg, frontLegOffsetX, 0, legPivotInImageX, legPivotInImageY, d);
     if (playerPants && playerPants !== 'none') {
         const pantsLegImage = characterCustomImages.pants_leg[playerPants];
         if (pantsLegImage && pantsLegImage.complete) {
             t(pantsLegImage, frontLegOffsetX, 0, legPivotInImageX, legPivotInImageY, d);
         }
     }
-    // ======================== KONIEC ZMIAN =========================
-
-    // --- KORPUS I GŁOWA ---
     ctx.drawImage(imageSet.body, o, q + a, playerSize, playerSize);
 
     if (playerPants && playerPants !== 'none') {
@@ -2272,6 +2092,7 @@ function drawPlayer(p, baseImageSet = characterImages) {
             ctx.textAlign = "center";
             
             const chatText = p.chatMessageText;
+            // Umieść tekst czatu nad głową. Jeśli jest też komenda /me, umieść go jeszcze wyżej.
             const chatTextY = (p.meActionText && Date.now() < p.meActionExpiry) ? p.y - 58 + a : p.y - 36 + a;
             
             ctx.strokeStyle = 'black';
@@ -2952,7 +2773,6 @@ function onSuccessfulJoin(roomData, hostPeerId = null) {
     gameContainerDiv.style.display = 'block';
     resetMenuUI();
     showNotification(`Successfully joined room: "${currentRoom.name}"`, 'success');
-    soundManager.startBackgroundMusic('background');
     
     // NOWOŚĆ: Uruchom mechanizm sprawdzania hosta po stronie gościa
     if (!isHost) {
@@ -3070,109 +2890,7 @@ function changeWeather() {
     cloudManager.setWeather(newWeather); // <-- DODAJ TĘ LINIĘ
 }
 
-function drawPlayerList() {
-    ctx.save();
-    ctx.setTransform(1, 0, 0, 1, 0, 0); // Reset transformacji
-
-    const players = Object.values(playersInRoom);
-    if (players.length === 0) {
-        ctx.restore();
-        return;
-    }
-
-    // Definicje stylów
-    const PANEL_PADDING = 20;
-    const ROW_HEIGHT = 40;
-    const HEADER_HEIGHT = 50;
-    const PANEL_WIDTH = 400;
-    const PANEL_HEIGHT = HEADER_HEIGHT + (players.length * ROW_HEIGHT) + PANEL_PADDING;
-    const PANEL_X = (canvas.width / 2) - (PANEL_WIDTH / 2);
-    const PANEL_Y = (canvas.height / 2) - (PANEL_HEIGHT / 2);
-
-    // Tło
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.39)';
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.roundRect(PANEL_X, PANEL_Y, PANEL_WIDTH, PANEL_HEIGHT, 8);
-    ctx.fill();
-    ctx.stroke();
-
-    // Nagłówek
-    ctx.fillStyle = '#FFFFFF';
-    ctx.font = `bold 24px ${PIXEL_FONT}`;
-    ctx.textAlign = 'center';
-    ctx.fillText(`Players Online (${players.length})`, canvas.width / 2, PANEL_Y + 35);
-
-    // Funkcja pomocnicza do rysowania ikony Wi-Fi
-    const drawWifiIcon = (x, y, latency) => {
-        let bars = 0;
-        let color = '#F44336'; // Czerwony (słaby)
-
-        if (latency > 0 && latency < 75) { bars = 4; color = '#4CAF50'; } // Zielony (świetny)
-        else if (latency >= 75 && latency < 150) { bars = 3; color = '#9ccc65'; } // Jasnozielony (dobry)
-        else if (latency >= 150 && latency < 250) { bars = 2; color = '#FFC107'; } // Żółty (średni)
-        else if (latency >= 250) { bars = 1; } // Czerwony (słaby)
-
-        const barWidth = 6;
-        const barGap = 3;
-        const heights = [8, 13, 18, 23];
-
-        for (let i = 0; i < 4; i++) {
-            ctx.fillStyle = (i < bars) ? color : '#555'; // Szary dla nieaktywnych kresek
-            const barX = x + i * (barWidth + barGap);
-            const barY = y - heights[i];
-            ctx.fillRect(barX, barY, barWidth, heights[i]);
-        }
-    };
-
-    // Lista graczy
-    players.forEach((player, index) => {
-        const rowY = PANEL_Y + HEADER_HEIGHT + (index * ROW_HEIGHT) + (ROW_HEIGHT / 2);
-
-        // ======================= POCZĄTEK ZMIAN =======================
-        const FLAG_WIDTH = 24;
-        const FLAG_HEIGHT = 18;
-        const FLAG_PADDING = 10;
-        let currentX = PANEL_X + PANEL_PADDING;
-
-        // Rysowanie flagi gracza
-        const flagCode = player.selectedFlag || 'pl'; // Domyślna flaga na wszelki wypadek
-        let flagImg = flagImageCache[flagCode];
-        if (!flagImg) {
-            flagImg = new Image();
-            // Używamy mniejszego obrazka, aby szybciej się ładował
-            flagImg.src = `https://flagcdn.com/24x18/${flagCode.toLowerCase()}.png`;
-            flagImageCache[flagCode] = flagImg;
-        }
-
-        if (flagImg.complete && flagImg.naturalWidth > 0) {
-            const flagY = rowY - FLAG_HEIGHT / 2;
-            ctx.drawImage(flagImg, currentX, flagY, FLAG_WIDTH, FLAG_HEIGHT);
-        }
-
-        // Przesuń pozycję X dla nicku
-        currentX += FLAG_WIDTH + FLAG_PADDING;
-
-        // Nick gracza
-        ctx.font = `20px ${PIXEL_FONT}`;
-        ctx.textAlign = 'left';
-        ctx.textBaseline = 'middle';
-        ctx.fillText(player.username, currentX, rowY);
-        // ======================== KONIEC ZMIAN =========================
-
-        // Ikona połączenia (bez zmian)
-        drawWifiIcon(PANEL_X + PANEL_WIDTH - PANEL_PADDING - 60, rowY + 10, player.latency);
-    });
-
-    ctx.restore();
-}
-
 function gameLoop(currentTime) {
-
-    if (localPlayer.isWalking && Math.random() < 0.003) {
-            birdManager.spawnBird(localPlayer);
-        }
     // === POCZĄTEK ZMIAN: Okresowe logowanie pozycji ===
     
     function updateLocalPlayerMovement() {
@@ -3369,12 +3087,10 @@ function gameLoop(currentTime) {
     bobberAnimationTime += BOBBER_ANIMATION_SPEED;
     biomeManager.updateAnimations(deltaTime, localPlayer, currentRoom.gameData.groundLevel, cameraX, DEDICATED_GAME_WIDTH);
     cycleManager.update(deltaTime);
-        starManager.update(deltaTime);
-        npcManager.update(deltaTime);
-        cloudManager.update(deltaTime);
-        dynamicObjectManager.update(deltaTime);
-        birdManager.update(deltaTime, cameraX, canvas.width); // <-- DODAJ TĘ LINIĘ
-
+    starManager.update(deltaTime);
+    npcManager.update(deltaTime);
+    cloudManager.update(deltaTime);
+    dynamicObjectManager.update(deltaTime); // NOWA LINIA
     const groundY = currentRoom.gameData ? (DEDICATED_GAME_HEIGHT - currentRoom.gameData.groundLevel) : DEDICATED_GAME_HEIGHT;
     weatherManager.update(deltaTime, cameraX, canvas.width, canvas.height, currentZoomLevel, biomeManager.WATER_TOP_Y_WORLD, groundY);
 
@@ -3509,17 +3225,6 @@ function gameLoop(currentTime) {
         nightAlpha = 1 - ((angleDraw - FADE_OUT_START) / (FADE_OUT_END - FADE_OUT_START));
     }
 
-    // ================== POCZĄTEK NOWEGO KODU ==================
-    const isNight = nightAlpha > 0.5; // Próg, od którego zaczyna się "noc" dla dźwięku
-    if (isNight && !isNightSoundPlaying) {
-        soundManager.startLoop('night');
-        isNightSoundPlaying = true;
-    } else if (!isNight && isNightSoundPlaying) {
-        soundManager.stopLoop('night');
-        isNightSoundPlaying = false;
-    }
-    // =================== KONIEC NOWEGO KODU ====================
-
     // Przekaż współczynnik nocy do funkcji rysującej chmury
     cloudManager.draw(ctx, nightAlpha);
     
@@ -3541,15 +3246,14 @@ function gameLoop(currentTime) {
     
     const allCharacters = [...Object.values(playersInRoom), ...npcManager.npcs];
     allCharacters.sort((a,b)=>(a.y+playerSize)-(b.y+playerSize)).forEach(p => {
-            if (p.username) drawPlayer(p);
-            else npcManager.drawPlayer(p, npcManager.npcAssets);
-        });
+        if (p.username) drawPlayer(p);
+        else npcManager.drawPlayer(p, npcManager.npcAssets);
+    });
+
     
-        birdManager.draw(ctx); // <-- DODAJ TĘ LINIĘ
-    
-        drawWorldItems(ctx);
-    
-        if(currentRoom?.gameData?.biome){
+    drawWorldItems(ctx);
+
+    if(currentRoom?.gameData?.biome){
         const {biome:b,groundLevel:g} = currentRoom.gameData;
 
         
@@ -3628,15 +3332,8 @@ fishingManager.draw(ctx, localPlayer, bobberScreenPos, cameraX, currentZoomLevel
     fishingManager.updateAndDrawDugBaitAnimations(ctx, playersInRoom, cameraX, cameraY, currentZoomLevel);
      biomeManager.drawFrontLayer(ctx, cameraX, DEDICATED_GAME_WIDTH, currentZoomLevel, MIN_ZOOM, MAX_ZOOM);
     scoreboardManager.draw(ctx); 
-
-    // <-- DODAJ TEN BLOK PRZED requestAnimationFrame -->
-    if (isPlayerListVisible) {
-        drawPlayerList();
-    }
-
-    requestAnimationFrame(gameLoop);
+     requestAnimationFrame(gameLoop);
 }
-
 
 
 // ====================================================================
@@ -3934,7 +3631,6 @@ function onSuccessfulJoin(roomData, hostPeerId = null) {
         }
         npcManager.loadCurrentBiomeAssets(roomData.gameData.biome, () => npcManager.spawnNPCs(roomData.gameData));
         biomeManager.setBiome(roomData.gameData.biome);
-        birdManager.loadBirdAsset(roomData.gameData.biome); // <-- DODAJ TĘ LINIĘ
         biomeManager.setVillageData(roomData.gameData.villageType, roomData.gameData.villageXPosition, roomData.gameData.placedBuildings);
         biomeManager.initializeGroundPlants(roomData.gameData.groundPlants || []);
         biomeManager.initializeTrees(roomData.gameData.trees || []);
@@ -4005,15 +3701,7 @@ function onSuccessfulJoin(roomData, hostPeerId = null) {
     gameContainerDiv.style.display = 'block';
     resetMenuUI();
     showNotification(`Successfully joined room: "${currentRoom.name}"`, 'success');
-
-    // ======================= ZMIANA TUTAJ =======================
-    // ZAMIEŃ:
-    // soundManager.startBackgroundMusic('background');
-    // NA:
-    soundManager.startLoop('background'); // Uruchamiamy dźwięk lasu jako pętlę świata
-    soundtrackManager.start(); // Uruchamiamy właściwą muzykę
-    // ============================================================
-
+    
      loadingManager.updateProgress(100);
     setTimeout(() => { // Dajmy chwilę na 100%
         loadingManager.hide(() => {
@@ -4028,30 +3716,14 @@ function onSuccessfulJoin(roomData, hostPeerId = null) {
 
 function handleDataFromServer(data) {
     switch (data.type) {
-        // <-- DODAJ NOWY CASE PONIŻEJ -->
-        case 'latencyPing': {
-            if (!isHost) {
-                sendPlayerAction('latencyPong', { timestamp: data.payload.timestamp });
-            }
-            break;
+    case 'playerLeftRoom': {
+        const { peerId, username } = data.payload;
+        if (playersInRoom[peerId]) {
+            delete playersInRoom[peerId];
+            chatManager.addMessage(null, `${username} left the room.`, true);
         }
-
-        case 'playerLeftRoom': {
-            const { peerId, username } = data.payload;
-            if (playersInRoom[peerId]) {
-                delete playersInRoom[peerId];
-                chatManager.addMessage(null, `${username} left the room.`, true);
-            }
-            break;
-        }
-
-    // ======================= POCZĄTEK NOWEGO KODU =======================
-    // Obsługuje ogólne wiadomości od serwera (jako żółte powiadomienia na czacie).
-    case 'serverMessage': {
-        chatManager.addMessage(null, data.payload.message, true);
         break;
     }
-    // ======================== KONIEC NOWEGO KODU =========================
 
     case 'totemStateUpdate': {
             if (worldTotem && typeof worldTotem.setStateFromServer === 'function') {
@@ -4399,10 +4071,9 @@ function leaveCurrentRoomUI() {
     insectsInRoom = [];
     pierSupportData = [];
     worldItems = [];
-    worldTotem = null;
-    isNightSoundPlaying = false; // <-- DODAJ TĘ LINIĘ
+    worldTotem = null; // <-- NOWA LINIA: Resetowanie totemu przy wyjściu z pokoju
     npcManager.clear();
-        birdManager.clear(); // <-- DODAJ TĘ LINIĘ
+
     resetMenuUI();
     currentWorldWidth = DEDICATED_GAME_WIDTH * 2;
     biomeManager.worldWidth = currentWorldWidth;
@@ -4415,7 +4086,6 @@ function leaveCurrentRoomUI() {
     
     // === DODANA LINIA DO ZATRZYMANIA DŹWIĘKÓW ===
     soundManager.stopAllLoops();
-    soundtrackManager.stop(); // <<< DODAJ TĘ LINIĘ
     // ===========================================
 
     console.log('Cleanup complete. Returned to lobby.');
@@ -4442,12 +4112,14 @@ function getMousePosOnCanvas(canvas, evt) {
     // Pobierz rzeczywiste wymiary i pozycję elementu <canvas> na stronie
     const rect = canvas.getBoundingClientRect();
 
-    // Oblicz współczynniki skalowania między rozmiarem logicznym (wewnętrznym)
+    // Oblicz współczynniki skalowania między rozmiarem logicznym (1920x1080)
     // a rozmiarem, w jakim canvas jest faktycznie renderowany na ekranie.
     const scaleX = canvas.width / rect.width;
     const scaleY = canvas.height / rect.height;
 
-    // Przelicz pozycję myszy, biorąc pod uwagę skalowanie
+    // Przelicz pozycję myszy:
+    // 1. Weź pozycję myszy względem lewego górnego rogu wyrenderowanego płótna (evt.clientX - rect.left)
+    // 2. Przemnóż przez współczynnik skalowania, aby uzyskać współrzędne w logicznej przestrzeni gry (1920x1080)
     const mouseX = (evt.clientX - rect.left) * scaleX;
     const mouseY = (evt.clientY - rect.top) * scaleY;
 
@@ -4460,14 +4132,8 @@ document.addEventListener('keydown', (event) => {
     if (chatManager && chatManager.isFocused) {
         return;
     }
-    
-    // <-- DODAJ TEN BLOK NA GÓRZE -->
-    if (event.code === 'KeyY' && !isCustomizationMenuOpen) {
-        event.preventDefault();
-        isPlayerListVisible = true;
-        return; // Zakończ, aby nie aktywować innych funkcji
-    }
 
+    // NOWY BLOK - Dodaj go na początku, zaraz po powyższych warunkach
     if (event.code === 'KeyI' && !isCustomizationMenuOpen) {
         event.preventDefault();
         sendPlayerAction('createDynamicObject');
@@ -4743,11 +4409,6 @@ if (event.code === 'KeyT') {
 
 document.addEventListener('keyup', (event) => {
     if (currentRoom) {
-        // <-- DODAJ TEN BLOK NA GÓRZE -->
-        if (event.code === 'KeyY') {
-            isPlayerListVisible = false;
-        }
-
         delete keys[event.code];
 
         if ((event.code === 'ArrowLeft' || event.code === 'KeyA') && fishingManager.minigameBarDirection === -1) {
@@ -4979,13 +4640,10 @@ cycleManager.load();
 // === POCZĄTEK ZMIAN ===
 // Zdefiniuj ścieżki do dźwięków i rozpocznij ich ładowanie
 const soundPaths = {
-    'background': 'sound/background.mp3', // <-- DODAJ TĘ LINIĘ
-    'night': 'sound/night.mp3',           // <-- DODAJ TĘ LINIĘ
     'menuClick': 'sound/menu_click.mp3',
     'menuNavigate': 'sound/menu_navigate.mp3',
     'clothNavigate': 'sound/cloth_navigate.mp3',
     'walk': 'sound/walk.mp3',
-    'bird': 'sound/bird.mp3', // <-- DODAJ TĘ LINIĘ
     'walking_wood': 'sound/walking_wood.mp3', // <-- DODAJ TĘ LINIĘ
     'jump': 'sound/jump.mp3',
     'land': 'sound/land.mp3',
@@ -5020,6 +4678,7 @@ const soundPaths = {
     'gem_found': 'sound/gem_found.mp3',
     
 };
+
 soundManager.loadSounds(soundPaths);
 
 // WAŻNE: W tym miejscu nic nie zmieniamy. loadImages wciąż jest potrzebne,
@@ -5050,8 +4709,6 @@ fishingManager.onBaitConsumedCallback = () => {
     updatePlayerAudio();
     requestAnimationFrame(gameLoop);
 });
-
-
 
 function isPlayerOnPier() {
     if (!biomeManager || !biomeManager.placedPiers || biomeManager.placedPiers.length === 0) {
@@ -5117,7 +4774,6 @@ function updatePlayerAudio() {
 
 // Inicjalizacja Chatu
 const chatManager = new ChatManager();
-const settingsManager = new SettingsManager(soundManager); // Inicjalizacja managera ustawień
 setupFlagSelection();
 setupMobileControls();
 setupMobileControlsToggle();
