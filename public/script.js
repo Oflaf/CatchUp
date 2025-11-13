@@ -106,6 +106,8 @@ let hostPeerConnections = {};
 
 // === POCZĄTEK ZMIAN ===
 let worldTotem = null;
+let worldNoticeBoard = null; // <-- NOWA ZMIENNA
+let noticeBoardImage = null; // <-- DODAJ TĘ LINIĘ
 const totemImages = {};
 window.particleCharImage = null; // <-- DODAJ TĘ LINIĘ
 
@@ -139,8 +141,9 @@ const tutorialImagePaths = {
     info4: 'img/ui/info4.png',
     info5: 'img/ui/info5.png',
     info6: 'img/ui/info6.png',
-    info7: 'img/ui/info7.png', // <-- DODANA LINIA
-    info8: 'img/ui/info8.png'  // <-- DODANA LINIA
+    info7: 'img/ui/info7.png',
+    info8: 'img/ui/info8.png',
+    info9: 'img/ui/info9.png'  // <-- DODAJ TĘ LINIĘ
 };
 const tutorialImages = {};
 
@@ -253,6 +256,64 @@ class CloudManager {
     }
 }
 
+
+class NoticeBoard {
+    constructor(x, y, image, scale = 4) {
+        if (!image) {
+            console.error("NoticeBoard: Obrazek nie został przekazany do konstruktora.");
+            return;
+        }
+        this.image = image;
+        this.width = image.width * scale;
+        this.height = image.height * scale;
+        this.x = x - this.width / 2;
+        this.y = y - this.height;
+
+        // ================== POCZĄTEK ZMIANY 1 ==================
+        this.hasBeenReadByPlayer = false; // Domyślnie tablica jest nieprzeczytana
+        // =================== KONIEC ZMIANY 1 ===================
+    }
+
+    draw(ctx) {
+        if (this.image && this.image.complete) {
+            ctx.drawImage(this.image, this.x, this.y, this.width, this.height);
+        }
+
+        // ================== POCZĄTEK ZMIANY 2 ==================
+        // Rysuj pulsującą ikonkę, jeśli tablica nie została jeszcze przeczytana.
+        if (!this.hasBeenReadByPlayer) {
+            const iconImage = tutorialImages['info9'];
+            if (!iconImage || !iconImage.complete) return; // Upewnij się, że obrazek jest załadowany
+
+            const time = Date.now() / 1000;
+            const ICON_BASE_SCALE = 3.2;
+
+            // Animacja pulsowania (zmiana skali)
+            const pulseSpeed = 12;
+            const pulseAmount = 0.2;
+            const pulseScale = ICON_BASE_SCALE + Math.sin(time * pulseSpeed) * pulseAmount;
+            
+            // Animacja bujania (zmiana rotacji)
+            const swaySpeed = TUTORIAL_ROCKING_SPEED * 0.8;
+            const swayAngleDegrees = TUTORIAL_ROCKING_ANGLE_DEGREES * 1.2;
+            const swayAngle = Math.sin(time * swaySpeed) * (swayAngleDegrees * Math.PI / 180);
+
+            // Obliczenia wymiarów i pozycji
+            const iconWidth = iconImage.width * pulseScale;
+            const iconHeight = iconImage.height * pulseScale;
+            const iconX = this.x + this.width - (iconWidth / 3); // Pozycja X w prawym górnym rogu z offsetem
+            const iconY = this.y + (iconHeight / 3); // Pozycja Y z offsetem
+
+            // Rysowanie z transformacjami
+            ctx.save();
+            ctx.translate(iconX, iconY);
+            ctx.rotate(swayAngle);
+            ctx.drawImage(iconImage, -iconWidth / 2, -iconHeight / 2, iconWidth, iconHeight);
+            ctx.restore();
+        }
+        // =================== KONIEC ZMIANY 2 ===================
+    }
+}
 class StarManager {
     constructor() {
         this.stars = [];
@@ -1011,7 +1072,7 @@ const characterImagePaths = SKIN_TONES[0].paths; // Domyślne ścieżki
 const characterImages = SKIN_TONES[0].images; // Domyślne załadowane obrazki
 
 // ======================== KONIEC ZMIAN - KOLOR SKÓRY =========================
-const customizationUIPaths = { frame: 'img/ui/frame.png' };
+const customizationUIPaths = { frame: 'img/ui/frame.png', paper: 'img/ui/paper.png' }; // <-- ZMIANA
 const fishingUIPaths = { strike: 'img/ui/strike.png', fishframe: 'img/ui/fishframe.png' };
 const baitImagePaths = {
     //robaki
@@ -1348,6 +1409,8 @@ let lastTime = 0;
 let campPromptAlpha = 0;
 let npcPromptAlpha = 0; // <--- DODAJ TĘ LINIĘ
 let totemPromptAlpha = 0; // <-- NOWA ZMIENNA DLA TOTEMU
+let noticeBoardPromptAlpha = 0; // <-- NOWA ZMIENNA
+let activePromptType = 'none'; // <-- DODAJ TĘ LINIĘ
 const PROMPT_FADE_SPEED = 4;
 let wasPlayerOnGround = true; // <-- NOWA ZMIENNA
 
@@ -1602,6 +1665,68 @@ function drawCampPrompt() {
     ctx.restore();
 }
 
+
+function drawNoticeBoardPrompt() {
+    if (noticeBoardPromptAlpha <= 0) return;
+
+    const image = tutorialImages['info6'];
+    if (!image || !image.complete) return;
+
+    const textBefore = "press ";
+    const textAfter = " to check notice board"; // <-- ZMIENIONY TEKST
+    const PROMPT_FONT_SIZE = 16;
+    const PROMPT_FONT_FAMILY = `'Segoe UI', sans-serif`;
+    const PROMPT_TEXT_COLOR = 'white';
+    const PROMPT_OUTLINE_COLOR = 'black';
+    const PROMPT_OUTLINE_WIDTH = 4;
+    const SPACING = -24;
+
+    const playerScreenX = (localPlayer.x - cameraX + playerSize / 2) * currentZoomLevel;
+    const playerScreenY = (localPlayer.y - cameraY) * currentZoomLevel;
+    const drawHeight = PROMPT_FONT_SIZE * 6.5;
+    const drawWidth = (image.width / image.height) * drawHeight;
+    ctx.font = `bold ${PROMPT_FONT_SIZE}px ${PROMPT_FONT_FAMILY}`;
+    const textBeforeWidth = ctx.measureText(textBefore).width;
+    const textAfterWidth = ctx.measureText(textAfter).width;
+    const totalWidth = textBeforeWidth + drawWidth + textAfterWidth + SPACING * 2;
+    const promptY = playerScreenY + TUTORIAL_Y_OFFSET - drawHeight;
+    
+    const time = Date.now() / 1000;
+    const mainRockingAngle = Math.sin(time * (TUTORIAL_ROCKING_SPEED * 0.5)) * ((TUTORIAL_ROCKING_ANGLE_DEGREES * 0.4) * Math.PI / 180);
+    const imageRockingAngle = Math.sin(time * (TUTORIAL_ROCKING_SPEED * 1.2)) * ((TUTORIAL_ROCKING_ANGLE_DEGREES * 0.8) * Math.PI / 180);
+    
+    ctx.save();
+    ctx.globalAlpha = noticeBoardPromptAlpha; // Używamy nowej zmiennej alpha
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.translate(playerScreenX, promptY + drawHeight / 2);
+    ctx.rotate(mainRockingAngle);
+
+    ctx.font = `bold ${PROMPT_FONT_SIZE}px ${PROMPT_FONT_FAMILY}`;
+    ctx.strokeStyle = PROMPT_OUTLINE_COLOR;
+    ctx.lineWidth = PROMPT_OUTLINE_WIDTH;
+    ctx.fillStyle = PROMPT_TEXT_COLOR;
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'middle';
+
+    let currentX = -totalWidth / 2;
+
+    ctx.strokeText(textBefore, currentX, 0);
+    ctx.fillText(textBefore, currentX, 0);
+    currentX += textBeforeWidth + SPACING;
+
+    ctx.save();
+    ctx.translate(currentX + drawWidth / 2, 0); 
+    ctx.rotate(imageRockingAngle);
+    ctx.drawImage(image, -drawWidth / 2, -drawHeight / 2, drawWidth, drawHeight);
+    ctx.restore(); 
+
+    currentX += drawWidth + SPACING;
+
+    ctx.strokeText(textAfter, currentX, 0);
+    ctx.fillText(textAfter, currentX, 0);
+
+    ctx.restore();
+}
 function drawNpcTradePrompt() {
     if (npcPromptAlpha <= 0) return;
 
@@ -1677,7 +1802,7 @@ function loadImages(callback) {
 
     // Zmodyfikuj tę linię, aby zawierała nowe ścieżki
     const basePaths = { ...customizationUIPaths, ...tutorialImagePaths, ...fishingUIPaths, ...baitImagePaths, ...hookImagePaths, ...weatherImagePaths, ...mineralImagePaths, ...dynamicObjectImagePaths };
-    const allPaths = { ...basePaths };
+    const allPaths = { ...basePaths, notice_board: 'img/world/notice_board.png' };
     
     // Dodaj wszystkie ścieżki skinów do ogólnej puli
     SKIN_TONES.forEach(tone => {
@@ -1785,6 +1910,7 @@ function loadImages(callback) {
         const i = new Image;
         i.src = allPaths[h];
         i.onload = () => {
+            
             // Sprawdź, czy to obrazek części ciała
             let isCharacterPart = false;
             SKIN_TONES.forEach(tone => {
@@ -1825,6 +1951,12 @@ function loadImages(callback) {
         } else {
             weatherImages[h] = i;
         }}
+        if (h === 'paper') { // <-- DODAJ TEN BLOK
+        noticeBoardManager.paperImage = i;
+    }
+        if (h === 'notice_board') {
+                noticeBoardImage = i;
+            }
             f();
         };
         i.onerror = () => { console.error(`Image loading error: ${i.src}`), f() };
@@ -2803,12 +2935,12 @@ function initializePeer(callback) {
 
     // === KONFIGURACJA PRODUKCYJNA (dla serwera Render) ===
     
-const peerConfig = {
-    host: 'server-port-yxen.onrender.com', // Bez https:// dla bezpieczeństwa
-    path: '/', // <--- NA TĘ WARTOŚĆ
-    secure: true,
-    debug: 3
-};
+    const peerConfig = {
+        host: 'https://server-port-yxen.onrender.com', 
+        path: '/peerjs',
+        secure: true,
+        debug: 3
+    };
     
     
     // =======================
@@ -3001,8 +3133,10 @@ function updateTutorialAnimations() {
     }
 }
 
+
+
 function sendPlayerInput() {
-    const isPlayerInputLocked = isCustomizationMenuOpen;
+    const isPlayerInputLocked = isCustomizationMenuOpen || noticeBoardManager.isOpen; // <-- ZMIANA
     const inputPayload = {
         keys: isPlayerInputLocked ? {} : keys,
         currentMouseX: localPlayer.currentMouseX,
@@ -3200,6 +3334,17 @@ function gameLoop(currentTime) {
     }
 
     // === NOWY BLOK: Aktualizacja logiki totemu ===
+    if (worldNoticeBoard && !worldNoticeBoard.isPositioned && typeof biomeManager.campsiteX === 'number' && biomeManager.campsiteX !== 0) {
+        
+        const finalBoardX = biomeManager.campsiteX + (biomeManager.campsiteWidth / 2) - 500;
+        worldNoticeBoard.x = finalBoardX - worldNoticeBoard.width / 2; // Ustawiamy właściwą pozycję
+        
+        worldNoticeBoard.isPositioned = true; // Ustawiamy flagę, żeby nie robić tego ponownie
+        console.log('Pozycja NoticeBoard została skorygowana w pętli gry.');
+    }
+    // =================== KONIEC NOWEGO KODU ===================
+
+    // === NOWY BLOK: Aktualizacja logiki totemu ===
     if (worldTotem) {
         worldTotem.update(deltaTime);
     }
@@ -3218,100 +3363,78 @@ function gameLoop(currentTime) {
     soundManager.setWeatherSound(targetWeatherSound);
     // ===============================================================
 
-     if (currentRoom && currentRoom.gameData) {
-        const playerRect = { x: localPlayer.x, y: localPlayer.y, width: playerSize, height: playerSize };
+    if (currentRoom && currentRoom.gameData) {
         const playerCenterX = localPlayer.x + playerSize / 2;
 
-        // === POCZĄTEK NOWEJ LOGIKI INTERAKCJI ===
-        const TOTEM_INTERACTION_RADIUS = 150;
-        let isPlayerInTotemZone = false;
+        // --- Krok 1: Sprawdź wszystkie strefy interakcji ---
+        const isPlayerInCampZone = (localPlayer.x < (biomeManager.campsiteX + biomeManager.campsiteWidth) &&
+                                  (localPlayer.x + playerSize) > biomeManager.campsiteX);
 
-        // Sprawdź odległość od totemu, jeśli istnieje
-        if (worldTotem) {
-            const totemCenterX = worldTotem.x + worldTotem.width / 2;
-            const distanceToTotem = Math.abs(playerCenterX - totemCenterX);
-            if (distanceToTotem < TOTEM_INTERACTION_RADIUS) {
-                isPlayerInTotemZone = true;
-            }
-            // Zaktualizuj stan podświetlenia totemu
-            worldTotem.isHighlighted = isPlayerInTotemZone;
-        }
-        // === KONIEC NOWEJ LOGIKI INTERAKCJI ===
-
-        const campRect = {
-            x: biomeManager.campsiteX || 0,
-            y: biomeManager.campsiteY || 0,
-            width: biomeManager.campsiteWidth || 256,
-            height: biomeManager.campsiteHeight || 256
-        };
-        isPlayerInCampZone = (playerRect.x < campRect.x + campRect.width &&
-                              playerRect.x + playerRect.width > campRect.x &&
-                              playerRect.y < campRect.y + campRect.height &&
-                              playerRect.y + playerRect.height > campRect.y);
-        
-        let activeInteraction = { type: 'none', distance: Infinity };
-
-        if (isPlayerInCampZone && tutorial.state === 'finished') {
-            const campCenterX = campRect.x + campRect.width / 2;
-            activeInteraction = {
-                type: 'camp',
-                distance: Math.abs(playerCenterX - campCenterX)
-            };
-        }
-        
-        closestNpc = null; 
+        closestNpc = null;
+        let isPlayerNearNpc = false;
         let isPlayerStillNearTradingNpc = false;
-
         npcManager.npcs.forEach(npc => {
-            const npcCenterX = npc.x + playerSize / 2;
-            const distance = Math.abs(playerCenterX - npcCenterX);
-
+            const distance = Math.abs(playerCenterX - (npc.x + playerSize / 2));
             if (tradingManager.isTradeWindowOpen && tradingManager.activeNpc?.id === npc.id && distance < npcManager.INTERACTION_RADIUS) {
                 isPlayerStillNearTradingNpc = true;
             }
-
-            if (distance < npcManager.INTERACTION_RADIUS && distance < activeInteraction.distance) {
-                activeInteraction = { type: 'npc', distance: distance };
-                closestNpc = npc;
+            if (distance < npcManager.INTERACTION_RADIUS) {
+                if (!closestNpc || distance < Math.abs(playerCenterX - (closestNpc.x + playerSize / 2))) {
+                    closestNpc = npc;
+                }
             }
         });
-
+        isPlayerNearNpc = !!closestNpc;
         if (tradingManager.isTradeWindowOpen && !isPlayerStillNearTradingNpc) {
             tradingManager.stopTrading();
         }
-
         npcManager.npcs.forEach(npc => {
             npc.isHighlighted = (npc === closestNpc);
             npc.isInteracting = (tradingManager.isTradeWindowOpen && tradingManager.activeNpc?.id === npc.id);
         });
 
-        showCampPrompt = (activeInteraction.type === 'camp');
-        let showNpcTradePrompt = (activeInteraction.type === 'npc');
-        let showTotemPrompt = isPlayerInTotemZone; // <-- NOWA ZMIENNA
+        let isPlayerInTotemZone = false;
+        if (worldTotem) {
+            const distance = Math.abs(playerCenterX - (worldTotem.x + worldTotem.width / 2));
+            isPlayerInTotemZone = distance < 150;
+            worldTotem.isHighlighted = isPlayerInTotemZone;
+        }
 
-        if (biomeManager.setPlayerProximity) {
-            biomeManager.setPlayerProximity(showCampPrompt);
+        let isPlayerInNoticeBoardZone = false;
+        if (worldNoticeBoard) {
+            const distance = Math.abs(playerCenterX - (worldNoticeBoard.x + worldNoticeBoard.width / 2));
+            isPlayerInNoticeBoardZone = distance < 120;
         }
         
-        if (showCampPrompt) {
-            campPromptAlpha = Math.min(1, campPromptAlpha + PROMPT_FADE_SPEED * deltaTime);
-        } else {
-            campPromptAlpha = Math.max(0, campPromptAlpha - PROMPT_FADE_SPEED * deltaTime);
+        // --- Krok 2: Ustaw priorytet dla aktywnej podpowiedzi ---
+        activePromptType = 'none';
+
+        if (tutorial.state !== 'finished') {
+            // Główny samouczek ma najwyższy priorytet
+            activePromptType = 'none';
+        } else if (isPlayerNearNpc && !tradingManager.isTradeWindowOpen) {
+            activePromptType = 'npc';
+        } else if (isPlayerInTotemZone) {
+            activePromptType = 'totem';
+        } else if (isPlayerInNoticeBoardZone) {
+            activePromptType = 'notice_board';
+        } else if (isPlayerInCampZone) {
+            activePromptType = 'camp';
+        }
+        
+        // Przekaż informację o bliskości ogniska do BiomeManagera
+        if (biomeManager.setPlayerProximity) {
+            biomeManager.setPlayerProximity(activePromptType === 'camp');
         }
 
-        if (showNpcTradePrompt && !tradingManager.isTradeWindowOpen) {
-            npcPromptAlpha = Math.min(1, npcPromptAlpha + PROMPT_FADE_SPEED * deltaTime);
-        } else {
-            npcPromptAlpha = Math.max(0, npcPromptAlpha - PROMPT_FADE_SPEED * deltaTime);
-        }
-
-        // === NOWA LOGIKA DLA PRZEZROCZYSTOŚCI KOMUNIKATU TOTEMU ===
-        if (showTotemPrompt) {
-            totemPromptAlpha = Math.min(1, totemPromptAlpha + PROMPT_FADE_SPEED * deltaTime);
-        } else {
-            totemPromptAlpha = Math.max(0, totemPromptAlpha - PROMPT_FADE_SPEED * deltaTime);
-        }
+        // --- Krok 3: Zaktualizuj przezroczystość na podstawie jednego aktywnego typu ---
+        campPromptAlpha = Math.max(0, Math.min(1, campPromptAlpha + (activePromptType === 'camp' ? PROMPT_FADE_SPEED : -PROMPT_FADE_SPEED) * deltaTime));
+        npcPromptAlpha = Math.max(0, Math.min(1, npcPromptAlpha + (activePromptType === 'npc' ? PROMPT_FADE_SPEED : -PROMPT_FADE_SPEED) * deltaTime));
+        totemPromptAlpha = Math.max(0, Math.min(1, totemPromptAlpha + (activePromptType === 'totem' ? PROMPT_FADE_SPEED : -PROMPT_FADE_SPEED) * deltaTime));
+        noticeBoardPromptAlpha = Math.max(0, Math.min(1, noticeBoardPromptAlpha + (activePromptType === 'notice_board' ? PROMPT_FADE_SPEED : -PROMPT_FADE_SPEED) * deltaTime));
     }
+
+
     if (insectsInRoom.length > 0 && currentRoom.gameData) {
         const worldWidth = currentRoom.gameData.worldWidth || 0;
         insectsInRoom.forEach(insect => {
@@ -3431,7 +3554,8 @@ function gameLoop(currentTime) {
     inventoryManager.origin = inventoryOrigin;
     tradingManager.update(deltaTime);
     inventoryManager.update(deltaTime);
-    totemManager.update(deltaTime); // <-- DODAJ TĘ LINIĘ
+    totemManager.update(deltaTime);
+    noticeBoardManager.update(deltaTime); 
     if (localPlayer.isCasting) {
         localPlayer.fishingBarTime += FISHING_SLIDER_SPEED;
         localPlayer.fishingBarSliderPosition = (Math.sin(localPlayer.fishingBarTime) + 1) / 2;
@@ -3534,6 +3658,10 @@ function gameLoop(currentTime) {
     }
     
     // === POCZĄTEK ZMIAN: Rysowanie totemu ===
+    if (worldNoticeBoard) { // <-- DODAJ TEN BLOK
+        worldNoticeBoard.draw(ctx);
+    }
+
     if (worldTotem) {
         worldTotem.draw(ctx);
     }
@@ -3595,7 +3723,8 @@ function gameLoop(currentTime) {
     drawTutorialHelper();
     drawCampPrompt();
     drawNpcTradePrompt();
-    drawTotemPrompt(); // <-- DODAJ TĘ LINIĘ
+    drawTotemPrompt();
+    drawNoticeBoardPrompt(); // <-- DODAJ TĘ LINIĘ
     drawTimedTutorials();
     if (isCustomizationMenuOpen) {
 drawCustomizationMenu();
@@ -3627,7 +3756,9 @@ fishingManager.draw(ctx, localPlayer, bobberScreenPos, cameraX, currentZoomLevel
 
     fishingManager.updateAndDrawDugBaitAnimations(ctx, playersInRoom, cameraX, cameraY, currentZoomLevel);
      biomeManager.drawFrontLayer(ctx, cameraX, DEDICATED_GAME_WIDTH, currentZoomLevel, MIN_ZOOM, MAX_ZOOM);
-    scoreboardManager.draw(ctx); 
+    noticeBoardManager.draw(ctx); // <-- DODAJ TĘ LINIĘ
+    scoreboardManager.draw(ctx);
+
 
     // <-- DODAJ TEN BLOK PRZED requestAnimationFrame -->
     if (isPlayerListVisible) {
@@ -3936,7 +4067,22 @@ function onSuccessfulJoin(roomData, hostPeerId = null) {
         biomeManager.setBiome(roomData.gameData.biome);
         birdManager.loadBirdAsset(roomData.gameData.biome); // <-- DODAJ TĘ LINIĘ
         biomeManager.setVillageData(roomData.gameData.villageType, roomData.gameData.villageXPosition, roomData.gameData.placedBuildings);
-        biomeManager.initializeGroundPlants(roomData.gameData.groundPlants || []);
+
+        if (roomData.gameData && noticeBoardImage && noticeBoardImage.complete) {
+    const groundY = DEDICATED_GAME_HEIGHT - roomData.gameData.groundLevel;
+    let boardX = 0; // Ustaw TWARDO pozycję startową na 0.
+    let isPositioned = false;
+
+    // Spróbujmy od razu ustawić dobrą pozycję, jeśli dane są jakimś cudem dostępne
+    if (typeof biomeManager.campsiteX === 'number' && biomeManager.campsiteX !== 0) {
+        boardX = biomeManager.campsiteX + (biomeManager.campsiteWidth / 2) - 500;
+        isPositioned = true;
+    }
+
+    worldNoticeBoard = new NoticeBoard(boardX, groundY, noticeBoardImage);
+    worldNoticeBoard.isPositioned = isPositioned; // Zapisujemy flagę, czy pozycja jest już finalna
+}
+             biomeManager.initializeGroundPlants(roomData.gameData.groundPlants || []);
         biomeManager.initializeTrees(roomData.gameData.trees || []);
         if (biomeManager.initializePiers) biomeManager.initializePiers(roomData.gameData.piers || []);
         if (biomeManager.initializeObstacles) biomeManager.initializeObstacles(roomData.gameData.obstacles || []);
@@ -4400,6 +4546,7 @@ function leaveCurrentRoomUI() {
     pierSupportData = [];
     worldItems = [];
     worldTotem = null;
+    worldNoticeBoard = null; // <-- DODAJ TĘ LINIĘ
     isNightSoundPlaying = false; // <-- DODAJ TĘ LINIĘ
     npcManager.clear();
         birdManager.clear(); // <-- DODAJ TĘ LINIĘ
@@ -4461,11 +4608,10 @@ document.addEventListener('keydown', (event) => {
         return;
     }
     
-    // <-- DODAJ TEN BLOK NA GÓRZE -->
     if (event.code === 'KeyY' && !isCustomizationMenuOpen) {
         event.preventDefault();
         isPlayerListVisible = true;
-        return; // Zakończ, aby nie aktywować innych funkcji
+        return;
     }
 
     if (event.code === 'KeyI' && !isCustomizationMenuOpen) {
@@ -4474,72 +4620,72 @@ document.addEventListener('keydown', (event) => {
         return;
     }
 
-    // ======================= POCZĄTEK ZMIAN =======================
     if (inventoryManager.isOpen && event.code === 'KeyQ') {
         event.preventDefault();
-
-        // Wyrzucamy przedmiot pod kursorem tylko, jeśli nie trzymamy innego w ręku
         if (!inventoryManager.heldItem) {
             const hoveredSlot = inventoryManager._getHoveredSlot();
-
             if (hoveredSlot && hoveredSlot.item) {
                 const droppedItem = { ...hoveredSlot.item };
-                hoveredSlot.item = null; // Usuń przedmiot ze slotu
-
-                // Wyślij informację do hosta o wyrzuceniu przedmiotu
-                sendPlayerAction('dropItem', {
-                    name: droppedItem.name,
-                    tier: droppedItem.tier
-                });
-
-                // Odtwórz dźwięk
+                hoveredSlot.item = null;
+                sendPlayerAction('dropItem', { name: droppedItem.name, tier: droppedItem.tier });
                 soundManager.play('throw');
             }
         }
-        return; // Zakończ dalsze przetwarzanie
+        return;
     }
-    // ======================== KONIEC ZMIAN =========================
 
+    // ======================= POCZĄTEK POPRAWKI =======================
+    // Ujednolicona obsługa klawisza 'F' oparta na activePromptType
+    if (noticeBoardManager.isOpen) {
+    if (event.code === 'ArrowRight') {
+        noticeBoardManager.nextNotice();
+    } else if (event.code === 'ArrowLeft') {
+        noticeBoardManager.previousNotice();
+    } else if (event.code === 'ArrowUp' || event.code === 'ArrowDown') {
+        noticeBoardManager.toggleZOrder();
+    }
+    
+    // Zapobiegaj ruchowi gracza, gdy tablica jest otwarta
+    event.preventDefault(); 
+    // Nie kończymy tutaj (return), aby 'F' i 'Escape' mogły zamknąć tablicę
+}
+    
+    // Zmodyfikuj obsługę klawisza F
     if (event.code === 'KeyF' && tutorial.state === 'finished') {
-        const playerCenterX = localPlayer.x + playerSize / 2;
-        let isPlayerInTotemZone = false;
-        if (worldTotem) {
-            const totemCenterX = worldTotem.x + worldTotem.width / 2;
-            const distanceToTotem = Math.abs(playerCenterX - totemCenterX);
-            if (distanceToTotem < 150) { // Użyj tego samego promienia co w gameLoop
-                isPlayerInTotemZone = true;
-            }
-        }
+        event.preventDefault();
 
-        // === NOWA LOGIKA INTERAKCJI Z TOTEMEM ===
-        if (isPlayerInTotemZone) {
-            event.preventDefault();
-            totemManager.toggleUI(); // To jest prawidłowe wywołanie
-            return;
+        // Używamy zmiennej 'activePromptType' obliczonej w gameLoop, aby zdecydować, co zrobić
+        switch (activePromptType) {
+            case 'npc':
+                if (closestNpc) {
+                    tradingManager.toggleTrading(closestNpc, biomeManager.currentBiomeName);
+                }
+                break;
+            case 'totem':
+                totemManager.toggleUI();
+                break;
+            case 'notice_board':
+                noticeBoardManager.toggleUI(); // <-- POPRAWKA
+                break;
+            case 'camp':
+                if (!loadingManager.isVisible) {
+                    soundManager.play('camp');
+                    transitionToNewRoom();
+                }
+                break;
+            // Jeśli activePromptType to 'none', nic się nie dzieje
         }
-
-        // Używamy globalnej zmiennej `closestNpc`, która jest aktualizowana w gameLoop
-        if (closestNpc) {
-            event.preventDefault();
-            tradingManager.toggleTrading(closestNpc, biomeManager.currentBiomeName);
-            return;
-        }
-
-        // Jeśli nie ma aktywnego NPC ani totemu, sprawdź obóz
-        if (isPlayerInCampZone && !isCustomizationMenuOpen) {
-            if (loadingManager.isVisible) return;
-            event.preventDefault();
-            soundManager.play('camp');
-            transitionToNewRoom();
-            return;
-        }
+        return; // Zakończ przetwarzanie, aby nie kolidować z innymi klawiszami
     }
+    // ======================== KONIEC POPRAWKI =========================
 
     if (event.code === 'Escape') {
         event.preventDefault();
-        if (tradingManager.isTradeWindowOpen) {
+        if (noticeBoardManager.isOpen) { // <-- DODAJ TEN BLOK
+            noticeBoardManager.close();
+        } else if (tradingManager.isTradeWindowOpen) {
             tradingManager.stopTrading();
-        } else if (totemManager.isOpen) { // <-- NOWY WARUNEK
+        } else if (totemManager.isOpen) {
             totemManager.toggleUI();
         } else if (isCustomizationMenuOpen) {
             isCustomizationMenuOpen = false;
@@ -4550,10 +4696,9 @@ document.addEventListener('keydown', (event) => {
 
     if (event.code === 'KeyE' && !fishingManager.isFishHooked && !tradingManager.isTradeWindowOpen && !totemManager.isOpen) {
         event.preventDefault();
-        soundManager.play('inventory'); // <--- DODAJ TĘ LINIĘ
-
+        soundManager.play('inventory');
         if (tutorial.state === 5) {
-            soundManager.play('info'); // <-- DODANA LINIA
+            soundManager.play('info');
             advanceTutorialStep('finished');
             isCustomizationMenuOpen = true;
             inventoryManager.isOpen = true;
@@ -4601,19 +4746,16 @@ document.addEventListener('keydown', (event) => {
             let optionIndex = currentCustomizationOptionIndices[currentCategory];
             let selectionChanged = false;
 
-            // --- POCZĄTEK ZMIAN ---
         if (event.code === 'ArrowUp') {
             optionIndex = (optionIndex - 1 + options.length) % options.length;
             selectionChanged = true;
-            soundManager.play('clothNavigate'); // Zawsze odtwarzaj ten dźwięk
+            soundManager.play('clothNavigate');
         }
         else if (event.code === 'ArrowDown') {
             optionIndex = (optionIndex + 1) % options.length;
             selectionChanged = true;
-            soundManager.play('clothNavigate'); // Zawsze odtwarzaj ten dźwięk
+            soundManager.play('clothNavigate');
         }
-            // --- KONIEC ZMIAN ---
-
             else if (event.code === 'ArrowLeft') {
                 customizationMenuState = 'category';
                 soundManager.play('menuClick');
@@ -4634,27 +4776,27 @@ document.addEventListener('keydown', (event) => {
         } else if (customizationMenuState === 'color') {
             if (event.code === 'ArrowUp') {
                 selectedColorPropertyIndex = (selectedColorPropertyIndex - 1 + colorProperties.length) % colorProperties.length;
-                soundManager.play('menuNavigate'); // <-- NOWA LINIA
+                soundManager.play('menuNavigate');
             }
             else if (event.code === 'ArrowDown') {
                 selectedColorPropertyIndex = (selectedColorPropertyIndex + 1) % colorProperties.length;
-                soundManager.play('menuNavigate'); // <-- NOWA LINIA
+                soundManager.play('menuNavigate');
             }
             else if (event.code === 'ArrowLeft') {
                 customizationMenuState = 'value';
-                soundManager.play('menuClick'); // <-- NOWA LINIA
+                soundManager.play('menuClick');
             }
             else if (event.code === 'ArrowRight') {
                 customizationMenuState = 'adjust_value';
-                soundManager.play('menuClick'); // <-- NOWA LINIA
+                soundManager.play('menuClick');
             }
         } else if (customizationMenuState === 'adjust_value') {
             if (event.code === 'ArrowLeft') {
                 customizationMenuState = 'color';
-                soundManager.play('menuClick'); // <-- NOWA LINIA
+                soundManager.play('menuClick');
             }
             else if (event.code === 'ArrowUp' || event.code === 'ArrowDown') {
-                soundManager.play('menuNavigate'); // <-- NOWA LINIA
+                soundManager.play('menuNavigate');
                 const isIncrement = event.code === 'ArrowUp';
                 const category = customizationCategories[selectedCategoryIndex];
                 const property = colorProperties[selectedColorPropertyIndex];
@@ -4685,7 +4827,7 @@ if (event.code === 'KeyT') {
         soundManager.play('info');
         advanceTutorialStep(5);
     } else {
-        chatManager.focusChat(); // Po prostu wywołaj funkcję
+        chatManager.focusChat();
     }
     return;
 }
@@ -4694,19 +4836,19 @@ if (event.code === 'KeyT') {
         switch (tutorial.state) {
             case 1:
                 if (event.code === 'ArrowLeft' || event.code === 'ArrowRight' || event.code === 'KeyA' || event.code === 'KeyD') {
-                    soundManager.play('info'); // <-- DODANE
+                    soundManager.play('info');
                     advanceTutorialStep(2);
                 }
                 break;
             case 2:
                 if (event.code === 'Space') {
-                    soundManager.play('info'); // <-- DODANE
+                    soundManager.play('info');
                     advanceTutorialStep(3);
                 }
                 break;
             case 3:
             if (['Digit1', 'Numpad1', 'Digit2', 'Numpad2', 'Digit3', 'Numpad3', 'Digit4', 'Numpad4'].includes(event.code)) {
-                soundManager.play('info'); // <-- DODANE
+                soundManager.play('info');
                 advanceTutorialStep(4);
             }
             break;
@@ -4719,17 +4861,10 @@ if (event.code === 'KeyT') {
         if (event.code.includes('1')) item = ITEM_NONE;
         if (event.code.includes('2')) item = ITEM_ROD;
         if (event.code.includes('3')) item = ITEM_SHOVEL;
-        if (event.code.includes('4')) item = ITEM_PICKAXE; // <-- DODANA LINIA
+        if (event.code.includes('4')) item = ITEM_PICKAXE;
 
-        // Sprawdzamy, czy przedmiot faktycznie się zmienia
         if (localPlayer.customizations.rightHandItem !== item) {
-
-            // ===============================================
-            // === DODAJ TĘ LINIĘ WŁAŚNIE TUTAJ ===
-            // ===============================================
             soundManager.play('itemChange');
-            // ===============================================
-
             localPlayer.customizations.rightHandItem = item;
             localPlayerCustomizations.rightHandItem = item;
             sendPlayerAction('updateCustomization', localPlayer.customizations);
@@ -4765,9 +4900,9 @@ canvas.addEventListener('mousemove', (event) => {
         localPlayer.currentMouseX = pos.x / currentZoomLevel + cameraX;
         localPlayer.currentMouseY = pos.y / currentZoomLevel + cameraY;
         inventoryManager.updateMousePosition(pos.x, pos.y);
+        noticeBoardManager.handleMouseMove(pos.x, pos.y); // <-- DODAJ TĘ LINIĘ
     }
 });
-
 canvas.addEventListener('mousedown', (event) => {
     if (event.button !== 0 || !currentRoom) return;
 
@@ -4837,19 +4972,13 @@ if (!isCustomizationMenuOpen && localPlayer.customizations.rightHandItem === ITE
         const worldY = pos.y / currentZoomLevel + cameraY;
 
         // Znajdź klikniętą przeszkodę
-        if (currentRoom && currentRoom.gameData && currentRoom.gameData.obstacles) {
-            const clickedObstacle = currentRoom.gameData.obstacles.find(obs =>
-                worldX >= obs.x && worldX <= obs.x + obs.width &&
-                worldY >= obs.y && worldY <= obs.y + obs.height &&
-                (obs.typeIndex === 0 || obs.typeIndex === 1) // Sprawdź, czy to kamień
-            );
-
-            if (clickedObstacle) {
-                sendPlayerAction('mineObstacle', { obstacleId: clickedObstacle.id });
-                event.preventDefault();
-                return; // Zakończ, aby nie wykonywać innych akcji
-            }
+        if (currentRoom && currentRoom.gameData && noticeBoardImage && noticeBoardImage.complete && !worldNoticeBoard) {
+        if (typeof biomeManager.campsiteX === 'number' && typeof currentRoom.gameData.groundLevel === 'number') {
+            const groundY = DEDICATED_GAME_HEIGHT - currentRoom.gameData.groundLevel;
+            const boardX = biomeManager.campsiteX + (biomeManager.campsiteWidth / 2) - 500;
+            worldNoticeBoard = new NoticeBoard(boardX, groundY, noticeBoardImage);
         }
+    }
     }
 
     // Logika kopania łopatą
@@ -4961,6 +5090,13 @@ canvas.addEventListener('mouseup', (event) => {
 });
 
 canvas.addEventListener('wheel', (event) => {
+    // Nowa logika dla tablicy ogłoszeń
+    if (noticeBoardManager.isOpen) {
+        noticeBoardManager.handleWheel(event);
+        return; // Zablokuj zoomowanie kamery, gdy tablica jest otwarta
+    }
+
+    // Istniejąca logika zoomowania kamery
     event.preventDefault();
     const zoomDelta = event.deltaY < 0 ? ZOOM_SENSITIVITY : -ZOOM_SENSITIVITY;
     currentZoomLevel = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, currentZoomLevel + zoomDelta));
@@ -4971,6 +5107,7 @@ canvas.addEventListener('wheel', (event) => {
 // === SEKCJA 7: INICJALIZACJA ===
 // ====================================================================
 
+const noticeBoardManager = new NoticeBoardManager(); // <-- DODAJ LINIĘ TUTAJ
 console.log("Initializing P2P client...");
 setupNotificationArea();
 initializeSignaling();
@@ -4979,14 +5116,15 @@ cycleManager.load();
 // === POCZĄTEK ZMIAN ===
 // Zdefiniuj ścieżki do dźwięków i rozpocznij ich ładowanie
 const soundPaths = {
-    'background': 'sound/background.mp3', // <-- DODAJ TĘ LINIĘ
-    'night': 'sound/night.mp3',           // <-- DODAJ TĘ LINIĘ
+    'background': 'sound/background.mp3',
+    'night': 'sound/night.mp3',
+    'paper': 'sound/paper.mp3', // <-- DODANA LINIA
     'menuClick': 'sound/menu_click.mp3',
     'menuNavigate': 'sound/menu_navigate.mp3',
     'clothNavigate': 'sound/cloth_navigate.mp3',
     'walk': 'sound/walk.mp3',
-    'bird': 'sound/bird.mp3', // <-- DODAJ TĘ LINIĘ
-    'walking_wood': 'sound/walking_wood.mp3', // <-- DODAJ TĘ LINIĘ
+    'bird': 'sound/bird.mp3',
+    'walking_wood': 'sound/walking_wood.mp3',
     'jump': 'sound/jump.mp3',
     'land': 'sound/land.mp3',
     'itemChange': 'sound/change.mp3',
@@ -5016,16 +5154,19 @@ const soundPaths = {
     'thunder_3': 'sound/thunder_3.mp3',
 
 // I DODAJ POD NIM LINIĘ:
-    'stone_breaking': 'sound/stone_breaking.mp3', // <-- DODANA LINIA
+    'stone_breaking': 'sound/stone_breaking.mp3', 
     'gem_found': 'sound/gem_found.mp3',
     
 };
 soundManager.loadSounds(soundPaths);
 
+
 // WAŻNE: W tym miejscu nic nie zmieniamy. loadImages wciąż jest potrzebne,
 // aby zasoby gry były dostępne w pamięci, zanim gracz kliknie "Join".
 // Nasz drugi ekran ładowania symuluje wczytywanie stanu pokoju, nie plików.
 loadImages(() => {
+    console.log("All images loaded, starting render loop.");
+    noticeBoardManager.loadNotices(); // <-- DODAJ TĘ LINIĘ
     console.log("All images loaded, starting render loop.");
     dynamicObjectManager.setImages(dynamicObjectImages); // NOWA LINIA
     
@@ -5324,5 +5465,4 @@ function setupMobileControlsToggle() {
             });
         }
     }
-
 }
