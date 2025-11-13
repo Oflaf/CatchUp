@@ -2937,7 +2937,7 @@ function initializePeer(callback) {
     
     const peerConfig = {
         host: 'https://server-port-yxen.onrender.com', 
-        path: '/peerjs',
+        path: '/',
         secure: true,
         debug: 3
     };
@@ -4006,7 +4006,7 @@ function resetMenuUI() {
 // --- FUNKCJE OBSŁUGI SIECI I STANU GRY ---
 
 function initializeSignaling() {
-    signalingSocket = io("https://catchin-club.onrender.com");
+    signalingSocket = io("catchin-club.onrender.com");
     //signalingSocket = io("http://localhost:3000"); 
     signalingSocket.on('connect', () => {
         console.log('Connected to the signaling server.', signalingSocket.id);
@@ -5465,4 +5465,5 @@ function setupMobileControlsToggle() {
             });
         }
     }
+
 }
