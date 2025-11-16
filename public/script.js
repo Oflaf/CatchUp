@@ -87,6 +87,8 @@ function showNotification(message, type = 'warning', duration = 5000) {
 // ====================================================================
 
 
+const screenshotMode = false; // Zmień na 'false', aby wyłączyć białe tło
+
 let signalingSocket;
 let peer;
 let isHost = false;
@@ -1113,6 +1115,17 @@ const mineralImagePaths = {
 
 // ======================== KONIEC ZMIAN =========================
 
+const fishingTutorialIconPath = { 'tutorial_icon': 'img/ui/tutorial.png' };
+const fishingTutorialImagePaths = {
+    'tutorial_1': 'img/ui/tutorial/1.png',
+    'tutorial_2': 'img/ui/tutorial/2.png',
+    'tutorial_3': 'img/ui/tutorial/3.png',
+    'tutorial_4': 'img/ui/tutorial/4.png',
+    'tutorial_5': 'img/ui/tutorial/5.png',
+    'tutorial_6': 'img/ui/tutorial/6.png',
+};
+const fishingTutorialImages = {}; // Obiekt na załadowane obrazki 1-6.png
+const fishingTutorialIcon = {};   // Obiekt na załadowaną ikonę tutorial.png
 
 const customizationUIImages = {};
 const fishingUIImages = {};
@@ -1445,6 +1458,7 @@ const soundManager = new SoundManager(soundtrackManager); // Przekazujemy soundt
 const weatherManager = new WeatherManager();
 const cloudManager = new CloudManager();
 const scoreboardManager = new ScoreboardManager();
+const fishingTutorialManager = new FishingTutorialManager();
 
     const dynamicObjectManager = new DynamicObjectManager(soundManager);
     const birdManager = new BirdManager(); // <-- DODAJ TĘ LINIĘ
@@ -1801,7 +1815,7 @@ function loadImages(callback) {
     }
 
     // Zmodyfikuj tę linię, aby zawierała nowe ścieżki
-    const basePaths = { ...customizationUIPaths, ...tutorialImagePaths, ...fishingUIPaths, ...baitImagePaths, ...hookImagePaths, ...weatherImagePaths, ...mineralImagePaths, ...dynamicObjectImagePaths };
+    const basePaths = { ...customizationUIPaths, ...tutorialImagePaths, ...fishingUIPaths, ...baitImagePaths, ...hookImagePaths, ...weatherImagePaths, ...mineralImagePaths, ...dynamicObjectImagePaths, ...fishingTutorialIconPath, ...fishingTutorialImagePaths };
     const allPaths = { ...basePaths, notice_board: 'img/world/notice_board.png' };
     
     // Dodaj wszystkie ścieżki skinów do ogólnej puli
@@ -1941,16 +1955,22 @@ function loadImages(callback) {
                 allItemImages[h] = i;
             } else if (mineralImagePaths[h]) {
         allItemImages[h] = i;
-    } else if (dynamicObjectImagePaths[h]) { // NOWY BLOK
-        const key = h.split('_')[1]; // Wyciąga numer z klucza 'dynamic_1'
+    } else if (dynamicObjectImagePaths[h]) {
+        const key = h.split('_')[1];
         dynamicObjectImages[key] = i;
+    } else if (fishingTutorialIconPath[h]) {
+        fishingTutorialIcon[h] = i;
+    } else if (fishingTutorialImagePaths[h]) {
+        const key = parseInt(h.split('_')[1], 10) - 1;
+        fishingTutorialImages[key] = i;
     } else if (weatherImagePaths[h]) {
         // === POCZĄTEK ZMIANY ===
         if (h === 'char') {
             window.particleCharImage = i; // Przypisz do zmiennej globalnej
         } else {
             weatherImages[h] = i;
-        }}
+        }
+    }
         if (h === 'paper') { // <-- DODAJ TEN BLOK
         noticeBoardManager.paperImage = i;
     }
@@ -1961,6 +1981,7 @@ function loadImages(callback) {
         };
         i.onerror = () => { console.error(`Image loading error: ${i.src}`), f() };
     }
+    
     for (const j in exampleCustomItemPaths) {
         if (j === "items") continue;
         const k = exampleCustomItemPaths[j];
@@ -2332,25 +2353,31 @@ function drawPlayer(p, baseImageSet = characterImages) {
 
     ctx.restore();
 
-    if (p.username) {
-        const ROD_TIP_OFFSET_X = playerSize * 1.07; 
-        const ROD_TIP_OFFSET_Y = -playerSize * 0.32;
-        if (p.customizations && p.customizations.rightHandItem === ITEM_ROD) {
-            p.rodTipWorldX = p.x + playerSize / 2 + (frontArmOffsetX + originalArmPivotInImageX - playerSize / 2) * p.direction + (ROD_TIP_OFFSET_X * Math.cos(b) - ROD_TIP_OFFSET_Y * Math.sin(b)) * p.direction;
-            p.rodTipWorldY = p.y + playerSize / 2 + (0 + originalArmPivotInImageY - playerSize / 2) + (ROD_TIP_OFFSET_X * Math.sin(b) + ROD_TIP_OFFSET_Y * Math.cos(b));
-            if (p.id === localPlayer.id) {
-                localPlayer.rodTipWorldX = p.rodTipWorldX;
-                localPlayer.rodTipWorldY = p.rodTipWorldY;
-            }
-        } else {
-            p.rodTipWorldX = null;
-            p.rodTipWorldY = null;
-            if (p.id === localPlayer.id) {
-                localPlayer.rodTipWorldX = null;
-                localPlayer.rodTipWorldY = null;
-            }
+    // ===================================================
+    // === POCZĄTEK ZMIANY - UKRYWANIE NICKU ===
+    // ===================================================
+
+    // Krok 1: Obliczenia pozycji wędki (muszą być wykonane zawsze, aby linka działała)
+    const ROD_TIP_OFFSET_X = playerSize * 1.07; 
+    const ROD_TIP_OFFSET_Y = -playerSize * 0.32;
+    if (p.customizations && p.customizations.rightHandItem === ITEM_ROD) {
+        p.rodTipWorldX = p.x + playerSize / 2 + (frontArmOffsetX + originalArmPivotInImageX - playerSize / 2) * p.direction + (ROD_TIP_OFFSET_X * Math.cos(b) - ROD_TIP_OFFSET_Y * Math.sin(b)) * p.direction;
+        p.rodTipWorldY = p.y + playerSize / 2 + (0 + originalArmPivotInImageY - playerSize / 2) + (ROD_TIP_OFFSET_X * Math.sin(b) + ROD_TIP_OFFSET_Y * Math.cos(b));
+        if (p.id === localPlayer.id) {
+            localPlayer.rodTipWorldX = p.rodTipWorldX;
+            localPlayer.rodTipWorldY = p.rodTipWorldY;
         }
-        
+    } else {
+        p.rodTipWorldX = null;
+        p.rodTipWorldY = null;
+        if (p.id === localPlayer.id) {
+            localPlayer.rodTipWorldX = null;
+            localPlayer.rodTipWorldY = null;
+        }
+    }
+    
+    // Krok 2: Rysowanie nicku i flagi (tylko jeśli nie jest włączony tryb zrzutów ekranu)
+    if (!screenshotMode && p.username) {
         ctx.font = `${DEFAULT_FONT_SIZE_USERNAME}px ${PIXEL_FONT}`;
         const usernameText = p.username || p.id.substring(0, 5);
         const usernameMetrics = ctx.measureText(usernameText);
@@ -2412,6 +2439,9 @@ function drawPlayer(p, baseImageSet = characterImages) {
             ctx.fillText(chatText, playerCenterX, chatTextY);
         }
     }
+    // ===================================================
+    // === KONIEC ZMIANY - UKRYWANIE NICKU ===
+    // ===================================================
 }
 
 
@@ -2658,6 +2688,63 @@ function drawTutorialHelper() {
     drawSingleTutorialImage(tutorial.activeImage);
 }
 
+let isTutorialIconHovered = false;
+let tutorialIconScale = 1.0;
+
+function drawFishingTutorialIcon(ctx) {
+    const icon = fishingTutorialIcon['tutorial_icon'];
+    if (!icon || !icon.complete) return;
+
+    // Skala i pozycja
+    const BASE_SCALE = 3.0;
+    const HOVER_SCALE = 3.5;
+    const iconBaseWidth = icon.width * BASE_SCALE;
+    const iconX = invX - iconBaseWidth - 20;
+    const iconY = invY;
+    
+    // Animacje
+    const time = Date.now() / 1000;
+    const rockingAngle = Math.sin(time * TUTORIAL_ROCKING_SPEED) * (TUTORIAL_ROCKING_ANGLE_DEGREES * Math.PI / 180 * 0.7);
+    
+    const iconWidth = icon.width * tutorialIconScale;
+    const iconHeight = icon.height * tutorialIconScale;
+    const iconCenterX = iconX + iconWidth / 2;
+    const iconCenterY = iconY + iconHeight / 2;
+
+    // --- POPRAWKA: Użycie .mousePos.x i .mousePos.y ---
+    const mouseX = inventoryManager.mousePos.x;
+    const mouseY = inventoryManager.mousePos.y;
+    isTutorialIconHovered = mouseX >= iconX && mouseX <= iconX + iconWidth && mouseY >= iconY && mouseY <= iconY + iconHeight;
+
+    // Płynne przejście skali
+    const targetScale = isTutorialIconHovered ? HOVER_SCALE : BASE_SCALE;
+    tutorialIconScale += (targetScale - tutorialIconScale) * 0.1;
+
+    // Rysowanie ikony
+    ctx.save();
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.translate(iconCenterX, iconCenterY);
+    ctx.rotate(rockingAngle);
+    ctx.drawImage(icon, -iconWidth / 2, -iconHeight / 2, iconWidth, iconHeight);
+    ctx.restore();
+
+    // Rysowanie podpowiedzi "game helper"
+    if (isTutorialIconHovered) {
+        ctx.save();
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
+        const text = "game helper";
+        ctx.font = `14px ${PIXEL_FONT}`;
+        ctx.textAlign = 'left';
+        ctx.textBaseline = 'middle';
+        
+        ctx.strokeStyle = 'black';
+        ctx.lineWidth = 3;
+        ctx.strokeText(text, mouseX + 20, mouseY + 15);
+        ctx.fillStyle = 'white';
+        ctx.fillText(text, mouseX + 20, mouseY + 15);
+        ctx.restore();
+    }
+}
 function drawInsects() {
     const insectImage = biomeManager.getCurrentInsectImage();
     if (!insectImage || !insectImage.complete) return;
@@ -2942,7 +3029,6 @@ function initializePeer(callback) {
     debug: 3
 };
     
-    
     // =======================
 
     peer = new Peer(undefined, peerConfig);
@@ -3136,7 +3222,8 @@ function updateTutorialAnimations() {
 
 
 function sendPlayerInput() {
-    const isPlayerInputLocked = isCustomizationMenuOpen || noticeBoardManager.isOpen; // <-- ZMIANA
+    // DODAJ fishingTutorialManager.isOpen do warunku
+    const isPlayerInputLocked = isCustomizationMenuOpen || noticeBoardManager.isOpen || fishingTutorialManager.isOpen;
     const inputPayload = {
         keys: isPlayerInputLocked ? {} : keys,
         currentMouseX: localPlayer.currentMouseX,
@@ -3556,6 +3643,7 @@ function gameLoop(currentTime) {
     inventoryManager.update(deltaTime);
     totemManager.update(deltaTime);
     noticeBoardManager.update(deltaTime); 
+    fishingTutorialManager.update(deltaTime); // <-- NOWA LINIA
     if (localPlayer.isCasting) {
         localPlayer.fishingBarTime += FISHING_SLIDER_SPEED;
         localPlayer.fishingBarSliderPosition = (Math.sin(localPlayer.fishingBarTime) + 1) / 2;
@@ -3589,133 +3677,129 @@ function gameLoop(currentTime) {
     
 
     applyCycleColorBalance(); 
-    ctx.clearRect(0, 0, DEDICATED_GAME_WIDTH, DEDICATED_GAME_HEIGHT);
 
-    const centerX = canvas.width / 2;
-    const centerY = canvas.height / 2;
+    // ===================================================
+    // === POCZĄTEK ZMIANY - TRYB ZRZUTÓW EKRANU ===
+    // ===================================================
+
+    if (screenshotMode) {
+        ctx.fillStyle = 'white';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+    } else {
+        ctx.clearRect(0, 0, DEDICATED_GAME_WIDTH, DEDICATED_GAME_HEIGHT);
+
+        const centerX = canvas.width / 2;
+        const centerY = canvas.height / 2;
+
+        ctx.save();
+        ctx.translate(centerX, centerY + 2150);
+        ctx.rotate(cycleManager.rotation);
+        cycleManager.drawBackground(ctx);
+        ctx.restore();
+
+        starManager.draw(ctx, cycleManager);
+        
+        ctx.save();
+        ctx.translate(centerX, centerY + 2150);
+        ctx.rotate(cycleManager.rotation);
+        cycleManager.drawMoon(ctx);
+        ctx.restore();
+    }
+
+    // ===================================================
+    // === KONIEC ZMIANY - TRYB ZRZUTÓW EKRANU ===
+    // ===================================================
+
 
     ctx.save();
-    ctx.translate(centerX, centerY + 2150);
-    ctx.rotate(cycleManager.rotation);
-    cycleManager.drawBackground(ctx);
-    ctx.restore();
-
-    starManager.draw(ctx, cycleManager);
-
-    
-    ctx.save();
-    ctx.translate(centerX, centerY + 2150);
-    ctx.rotate(cycleManager.rotation);
-    cycleManager.drawMoon(ctx);
-    ctx.restore();
-
-       ctx.save();
     ctx.scale(currentZoomLevel, currentZoomLevel);
 
-    // --- POCZĄTEK POPRAWKI: Zastosowanie globalnego wstrząsu ekranu ---
-    // Pobieramy wstrząs z obiektu totemu, jeśli istnieje. Domyślnie wstrząs jest zerowy.
     const shakeX = worldTotem ? worldTotem.screenShakeX : 0;
     const shakeY = worldTotem ? worldTotem.screenShakeY : 0;
     ctx.translate(-cameraX + shakeX, -cameraY + shakeY);
     
-    biomeManager.drawClouds(ctx, cameraX, cameraY);
+    if (!screenshotMode) {
+        biomeManager.drawClouds(ctx, cameraX, cameraY);
 
-    // Oblicz współczynnik nocy
-    const rotationDegreesDraw = (cycleManager.rotation * (180 / Math.PI)) % 360;
-    const angleDraw = rotationDegreesDraw < 0 ? rotationDegreesDraw + 360 : rotationDegreesDraw;
-    let nightAlpha = 0;
-    const FADE_IN_START = 85, FADE_IN_END = 135, FADE_OUT_START = 240, FADE_OUT_END = 270;
-    if (angleDraw > FADE_IN_START && angleDraw < FADE_IN_END) {
-        nightAlpha = (angleDraw - FADE_IN_START) / (FADE_IN_END - FADE_IN_START);
-    } else if (angleDraw >= FADE_IN_END && angleDraw <= FADE_OUT_START) {
-        nightAlpha = 1;
-    } else if (angleDraw > FADE_OUT_START && angleDraw < FADE_OUT_END) {
-        nightAlpha = 1 - ((angleDraw - FADE_OUT_START) / (FADE_OUT_END - FADE_OUT_START));
+        const rotationDegreesDraw = (cycleManager.rotation * (180 / Math.PI)) % 360;
+        const angleDraw = rotationDegreesDraw < 0 ? rotationDegreesDraw + 360 : rotationDegreesDraw;
+        let nightAlpha = 0;
+        const FADE_IN_START = 85, FADE_IN_END = 135, FADE_OUT_START = 240, FADE_OUT_END = 270;
+        if (angleDraw > FADE_IN_START && angleDraw < FADE_IN_END) {
+            nightAlpha = (angleDraw - FADE_IN_START) / (FADE_IN_END - FADE_IN_START);
+        } else if (angleDraw >= FADE_IN_END && angleDraw <= FADE_OUT_START) {
+            nightAlpha = 1;
+        } else if (angleDraw > FADE_OUT_START && angleDraw < FADE_OUT_END) {
+            nightAlpha = 1 - ((angleDraw - FADE_OUT_START) / (FADE_OUT_END - FADE_OUT_START));
+        }
+
+        const isNight = nightAlpha > 0.5;
+        if (isNight && !isNightSoundPlaying) {
+            soundManager.startLoop('night');
+            isNightSoundPlaying = true;
+        } else if (!isNight && isNightSoundPlaying) {
+            soundManager.stopLoop('night');
+            isNightSoundPlaying = false;
+        }
+
+        cloudManager.draw(ctx, nightAlpha);
+        
+        biomeManager.drawParallaxBackground(ctx, cameraX, cameraY, DEDICATED_GAME_WIDTH / currentZoomLevel);
+        if (currentRoom?.gameData?.biome) {
+            const { biome: b, groundLevel: g } = currentRoom.gameData;
+            biomeManager.drawBuildings(ctx,g,cameraX,DEDICATED_GAME_WIDTH/currentZoomLevel);
+            biomeManager.drawBackgroundBiomeGround(ctx,b,g);
+            biomeManager.drawCampsite(ctx);
+            biomeManager.drawBackgroundPlants(ctx);
+            biomeManager.drawBackgroundTrees(ctx);
+        }
+        
+        if (worldNoticeBoard) {
+            worldNoticeBoard.draw(ctx);
+        }
+
+        if (worldTotem) {
+            worldTotem.draw(ctx);
+        }
     }
 
-    // ================== POCZĄTEK NOWEGO KODU ==================
-    const isNight = nightAlpha > 0.5; // Próg, od którego zaczyna się "noc" dla dźwięku
-    if (isNight && !isNightSoundPlaying) {
-        soundManager.startLoop('night');
-        isNightSoundPlaying = true;
-    } else if (!isNight && isNightSoundPlaying) {
-        soundManager.stopLoop('night');
-        isNightSoundPlaying = false;
-    }
-    // =================== KONIEC NOWEGO KODU ====================
-
-    // Przekaż współczynnik nocy do funkcji rysującej chmury
-    cloudManager.draw(ctx, nightAlpha);
-    
-    biomeManager.drawParallaxBackground(ctx, cameraX, cameraY, DEDICATED_GAME_WIDTH / currentZoomLevel);
-    if (currentRoom?.gameData?.biome) {
-        const { biome: b, groundLevel: g } = currentRoom.gameData;
-        biomeManager.drawBuildings(ctx,g,cameraX,DEDICATED_GAME_WIDTH/currentZoomLevel);
-        biomeManager.drawBackgroundBiomeGround(ctx,b,g);
-        biomeManager.drawCampsite(ctx);
-        biomeManager.drawBackgroundPlants(ctx);
-        biomeManager.drawBackgroundTrees(ctx);
-    }
-    
-    // === POCZĄTEK ZMIAN: Rysowanie totemu ===
-    if (worldNoticeBoard) { // <-- DODAJ TEN BLOK
-        worldNoticeBoard.draw(ctx);
-    }
-
-    if (worldTotem) {
-        worldTotem.draw(ctx);
-    }
-    // === KONIEC ZMIAN ===
-    
     const allCharacters = [...Object.values(playersInRoom), ...npcManager.npcs];
     allCharacters.sort((a,b)=>(a.y+playerSize)-(b.y+playerSize)).forEach(p => {
             if (p.username) drawPlayer(p);
             else npcManager.drawPlayer(p, npcManager.npcAssets);
         });
     
-        birdManager.draw(ctx); // <-- DODAJ TĘ LINIĘ
-    
+    if (!screenshotMode) {
+        birdManager.draw(ctx);
         drawWorldItems(ctx);
     
         if(currentRoom?.gameData?.biome){
-        const {biome:b,groundLevel:g} = currentRoom.gameData;
-
-        
-
-        biomeManager.drawLeaves(ctx);
-
-        biomeManager.drawForegroundTrees(ctx);
-        biomeManager.drawFireplaceParticles(ctx);
-        biomeManager.drawFireplace(ctx);
-        biomeManager.drawObstacles(ctx); // <-- DODAJ TĘ LINIĘ
-        
-        biomeManager.drawLightEffect(ctx);
-        
-        biomeManager.drawForegroundPlants(ctx);
-        dynamicObjectManager.draw(ctx); // NOWA LINIA
-        
-
-        drawInsects();
-                
-        biomeManager.drawForegroundBiomeGround(ctx,b,g);
-        
-         biomeManager.drawSwimmingFish(ctx);
-
-        drawPierSupports(ctx);
-
-        if (biomeManager.drawPiers) biomeManager.drawPiers(ctx);
-
-        biomeManager.drawWater(ctx,b,cameraX);
-       
-       
-        weatherManager.drawRain(ctx);
-        weatherManager.drawFog(ctx);
+            const {biome:b,groundLevel:g} = currentRoom.gameData;
+            biomeManager.drawLeaves(ctx);
+            biomeManager.drawForegroundTrees(ctx);
+            biomeManager.drawFireplaceParticles(ctx);
+            biomeManager.drawFireplace(ctx);
+            biomeManager.drawObstacles(ctx);
+            biomeManager.drawLightEffect(ctx);
+            biomeManager.drawForegroundPlants(ctx);
+            dynamicObjectManager.draw(ctx);
+            drawInsects();
+            biomeManager.drawForegroundBiomeGround(ctx,b,g);
+            biomeManager.drawSwimmingFish(ctx);
+            drawPierSupports(ctx);
+            if (biomeManager.drawPiers) biomeManager.drawPiers(ctx);
+            biomeManager.drawWater(ctx,b,cameraX);
+            weatherManager.drawRain(ctx);
+            weatherManager.drawFog(ctx);
+        }
     }
     
     ctx.restore();
 
-
-    weatherManager.drawLightning(ctx);
+    if (!screenshotMode) {
+        weatherManager.drawLightning(ctx);
+    }
+    
     for(const id in playersInRoom) drawFishingLine(playersInRoom[id]);
     
     drawDanglingBobber(ctx, localPlayer);
@@ -3724,43 +3808,48 @@ function gameLoop(currentTime) {
     drawCampPrompt();
     drawNpcTradePrompt();
     drawTotemPrompt();
-    drawNoticeBoardPrompt(); // <-- DODAJ TĘ LINIĘ
+    drawNoticeBoardPrompt();
     drawTimedTutorials();
     if (isCustomizationMenuOpen) {
-drawCustomizationMenu();
-} else {
-totemManager.draw(ctx); // Rysuj UI totemu tylko, gdy menu kustomizacji jest zamknięte
-}
+        drawCustomizationMenu();
+    } else {
+        totemManager.draw(ctx);
+    }
     if(localPlayer.isCasting) drawFishingBar(localPlayer);
 
-inventoryManager.draw(ctx, PIXEL_FONT);
-tradingManager.draw(ctx);
-
-ctx.save();
-ctx.setTransform(1, 0, 0, 1, 0, 0);
+    inventoryManager.draw(ctx, PIXEL_FONT);
+if (inventoryManager.isOpen) {
+        drawFishingTutorialIcon(ctx);
+    }
+    // ===============================================
+    tradingManager.draw(ctx);
+    ctx.save();
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
 
     let bobberScreenPos = null;
-if (localPlayer.hasLineCast && localPlayer.floatWorldX !== null) {
-    bobberScreenPos = {
-        x: (localPlayer.floatWorldX - cameraX) * currentZoomLevel,
-        y: (localPlayer.floatWorldY - cameraY) * currentZoomLevel
-    };
-}
+    if (localPlayer.hasLineCast && localPlayer.floatWorldX !== null) {
+        bobberScreenPos = {
+            x: (localPlayer.floatWorldX - cameraX) * currentZoomLevel,
+            y: (localPlayer.floatWorldY - cameraY) * currentZoomLevel
+        };
+    }
 
-fishingManager.update(deltaTime, localPlayer, bobberScreenPos);
-
-fishingManager.draw(ctx, localPlayer, bobberScreenPos, cameraX, currentZoomLevel);
+    fishingManager.update(deltaTime, localPlayer, bobberScreenPos);
+    fishingManager.draw(ctx, localPlayer, bobberScreenPos, cameraX, currentZoomLevel);
 
     updateAndDrawCaughtFishAnimations();
     updateAndDrawMinedGemAnimations();
 
     fishingManager.updateAndDrawDugBaitAnimations(ctx, playersInRoom, cameraX, cameraY, currentZoomLevel);
-     biomeManager.drawFrontLayer(ctx, cameraX, DEDICATED_GAME_WIDTH, currentZoomLevel, MIN_ZOOM, MAX_ZOOM);
-    noticeBoardManager.draw(ctx); // <-- DODAJ TĘ LINIĘ
+    
+    if (!screenshotMode) {
+        biomeManager.drawFrontLayer(ctx, cameraX, DEDICATED_GAME_WIDTH, currentZoomLevel, MIN_ZOOM, MAX_ZOOM);
+    }
+
+    fishingTutorialManager.draw(ctx); // <-- NOWA LINIA
+    noticeBoardManager.draw(ctx);
     scoreboardManager.draw(ctx);
 
-
-    // <-- DODAJ TEN BLOK PRZED requestAnimationFrame -->
     if (isPlayerListVisible) {
         drawPlayerList();
     }
@@ -4006,7 +4095,7 @@ function resetMenuUI() {
 // --- FUNKCJE OBSŁUGI SIECI I STANU GRY ---
 
 function initializeSignaling() {
-    signalingSocket = io("https://catchin-club.onrender.com");
+signalingSocket = io("https://catchin-club.onrender.com");
     //signalingSocket = io("http://localhost:3000"); 
     signalingSocket.on('connect', () => {
         console.log('Connected to the signaling server.', signalingSocket.id);
@@ -4608,6 +4697,30 @@ document.addEventListener('keydown', (event) => {
         return;
     }
     
+    // ================== POCZĄTEK POPRAWIONEJ LOGIKI ==================
+    // Obsługa klawiszy, gdy otwarty jest samouczek łowienia
+    if (fishingTutorialManager.isOpen) {
+        if (event.code === 'ArrowRight') {
+            fishingTutorialManager.nextImage();
+        } else if (event.code === 'ArrowLeft') {
+            fishingTutorialManager.previousImage();
+        }
+        // Klawisz Escape jest obsługiwany niżej, więc nie robimy `return`
+        event.preventDefault(); // Ale blokujemy inne akcje, jak ruch postaci
+    } 
+    // Obsługa klawiszy, gdy otwarta jest tablica ogłoszeń
+    else if (noticeBoardManager.isOpen) {
+        if (event.code === 'ArrowRight') {
+            noticeBoardManager.nextNotice();
+        } else if (event.code === 'ArrowLeft') {
+            noticeBoardManager.previousNotice();
+        } else if (event.code === 'ArrowUp' || event.code === 'ArrowDown') {
+            noticeBoardManager.toggleZOrder();
+        }
+        event.preventDefault(); // Blokujemy ruch postaci
+    }
+    // =================== KONIEC POPRAWIONEJ LOGIKI ===================
+    
     if (event.code === 'KeyY' && !isCustomizationMenuOpen) {
         event.preventDefault();
         isPlayerListVisible = true;
@@ -4634,23 +4747,7 @@ document.addEventListener('keydown', (event) => {
         return;
     }
 
-    // ======================= POCZĄTEK POPRAWKI =======================
     // Ujednolicona obsługa klawisza 'F' oparta na activePromptType
-    if (noticeBoardManager.isOpen) {
-    if (event.code === 'ArrowRight') {
-        noticeBoardManager.nextNotice();
-    } else if (event.code === 'ArrowLeft') {
-        noticeBoardManager.previousNotice();
-    } else if (event.code === 'ArrowUp' || event.code === 'ArrowDown') {
-        noticeBoardManager.toggleZOrder();
-    }
-    
-    // Zapobiegaj ruchowi gracza, gdy tablica jest otwarta
-    event.preventDefault(); 
-    // Nie kończymy tutaj (return), aby 'F' i 'Escape' mogły zamknąć tablicę
-}
-    
-    // Zmodyfikuj obsługę klawisza F
     if (event.code === 'KeyF' && tutorial.state === 'finished') {
         event.preventDefault();
 
@@ -4665,7 +4762,7 @@ document.addEventListener('keydown', (event) => {
                 totemManager.toggleUI();
                 break;
             case 'notice_board':
-                noticeBoardManager.toggleUI(); // <-- POPRAWKA
+                noticeBoardManager.toggleUI();
                 break;
             case 'camp':
                 if (!loadingManager.isVisible) {
@@ -4673,15 +4770,15 @@ document.addEventListener('keydown', (event) => {
                     transitionToNewRoom();
                 }
                 break;
-            // Jeśli activePromptType to 'none', nic się nie dzieje
         }
-        return; // Zakończ przetwarzanie, aby nie kolidować z innymi klawiszami
+        return;
     }
-    // ======================== KONIEC POPRAWKI =========================
-
+    
     if (event.code === 'Escape') {
         event.preventDefault();
-        if (noticeBoardManager.isOpen) { // <-- DODAJ TEN BLOK
+        if (fishingTutorialManager.isOpen) {
+            fishingTutorialManager.close();
+        } else if (noticeBoardManager.isOpen) {
             noticeBoardManager.close();
         } else if (tradingManager.isTradeWindowOpen) {
             tradingManager.stopTrading();
@@ -4900,12 +4997,24 @@ canvas.addEventListener('mousemove', (event) => {
         localPlayer.currentMouseX = pos.x / currentZoomLevel + cameraX;
         localPlayer.currentMouseY = pos.y / currentZoomLevel + cameraY;
         inventoryManager.updateMousePosition(pos.x, pos.y);
-        noticeBoardManager.handleMouseMove(pos.x, pos.y); // <-- DODAJ TĘ LINIĘ
+        noticeBoardManager.handleMouseMove(pos.x, pos.y);
+        fishingTutorialManager.handleMouseMove(pos.x, pos.y); // <-- NOWA LINIA
     }
 });
 canvas.addEventListener('mousedown', (event) => {
     if (event.button !== 0 || !currentRoom) return;
-
+    
+    // ================== ZMIENIONY BLOK ==================
+    if (inventoryManager.isOpen && isTutorialIconHovered) {
+        // Zamknij inventory i customization menu
+        inventoryManager.isOpen = false;
+        isCustomizationMenuOpen = false;
+        // Otwórz samouczek
+        fishingTutorialManager.open();
+        
+        event.preventDefault();
+        return;
+    }
     // Logika zacinania ryby
     if (!isCustomizationMenuOpen && fishingManager.isBiting) {
         soundManager.stopStrikeSound();
@@ -4972,13 +5081,19 @@ if (!isCustomizationMenuOpen && localPlayer.customizations.rightHandItem === ITE
         const worldY = pos.y / currentZoomLevel + cameraY;
 
         // Znajdź klikniętą przeszkodę
-        if (currentRoom && currentRoom.gameData && noticeBoardImage && noticeBoardImage.complete && !worldNoticeBoard) {
-        if (typeof biomeManager.campsiteX === 'number' && typeof currentRoom.gameData.groundLevel === 'number') {
-            const groundY = DEDICATED_GAME_HEIGHT - currentRoom.gameData.groundLevel;
-            const boardX = biomeManager.campsiteX + (biomeManager.campsiteWidth / 2) - 500;
-            worldNoticeBoard = new NoticeBoard(boardX, groundY, noticeBoardImage);
+        if (currentRoom && currentRoom.gameData && currentRoom.gameData.obstacles) {
+            const clickedObstacle = currentRoom.gameData.obstacles.find(obs =>
+                worldX >= obs.x && worldX <= obs.x + obs.width &&
+                worldY >= obs.y && worldY <= obs.y + obs.height &&
+                (obs.typeIndex === 0 || obs.typeIndex === 1) // Sprawdź, czy to kamień
+            );
+
+            if (clickedObstacle) {
+                sendPlayerAction('mineObstacle', { obstacleId: clickedObstacle.id });
+                event.preventDefault();
+                return; // Zakończ, aby nie wykonywać innych akcji
+            }
         }
-    }
     }
 
     // Logika kopania łopatą
@@ -5090,6 +5205,12 @@ canvas.addEventListener('mouseup', (event) => {
 });
 
 canvas.addEventListener('wheel', (event) => {
+    // Nowa logika dla samouczka
+    if (fishingTutorialManager.isOpen) { // <-- NOWA LINIA
+        fishingTutorialManager.handleWheel(event); // <-- NOWA LINIA
+        return; // <-- NOWA LINIA
+    } // <-- NOWA LINIA
+
     // Nowa logika dla tablicy ogłoszeń
     if (noticeBoardManager.isOpen) {
         noticeBoardManager.handleWheel(event);
@@ -5166,9 +5287,11 @@ soundManager.loadSounds(soundPaths);
 // Nasz drugi ekran ładowania symuluje wczytywanie stanu pokoju, nie plików.
 loadImages(() => {
     console.log("All images loaded, starting render loop.");
-    noticeBoardManager.loadNotices(); // <-- DODAJ TĘ LINIĘ
-    console.log("All images loaded, starting render loop.");
-    dynamicObjectManager.setImages(dynamicObjectImages); // NOWA LINIA
+    noticeBoardManager.loadNotices();
+    // ================== NOWA LINIA ==================
+    fishingTutorialManager.loadImages(Object.values(fishingTutorialImages));
+    // ================================================
+    dynamicObjectManager.setImages(dynamicObjectImages);
     
     fishingManager.strikeImage = fishingUIImages.strike;
     fishingManager.fishFrameImage = fishingUIImages.fishframe;
@@ -5465,8 +5588,4 @@ function setupMobileControlsToggle() {
             });
         }
     }
-
 }
-
-
-
