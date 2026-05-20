@@ -3120,24 +3120,24 @@ function createFullItemObject(itemName) {
 function initializePeer(callback) {
     if (peer && !peer.destroyed) return callback(peer.id);
     // === KONFIGURACJA LOKALNA (do testów na komputerze) ===
-    
+    /*
     const peerConfig = {
         host: 'localhost',
         port: 9000,
         path: '/',
         debug: 3
     };
-    
+     */
 
     // === KONFIGURACJA PRODUKCYJNA (dla serwera Render) ===
-    /*
+    
     const peerConfig = {
     host: 'server-port-yxen.onrender.com', // Bez https:// dla bezpieczeństwa
     path: '/', // <--- NA TĘ WARTOŚĆ
     secure: true,
     debug: 3
 };
-    */
+   
     // =======================
 
     peer = new Peer(undefined, peerConfig);
