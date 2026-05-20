@@ -193,6 +193,8 @@ class BiomeManager {
         this.tileSize = tileSize;
         this.scaledTileSize = tileSize * 3.75;
 
+                this.treeSwayTimer = 10 + Math.random() * 10; // <-- NOWA ZMIANA
+
         this.leavesManager = new LeavesManager(this);
 
         this.biomeTiles = {};
@@ -248,7 +250,8 @@ class BiomeManager {
         this.fireplaceObject = null;
         this.fireplaceParticles = [];
         this.particleSpawnTimer = 0;
-
+        this.campfireSmokeTimer = 0; // <-- DODAJ TĘ LINIĘ
+        
         this.fireplaceImage.src = 'img/world/fireplace.png';
         this.fireplaceImage.onload = () => { this.fireplaceLoaded = true; };
         this.fireplaceImage.onerror = () => { console.error('Failed to load fireplace.png'); };
@@ -701,6 +704,7 @@ this.signImage.onerror = () => { console.error('Failed to load sign.png'); };
     _updateFireplaceParticles(deltaTime) {
         if (!this.fireplaceLoaded || !this.fireplaceObject) return;
 
+        // Logika dla istniejących iskierek ognia (pozostaje bez zmian)
         this.particleSpawnTimer -= deltaTime;
         if (this.particleSpawnTimer <= 0) {
             this._spawnFireplaceParticle();
@@ -722,6 +726,25 @@ this.signImage.onerror = () => { console.error('Failed to load sign.png'); };
             
             p.rotation += p.rotationSpeed * deltaTime;
         }
+
+        // --- POCZĄTEK POPRAWKI ---
+        // Logika dla dymu z ogniska
+        this.campfireSmokeTimer -= deltaTime;
+        if (this.campfireSmokeTimer <= 0) {
+            this.campfireSmokeTimer = Math.random() * 0.55 + 0.15;
+
+            // Używamy obiektu this.fireplaceObject zamiast campsiteObject
+            if (this.fireplaceObject) {
+                // Pozycja X to środek obiektu fireplace
+                const smokeX = this.fireplaceObject.x + this.fireplaceObject.width / 2;
+                // Pozycja Y to góra obiektu fireplace (y to dół, więc odejmujemy wysokość)
+                // Dodajemy mały ujemny offset, żeby dym startował nieco nad płomieniami
+                const smokeY = (this.fireplaceObject.y - this.fireplaceObject.height) + 60;
+                
+                walkingparticles.spawnCampfireSmoke(smokeX, smokeY);
+            }
+        }
+        // --- KONIEC POPRAWKI ---
     }
     
     getCurrentInsectImage() {
@@ -1167,6 +1190,8 @@ startObstacleShake(obstacleId) {
         this.foregroundGroundPlants = allPlants.filter(p => p.zIndex > 0);
     }
 
+
+
     initializeTrees(treesData) {
         if (!treesData || treesData.length === 0) {
             this.backgroundTrees = [];
@@ -1178,6 +1203,13 @@ startObstacleShake(obstacleId) {
             definition: this.treeDefinitions[serverTree.typeIndex],
             scale: this.TREE_MIN_SCALE + Math.random() * (this.TREE_MAX_SCALE - this.TREE_MIN_SCALE),
             zIndex: serverTree.zIndex === undefined ? -1 : serverTree.zIndex,
+            // <-- POCZĄTEK NOWEGO FRAGMENTU -->
+            isSwaying: false,
+            swayStartTime: 0,
+            swayDuration: 0,
+            swayMaxAngle: 0,
+            swayDirection: 1
+            // <-- KONIEC NOWEGO FRAGMENTU -->
         }));
         this.backgroundTrees = allTrees.filter(t => t.zIndex <= 0);
         this.foregroundTrees = allTrees.filter(t => t.zIndex > 0);
@@ -1190,6 +1222,51 @@ startObstacleShake(obstacleId) {
             grass.swayAnimationTime = 0;
             grass.swayDirection = direction || 1;
         }
+    }
+
+    _updateTreeSway(deltaTime) {
+        const allTrees = [...this.backgroundTrees, ...this.foregroundTrees];
+        if (allTrees.length === 0) return;
+
+        // Uruchamianie nowej animacji
+        this.treeSwayTimer -= deltaTime;
+        if (this.treeSwayTimer <= 0) {
+
+            this.treeSwayTimer = 0.3 + Math.random() * 1; 
+
+            const idleTrees = allTrees.filter(t => !t.isSwaying);
+            if (idleTrees.length > 0) {
+                const treeToSway = idleTrees[Math.floor(Math.random() * idleTrees.length)];
+                
+                // --- MODYFIKACJA 2: Zróżnicowana siła i czas trwania ---
+                const isVeryGentle = Math.random() < 0.6; // 60% szans na bardzo delikatny ruch
+
+                treeToSway.isSwaying = true;
+                treeToSway.swayStartTime = Date.now();
+                
+                if (isVeryGentle) {
+                    // Bardzo delikatne, ledwo zauważalne kołysanie
+                    treeToSway.swayDuration = 4000 + Math.random() * 2000; // Dłuższe, 4-6 sekund
+                    treeToSway.swayMaxAngle = (0.2 + Math.random() * 0.6) * (Math.PI / 180); // Kąt 0.5 - 1.5 stopnia
+                } else {
+                    // Normalne, lekko mocniejsze kołysanie
+                    treeToSway.swayDuration = 6500 + Math.random() * 3500; // Krótsze, 2.5-4 sekundy
+                    treeToSway.swayMaxAngle = (0.6 + Math.random() * 1) * (Math.PI / 180); // Kąt 2-4 stopnie
+                }
+
+                treeToSway.swayDirection = Math.random() < 0.5 ? 1 : -1;
+            }
+        }
+
+        // Aktualizacja aktywnych animacji (bez zmian)
+        allTrees.forEach(tree => {
+            if (tree.isSwaying) {
+                const elapsed = Date.now() - tree.swayStartTime;
+                if (elapsed >= tree.swayDuration) {
+                    tree.isSwaying = false;
+                }
+            }
+        });
     }
 
     _updateGroundPlantsAnimation(deltaTime) {
@@ -1237,14 +1314,37 @@ startObstacleShake(obstacleId) {
 
     _drawSingleTree(ctx, tree) {
         if (!this.treesLoaded || !tree.definition) { return; }
+        
         const treeWidth = tree.definition.width * tree.scale;
         const treeHeight = tree.definition.height * tree.scale;
+        
         ctx.save();
-        ctx.translate(tree.x + treeWidth / 2, tree.y);
-        if (tree.isMirrored) { ctx.scale(-1, 1); }
+        
+        // --- POCZĄTEK MODYFIKACJI ---
+        let rotation = 0;
+        if (tree.isSwaying) {
+            const elapsed = Date.now() - tree.swayStartTime;
+            const progress = elapsed / tree.swayDuration;
+            // Używamy funkcji sinusoidalnej, aby uzyskać płynny ruch tam i z powrotem
+            // (wolno na początku, szybko w środku, wolno na końcu)
+            const easeFactor = Math.sin(progress * Math.PI);
+            rotation = tree.swayMaxAngle * easeFactor * tree.swayDirection;
+        }
+
+        // Punkt obrotu jest na dole pnia
+        ctx.translate(tree.x + treeWidth / 2, tree.y + this.TREE_VERTICAL_OFFSET);
+        ctx.rotate(rotation);
+        
+        if (tree.isMirrored) { 
+            ctx.scale(-1, 1); 
+        }
+
         ctx.drawImage(this.treesImage, tree.definition.x, tree.definition.y,
-            tree.definition.width, tree.definition.height, -treeWidth / 2, -treeHeight + this.TREE_VERTICAL_OFFSET,
+            tree.definition.width, tree.definition.height,
+            -treeWidth / 2, -treeHeight, // Rysuj w górę od punktu obrotu
             treeWidth, treeHeight);
+        // --- KONIEC MODYFIKACJI ---
+            
         ctx.restore();
     }
 
@@ -1383,6 +1483,7 @@ startObstacleShake(obstacleId) {
         this._updateLightEffect(deltaTime);
         this._updateSwimmingFish(deltaTime);
         this._updateClouds(deltaTime);
+        this._updateTreeSway(deltaTime); // <-- NOWA ZMIANA
 
         // --- POCZĄTEK NOWEGO BLOKU ---
         // Logika płynnego przejścia dla warstwy front_clear.png
