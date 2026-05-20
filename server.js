@@ -104,7 +104,7 @@ setInterval(() => {
 }, HEARTBEAT_CHECK_INTERVAL);
 
 // Użyj portu zdefiniowanego przez Render, a lokalnie 3000
-const PORT = process.env.PORT || 10000;
+const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
     console.log(`Serwer GRY działa na porcie ${PORT}`);
 });
